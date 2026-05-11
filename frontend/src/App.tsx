@@ -17,20 +17,18 @@ export default function App() {
         };
 
         const currentRef = scrollContainerRef.current;
-        if (currentRef) {
-            currentRef.addEventListener('scroll', handleScroll);
-        }
+        if (currentRef) currentRef.addEventListener('scroll', handleScroll);
 
         return () => {
             if (currentRef) currentRef.removeEventListener('scroll', handleScroll);
         };
     }, [activeTab]);
 
-    // Lógica para saber se a barra inferior está ocupando espaço
     const isNavVisible = isScrolled || activeTab !== 'inicio';
 
     return (
-        <div style={{ background: 'var(--cream)', height: '100vh', width: '100vw', position: 'fixed', overflow: 'hidden' }}>
+        // CORREÇÃO: position: 'fixed', top: 0, bottom: 0 ignora o bug da barra do navegador
+        <div style={{ background: 'var(--cream)', position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, overflow: 'hidden' }}>
 
             <nav style={{
                 position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1100,
@@ -43,13 +41,9 @@ export default function App() {
                 </div>
             </nav>
 
-            {/* ÁREA DE TELAS: Agora com margem dinâmica no fundo para não esconder conteúdo */}
             <div className="screens" style={{
-                position: 'absolute',
-                top: '60px',
-                left: 0,
-                right: 0,
-                bottom: isNavVisible ? '72px' : 0, // Se a nav aparecer, as telas sobem 72px
+                position: 'absolute', top: '60px', left: 0, right: 0,
+                bottom: isNavVisible ? '72px' : 0,
                 transition: 'bottom 0.4s ease'
             }}>
                 <div
@@ -57,9 +51,7 @@ export default function App() {
                     style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
                 >
                     {activeTab === 'inicio' && <Home onNavigateParaVoce={() => setActiveTab('paravoc')} />}
-
                     {activeTab === 'paravoc' && <DiscoveryScreen />}
-
                     {activeTab === 'carrinho' && (
                         <div style={{ padding: '40px 20px', textAlign: 'center' }}>
                             <div style={{ fontSize: '48px' }}>🛍️</div>
@@ -73,11 +65,7 @@ export default function App() {
                 </div>
             </div>
 
-            <BottomNavigation
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                isVisible={isNavVisible}
-            />
+            <BottomNavigation activeTab={activeTab} setActiveTab={setActiveTab} isVisible={isNavVisible} />
         </div>
     );
 }
