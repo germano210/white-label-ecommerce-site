@@ -3,44 +3,41 @@ import { SwipeCard } from '../components/domain/SwipeCard';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 
 export function DiscoveryScreen() {
-    const { history, likedItems } = useDiscoveryStore();
+    const { history } = useDiscoveryStore();
 
-    const currentIndex = history.length;
-    const remainingProducts = mockProducts.slice(currentIndex, currentIndex + 3);
+    // O segredo do Loop Infinito: Usar o resto da divisão (%)
+    const startIndex = history.length % mockProducts.length;
+
+    // Garantimos que a pilha tem sempre 3 cartas prontas para o swipe
+    const currentStack = [
+        mockProducts[startIndex],
+        mockProducts[(startIndex + 1) % mockProducts.length],
+        mockProducts[(startIndex + 2) % mockProducts.length],
+    ];
 
     return (
-        <div className="paravoc-screen" style={{ width: '100%', height: 'calc(100% - 80px)', display: 'flex', flexDirection: 'column' }}>
+        <div className="paravoc-screen" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
 
-            {/* Barra de Topo */}
-            <div className="pv-topbar">
-                <span className="pv-title">Para Você ✨</span>
-                <span className="pv-counter">
-          {Math.min(currentIndex + 1, mockProducts.length)} / {mockProducts.length}
+            {/* Barra de Topo Centralizada (usando Flexbox) e sem o emoji */}
+            <div className="pv-topbar" style={{ padding: '15px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <span className="pv-title" style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 600, color: 'var(--dark)' }}>
+          Para Você
         </span>
             </div>
 
-            {/* Pilha de Cartões (Ocupa todo o resto do espaço) */}
-            <div className="card-stack" style={{ flex: 1, paddingBottom: '20px' }}>
-                {remainingProducts.length > 0 ? (
-                    [...remainingProducts].reverse().map((product, index) => (
+            <div className="card-stack" style={{ flex: 1, position: 'relative', padding: '10px 16px 20px' }}>
+                {[...currentStack].reverse().map((product, index) => {
+                    const stackIndex = currentStack.length - 1 - index;
+                    return (
                         <SwipeCard
-                            key={product.id}
+                            key={`${product.id}-${history.length + stackIndex}`}
                             product={product}
-                            index={remainingProducts.length - 1 - index}
-                            isTop={index === remainingProducts.length - 1}
+                            index={stackIndex}
+                            isTop={stackIndex === 0}
                             onSwipeEnd={() => {}}
                         />
-                    ))
-                ) : (
-                    <div className="pv-empty">
-                        <div className="pv-empty-icon">🎉</div>
-                        <div className="pv-empty-title">Você viu tudo!</div>
-                        <div className="pv-empty-sub">
-                            Você salvou {likedItems.length} peça{likedItems.length !== 1 && 's'} que amou.<br/>
-                            Vá para o <strong>Carrinho</strong> para garanti-las!
-                        </div>
-                    </div>
-                )}
+                    );
+                })}
             </div>
 
         </div>

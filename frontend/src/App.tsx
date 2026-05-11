@@ -12,7 +12,6 @@ export default function App() {
         const handleScroll = () => {
             if (scrollContainerRef.current) {
                 const scrollTop = scrollContainerRef.current.scrollTop;
-                // A barra inferior só sobe após 50px de scroll
                 setIsScrolled(scrollTop > 50);
             }
         };
@@ -27,10 +26,12 @@ export default function App() {
         };
     }, [activeTab]);
 
-    return (
-        <div style={{ background: 'var(--cream)', minHeight: '100vh', position: 'relative' }}>
+    // Lógica para saber se a barra inferior está ocupando espaço
+    const isNavVisible = isScrolled || activeTab !== 'inicio';
 
-            {/* NAVBAR SUPERIOR: Fundo branco translúcido */}
+    return (
+        <div style={{ background: 'var(--cream)', height: '100vh', width: '100vw', position: 'fixed', overflow: 'hidden' }}>
+
             <nav style={{
                 position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1100,
                 background: 'rgba(255, 255, 255, 0.98)', backdropFilter: 'blur(10px)',
@@ -42,8 +43,15 @@ export default function App() {
                 </div>
             </nav>
 
-            {/* O conteúdo agora começa abaixo da Navbar (top: 60px) */}
-            <div className="screens" style={{ position: 'absolute', inset: 0, top: '60px' }}>
+            {/* ÁREA DE TELAS: Agora com margem dinâmica no fundo para não esconder conteúdo */}
+            <div className="screens" style={{
+                position: 'absolute',
+                top: '60px',
+                left: 0,
+                right: 0,
+                bottom: isNavVisible ? '72px' : 0, // Se a nav aparecer, as telas sobem 72px
+                transition: 'bottom 0.4s ease'
+            }}>
                 <div
                     ref={scrollContainerRef}
                     style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
@@ -62,20 +70,13 @@ export default function App() {
                             <p style={{ marginTop: '20px' }}>Carrinho vazio</p>
                         </div>
                     )}
-
-                    {activeTab === 'historia' && (
-                        <div style={{ padding: '40px 20px' }}>
-                            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px' }}>Nossa História</h2>
-                        </div>
-                    )}
                 </div>
             </div>
 
-            {/* Bottom Navigation com lógica de "Subir" ao scrollar */}
             <BottomNavigation
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
-                isVisible={isScrolled || activeTab !== 'inicio'}
+                isVisible={isNavVisible}
             />
         </div>
     );
