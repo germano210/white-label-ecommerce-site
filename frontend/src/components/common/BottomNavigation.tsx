@@ -1,4 +1,4 @@
-import { type LucideIcon, Home, Sparkles, Heart } from 'lucide-react';
+import { type LucideIcon, Home, Search, ShoppingCart } from 'lucide-react';
 
 interface NavItem {
     id: string;
@@ -8,38 +8,61 @@ interface NavItem {
 
 const navItems: NavItem[] = [
     { id: 'inicio', label: 'Início', icon: Home },
-    { id: 'paravoc', label: 'Para Você', icon: Sparkles },
-    { id: 'historia', label: 'Nossa História', icon: Heart },
+    { id: 'paravoc', label: 'Para Você', icon: Search },
+    { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
 ];
 
 interface Props {
     activeTab: string;
     setActiveTab: (id: string) => void;
+    isVisible: boolean; // Nova propriedade para controlar a animação
 }
 
-export function BottomNavigation({ activeTab, setActiveTab }: Props) {
+export function BottomNavigation({ activeTab, setActiveTab, isVisible }: Props) {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-[300] max-w-[430px] mx-auto bg-[#FAF7F2]/95 backdrop-blur-xl border-t border-[#D9D0C4] h-[72px] flex items-center px-2 pb-2 gap-1">
+        <div
+            className="bottom-nav"
+            style={{
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: 1000,
+                // Lógica de "Subir": Se não visível, desce 100% (some da tela)
+                transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
+                opacity: isVisible ? 1 : 0,
+                transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 8px 8px',
+                height: '72px',
+                background: 'rgba(250, 247, 242, 0.97)',
+                backdropFilter: 'blur(14px)',
+                borderTop: '0.5px solid #D9D0C4',
+                maxWidth: '430px',
+                margin: '0 auto'
+            }}
+        >
             {navItems.map((item) => (
                 <button
                     key={item.id}
+                    className={`bnav-item ${activeTab === item.id ? 'active' : ''}`}
                     onClick={() => setActiveTab(item.id)}
-                    className="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition-colors active:bg-[#EDE4D8]"
+                    style={{ flex: 1, border: 'none', background: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                 >
-                    <item.icon
-                        size={20}
-                        className={activeTab === item.id ? 'text-[#C2693F]' : 'text-[#6B5444]'}
-                    />
-                    <span className={`text-[10px] font-medium ${
-                        activeTab === item.id ? 'text-[#C2693F]' : 'text-[#6B5444]'
-                    }`}>
-            {item.label}
-          </span>
-                    {activeTab === item.id && (
-                        <div className="w-1 h-1 rounded-full bg-[#C2693F] -mt-0.5" />
-                    )}
+                    <span className="bnav-icon">
+                        <item.icon
+                            size={22}
+                            strokeWidth={1.5}
+                            color={activeTab === item.id ? 'var(--terra)' : 'var(--muted)'}
+                        />
+                    </span>
+                    <span className="bnav-label" style={{ fontSize: '10px', fontWeight: 500, color: activeTab === item.id ? 'var(--terra)' : 'var(--muted)' }}>
+                        {item.label}
+                    </span>
+                    {activeTab === item.id && <span className="bnav-dot" style={{ display: 'block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--terra)' }}></span>}
                 </button>
             ))}
-        </nav>
+        </div>
     );
 }

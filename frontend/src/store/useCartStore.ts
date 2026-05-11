@@ -20,7 +20,7 @@ export interface ProdutoVitrine {
     name: string;
     price: number;        // Valor numérico para cálculos de checkout
     category: string;
-    emoji: string;        // Representação visual simplificada (Ícone)
+    iconId: string;        // Representação visual simplificada (Ícone)
     sub: string;          // Subtítulo descritivo (ex: "Linho · Off white")
     social: string;       // Prova social (ex: "👁 23 pessoas viram agora")
 

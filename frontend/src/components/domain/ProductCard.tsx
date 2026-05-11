@@ -24,7 +24,7 @@ export function ProductCard({ product, onViewDetails }: ProductCardProps) {
             {/* Container da Imagem: Aspect Ratio otimizado para moda (3:4) */}
             <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-gray-100">
                 <img
-                    src={product.emoji}
+                    src={product.iconId}
                     alt={product.name}
                     className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                     loading="lazy" // Fundamental para performance (LCP)

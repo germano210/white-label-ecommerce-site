@@ -1,80 +1,82 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Home } from './pages/Home';
 import { DiscoveryScreen } from './pages/DiscoveryScreen';
+import { BottomNavigation } from './components/common/BottomNavigation';
 
 export default function App() {
     const [activeTab, setActiveTab] = useState('inicio');
+    const [isScrolled, setIsScrolled] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            if (scrollContainerRef.current) {
+                const scrollTop = scrollContainerRef.current.scrollTop;
+                // A barra inferior só sobe após 50px de scroll
+                setIsScrolled(scrollTop > 50);
+            }
+        };
+
+        const currentRef = scrollContainerRef.current;
+        if (currentRef) {
+            currentRef.addEventListener('scroll', handleScroll);
+        }
+
+        return () => {
+            if (currentRef) currentRef.removeEventListener('scroll', handleScroll);
+        };
+    }, [activeTab]);
 
     return (
-        <>
-            <div className="urgency-strip">
-                ✦ Frete grátis acima de <b>R$150</b> · Troca em até 7 dias garantida ✦
-            </div>
+        <div style={{ background: 'var(--cream)', minHeight: '100vh', position: 'relative' }}>
 
-            <nav>
-                <div className="nav-logo">Ateliê <span>Bella</span></div>
-                {/* Substituindo os ícones de livro e sino pelo botão único de História */}
-                <button
-                    className={`nav-icon-btn ${activeTab === 'historia' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('historia')}
-                    style={{ width: 'auto', padding: '0 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 }}
-                >
-                    NOSSA HISTÓRIA 💛
-                </button>
+            {/* NAVBAR SUPERIOR: Fundo branco translúcido */}
+            <nav style={{
+                position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1100,
+                background: 'rgba(255, 255, 255, 0.98)', backdropFilter: 'blur(10px)',
+                display: 'flex', alignItems: 'center', padding: '0 16px', height: '60px',
+                maxWidth: '430px', margin: '0 auto'
+            }}>
+                <div className="nav-logo" style={{ flex: 1, fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 600, color: 'var(--dark)' }}>
+                    Via <span style={{ color: 'var(--terra)' }}>Brás</span>
+                </div>
             </nav>
 
-            <div className="screens">
-                <div className={`screen ${activeTab === 'inicio' ? 'active' : ''}`}>
+            {/* O conteúdo agora começa abaixo da Navbar (top: 60px) */}
+            <div className="screens" style={{ position: 'absolute', inset: 0, top: '60px' }}>
+                <div
+                    ref={scrollContainerRef}
+                    style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
+                >
                     {activeTab === 'inicio' && <Home onNavigateParaVoce={() => setActiveTab('paravoc')} />}
-                </div>
 
-                <div className={`screen ${activeTab === 'paravoc' ? 'active' : ''}`}>
                     {activeTab === 'paravoc' && <DiscoveryScreen />}
-                </div>
 
-                <div className={`screen ${activeTab === 'carrinho' ? 'active' : ''}`}>
-                    {/* Tela de Carrinho (Será construída em breve) */}
-                    <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '48px' }}>🛍️</div>
-                        <h2 style={{ fontFamily: 'var(--font-display)', marginTop: '10px' }}>Seu Carrinho</h2>
-                        <p style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '8px' }}>Seus itens selecionados aparecerão aqui.</p>
-                    </div>
-                </div>
+                    {activeTab === 'carrinho' && (
+                        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '48px' }}>🛍️</div>
+                            <h2 style={{ fontFamily: 'var(--font-display)', marginTop: '10px' }}>Seu Carrinho</h2>
+                            <p style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '15px', background: 'var(--soft)', padding: '12px', borderRadius: '8px' }}>
+                                ✦ Ganhe <b>Frete Grátis</b> em compras acima de R$150!
+                            </p>
+                            <p style={{ marginTop: '20px' }}>Carrinho vazio</p>
+                        </div>
+                    )}
 
-                <div className={`screen ${activeTab === 'historia' ? 'active' : ''}`}>
-                    {/* Tela de História (Sendo refinada) */}
-                    <div style={{ padding: '20px' }}>
-                        <h2 style={{ fontFamily: 'var(--font-display)' }}>Nossa História</h2>
-                        <p style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '10px' }}>Em breve: Conheça mais sobre o Ateliê Bella.</p>
-                    </div>
+                    {activeTab === 'historia' && (
+                        <div style={{ padding: '40px 20px' }}>
+                            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px' }}>Nossa História</h2>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="bottom-nav">
-                <button className={`bnav-item ${activeTab === 'inicio' ? 'active' : ''}`} onClick={() => setActiveTab('inicio')}>
-                    <span className="bnav-icon">🏠</span>
-                    <span className="bnav-label">Início</span>
-                    <span className="bnav-dot"></span>
-                </button>
-                <button className={`bnav-item ${activeTab === 'paravoc' ? 'active' : ''}`} onClick={() => setActiveTab('paravoc')}>
-                    <span className="bnav-icon">✨</span>
-                    <span className="bnav-label">Para Você</span>
-                    <span className="bnav-dot"></span>
-                </button>
-                {/* Substituindo Nossa História por Carrinho no Bottom Nav */}
-                <button className={`bnav-item ${activeTab === 'carrinho' ? 'active' : ''}`} onClick={() => setActiveTab('carrinho')}>
-                    <span className="bnav-icon">🛍️</span>
-                    <span className="bnav-label">Carrinho</span>
-                    <span className="bnav-dot"></span>
-                </button>
-            </div>
-
-            {/* WhatsApp flutuante inteligente */}
-            {activeTab === 'inicio' && (
-                <button className="sticky-wa" style={{ display: 'flex', bottom: 'calc(var(--bottom-h) + 12px)', right: '16px' }}>
-                    📲 WhatsApp
-                </button>
-            )}
-        </>
+            {/* Bottom Navigation com lógica de "Subir" ao scrollar */}
+            <BottomNavigation
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                isVisible={isScrolled || activeTab !== 'inicio'}
+            />
+        </div>
     );
 }

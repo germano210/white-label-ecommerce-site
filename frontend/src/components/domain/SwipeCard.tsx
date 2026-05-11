@@ -1,6 +1,7 @@
 import { motion, useMotionValue, useTransform, useAnimation, type PanInfo } from 'framer-motion';
 import { type ProdutoVitrine } from '../../store/useCartStore';
 import { useDiscoveryStore } from '../../store/useDiscoveryStore';
+import {getProductIcon} from "../../utils/iconMap.tsx";
 
 interface SwipeCardProps {
     product: ProdutoVitrine;
@@ -56,7 +57,9 @@ export function SwipeCard({ product, isTop, index, onSwipeEnd }: SwipeCardProps)
 
             {/* Usando exatamente a estrutura do seu HTML */}
             <div className="card-img">
-                <span style={{ fontSize: '80px' }}>{product.emoji}</span>
+                <div className="opacity-80">
+                    {getProductIcon(product.iconId, 120)}
+                </div>
                 {product.badge && <span className={`card-badge ${product.badge}`}>{product.badgeText}</span>}
             </div>
 
