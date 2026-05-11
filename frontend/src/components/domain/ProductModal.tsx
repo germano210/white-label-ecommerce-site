@@ -50,7 +50,7 @@ export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
                     {/* Imagem de Topo */}
                     <div className="aspect-[4/5] w-full bg-gray-100">
                         <img
-                            src={product.image}
+                            src={product.emoji}
                             alt={product.name}
                             className="w-full h-full object-cover"
                         />
