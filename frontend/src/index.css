@@ -2,17 +2,20 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root {
-  --cream: #FFFFFF; /* Fundo limpo e moderno (era bege) */
-  --dark: #1A1A1A;  /* Quase preto para alto contraste */
-  --terra: #E6398F; /* O novo Pink/Magenta vibrante da marca */
+  --cream: #FFFFFF;
+  --dark: #1A1A1A;
+  --terra: #E6398F;
   --gold: #B8913A;
-  --soft: #FCE4EC;  /* O fundo rosinha claro do badge */
-  --muted: #757575; /* Cinza elegante para subtítulos */
+  --soft: #FCE4EC;
+  --muted: #757575;
   --white: #FFFFFF;
   --green: #2D6A4F;
   --red: #A63D2F;
-  --font-display: 'Cormorant Garamond', serif;
-  --font-body: 'DM Sans', sans-serif;
+
+  /* Aplicando a fonte Alice em todo o site */
+  --font-display: 'Alice', serif;
+  --font-body: 'Alice', serif;
+
   --nav-h: 60px;
   --strip-h: 32px;
   --bottom-h: 72px;

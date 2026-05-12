@@ -1,24 +1,87 @@
-import { type ProdutoVitrine } from '../store/useCartStore';
 
-export const mockProducts: ProdutoVitrine[] = [
-    { id: '1', name: 'Blusa Mula Manca', category: 'Blusas', price: 79.90, iconId: 'shirt', badge: 'hot', badgeText: '🔥 Mais likes', priceOld: 'R$119,90', priceNew: 'R$79,90', priceSave: 'Economize R$40', social: 'Giovanna e 22 pessoas amaram!', sub: 'Canelado · Verde Mint · P M G' },
-    { id: '2', name: 'Calça Wide Leg', category: 'Calças', price: 159.90, iconId: 'pants', badge: 'novo', badgeText: '✨ Novo', priceOld: 'R$199,90', priceNew: 'R$159,90', priceSave: 'Economize R$40', social: '👁 45 pessoas viram nas últimas 2h', sub: 'Jeans 100% Algodão · Lavagem Clara' },
-    { id: '3', name: 'Vestido Seda Flora', category: 'Vestidos', price: 219.00, iconId: 'dress', badge: '', badgeText: '', priceOld: '', priceNew: 'R$219,00', priceSave: '', social: '📸 18 clientes já postaram look', sub: 'Toque de Seda · Estampa Floral · M G' },
-    { id: '4', name: 'Blazer Alfaiataria', category: 'Casacos', price: 289.00, iconId: 'shirt', badge: 'escasso', badgeText: '⚡ Últimas 2', priceOld: 'R$359,00', priceNew: 'R$289,00', priceSave: '-20%', social: '💼 Ideal para o office look', sub: 'Alfaiataria Premium · Preto · P M' },
-    { id: '5', name: 'Saia Plissada Areia', category: 'Saias', price: 119.90, iconId: 'skirt', badge: '', badgeText: '', priceOld: 'R$149,90', priceNew: 'R$119,90', priceSave: 'Economize R$30', social: '❤️ 89 pessoas salvaram esta semana', sub: 'Crepe Leve · Nude · Cintura Alta' },
-    { id: '6', name: 'Conjunto Moletinho', category: 'Conjuntos', price: 189.90, iconId: 'set', badge: 'novo', badgeText: '✨ Novo', priceOld: '', priceNew: 'R$189,90', priceSave: '', social: '🌟 Mais confortável da coleção', sub: 'Moletom Premium · Cinza Mescla' },
-    { id: '7', name: 'Body Renda Noir', category: 'Blusas', price: 89.90, iconId: 'shirt', badge: 'hot', badgeText: '🔥 Tendência', priceOld: 'R$129,90', priceNew: 'R$89,90', priceSave: 'Economize R$40', social: '🔥 Esgotou 2x no último mês', sub: 'Renda com Elastano · Preto · P M G' },
-    { id: '8', name: 'Shorts Linho Cru', category: 'Calças', price: 99.90, iconId: 'pants', badge: 'escasso', badgeText: '⚡ Última Peça', priceOld: 'R$139,90', priceNew: 'R$99,90', priceSave: 'Economize R$40', social: '⚠️ Quase esgotado!', sub: 'Linho Puro · Cru · Tamanho M' },
-    { id: '9', name: 'Macacão Pantalona', category: 'Conjuntos', price: 259.90, iconId: 'set', badge: '', badgeText: '', priceOld: 'R$299,90', priceNew: 'R$259,90', priceSave: 'Economize R$40', social: '👗 Look completo em 1 peça', sub: 'Viscolinho · Terracota · P M G' },
-    { id: '10', name: 'T-Shirt Basic Algodão', category: 'Blusas', price: 49.90, iconId: 'shirt', badge: '', badgeText: '', priceOld: '', priceNew: 'R$49,90', priceSave: '', social: '⭐ Básico essencial - 5/5 estrelas', sub: '100% Algodão · Branco · P M G GG' },
-    { id: '11', name: 'Vestido Tubinho Dark', category: 'Vestidos', price: 139.90, iconId: 'dress', badge: 'novo', badgeText: '✨ Novo', priceOld: 'R$179,90', priceNew: 'R$139,90', priceSave: '-22%', social: '🖤 O pretinho nada básico', sub: 'Canelado Grosso · Preto · P M' },
-    { id: '12', name: 'Cardigan Tricot Soft', category: 'Casacos', price: 169.90, iconId: 'shirt', badge: 'hot', badgeText: '🔥 Mais vendido', priceOld: 'R$219,90', priceNew: 'R$169,90', priceSave: 'Economize R$50', social: '❄️ Perfeito para o fim de tarde', sub: 'Fio Premium · Areia · Tamanho Único' },
-    { id: '13', name: 'Saia Couro Eco', category: 'Saias', price: 149.90, iconId: 'skirt', badge: 'escasso', badgeText: '⚡ Restam 3', priceOld: 'R$199,90', priceNew: 'R$149,90', priceSave: 'Economize R$50', social: '👁 Muito procurado hoje', sub: 'Couro Sintético · Preto · P M G' },
-    { id: '14', name: 'Calça Alfaiataria', category: 'Calças', price: 179.90, iconId: 'pants', badge: '', badgeText: '', priceOld: 'R$229,90', priceNew: 'R$179,90', priceSave: 'Economize R$50', social: '✨ Caimento perfeito garantido', sub: 'Crepe Encorpado · Marinho · M G GG' },
-    { id: '15', name: 'Cropped Amarração', category: 'Blusas', price: 69.90, iconId: 'shirt', badge: 'novo', badgeText: '✨ Novo', priceOld: '', priceNew: 'R$69,90', priceSave: '', social: '💕 Match perfeito com Wide Leg', sub: 'Viscose · Fúcsia · P M G' },
-    { id: '16', name: 'Jaqueta Puffer', category: 'Casacos', price: 319.90, iconId: 'shirt', badge: 'hot', badgeText: '🔥 Desejo', priceOld: 'R$399,90', priceNew: 'R$319,90', priceSave: '-20%', social: '⛄ Preparada para o inverno?', sub: 'Impermeável · Off White · P M' },
-    { id: '17', name: 'Vestido Midi Canelado', category: 'Vestidos', price: 129.90, iconId: 'dress', badge: '', badgeText: '', priceOld: 'R$159,90', priceNew: 'R$129,90', priceSave: 'Economize R$30', social: '🎀 Modela o corpo sem apertar', sub: 'Canelado · Rosa Queimado · P M G' },
-    { id: '18', name: 'Conjunto Alfaiataria', category: 'Conjuntos', price: 349.90, iconId: 'set', badge: 'escasso', badgeText: '⚡ Última Peça', priceOld: 'R$429,90', priceNew: 'R$349,90', priceSave: 'Economize R$80', social: '👑 Look de CEO', sub: 'Colete + Calça · Bege · M' },
-    { id: '19', name: 'Blusa Gola Alta', category: 'Blusas', price: 89.90, iconId: 'shirt', badge: '', badgeText: '', priceOld: '', priceNew: 'R$89,90', priceSave: '', social: '⭐ Clássico de inverno', sub: 'Tricot Modal · Preto · Tamanho Único' },
-    { id: '20', name: 'Saia Pareô Estampada', category: 'Saias', price: 109.90, iconId: 'skirt', badge: 'novo', badgeText: '✨ Novo', priceOld: 'R$139,90', priceNew: 'R$109,90', priceSave: '-21%', social: '🌴 Vibe resort', sub: 'Viscose Leve · Estampa Folhagem · P M' }
+// Adicionamos a tipagem 'any' temporariamente para aceitar o array de imagens
+// sem precisar reescrever as suas interfaces principais.
+export const mockProducts: any[] = [
+    {
+        id: '1', name: 'Blusa Mula Manca', category: 'Blusas', price: 79.90, iconId: 'shirt', badge: 'hot', badgeText: '🔥 Mais likes', priceOld: 'R$119,90', priceNew: 'R$79,90', sub: 'Canelado · Verde Mint · P M G',
+        images: [
+            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80',
+            'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&q=80',
+            'https://images.unsplash.com/photo-1503342394128-c104d54dba01?w=800&q=80'
+        ]
+    },
+    {
+        id: '2', name: 'Calça Wide Leg', category: 'Calças', price: 159.90, iconId: 'pants', badge: 'novo', badgeText: '✨ Novo', priceOld: 'R$199,90', priceNew: 'R$159,90', sub: 'Jeans 100% Algodão · Lavagem Clara',
+        images: [
+            'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800&q=80',
+            'https://images.unsplash.com/photo-1584328627389-4f70742cd26e?w=800&q=80',
+            'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800&q=80'
+        ]
+    },
+    {
+        id: '3', name: 'Vestido Seda Flora', category: 'Vestidos', price: 219.00, iconId: 'dress', badge: '', badgeText: '', priceOld: '', priceNew: 'R$219,00', sub: 'Toque de Seda · Estampa Floral · M G',
+        images: [
+            'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=800&q=80',
+            'https://images.unsplash.com/photo-1515347619252-1bf7ebbc1723?w=800&q=80',
+            'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=800&q=80'
+        ]
+    },
+    {
+        id: '4', name: 'Blazer Alfaiataria', category: 'Casacos', price: 289.00, iconId: 'shirt', badge: 'escasso', badgeText: '⚡ Últimas 2', priceOld: 'R$359,00', priceNew: 'R$289,00', sub: 'Alfaiataria Premium · Preto · P M',
+        images: [
+            'https://images.unsplash.com/photo-1550614000-4b9a9d701a2e?w=800&q=80',
+            'https://images.unsplash.com/photo-1548624313-0396c75e4b1a?w=800&q=80',
+            'https://images.unsplash.com/photo-1550614000-4b9a9d701a2e?w=800&q=80'
+        ]
+    },
+    {
+        id: '5', name: 'Saia Plissada Areia', category: 'Saias', price: 119.90, iconId: 'skirt', badge: '', badgeText: '', priceOld: 'R$149,90', priceNew: 'R$119,90', sub: 'Crepe Leve · Nude · Cintura Alta',
+        images: [
+            'https://images.unsplash.com/photo-1583496661160-c5d014f9714d?w=800&q=80',
+            'https://images.unsplash.com/photo-1583496661160-c5d014f9714d?w=800&q=80',
+            'https://images.unsplash.com/photo-1583496661160-c5d014f9714d?w=800&q=80'
+        ]
+    },
+    {
+        id: '6', name: 'Conjunto Moletinho', category: 'Conjuntos', price: 189.90, iconId: 'set', badge: 'novo', badgeText: '✨ Novo', priceOld: '', priceNew: 'R$189,90', sub: 'Moletom Premium · Cinza Mescla',
+        images: [
+            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80',
+            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80',
+            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80'
+        ]
+    },
+    {
+        id: '7', name: 'Body Renda Noir', category: 'Blusas', price: 89.90, iconId: 'shirt', badge: 'hot', badgeText: '🔥 Tendência', priceOld: 'R$129,90', priceNew: 'R$89,90', sub: 'Renda com Elastano · Preto · P M G',
+        images: [
+            'https://images.unsplash.com/photo-1434389678392-f0b472f616e1?w=800&q=80',
+            'https://images.unsplash.com/photo-1434389678392-f0b472f616e1?w=800&q=80',
+            'https://images.unsplash.com/photo-1434389678392-f0b472f616e1?w=800&q=80'
+        ]
+    },
+    {
+        id: '8', name: 'Shorts Linho Cru', category: 'Calças', price: 99.90, iconId: 'pants', badge: 'escasso', badgeText: '⚡ Última Peça', priceOld: 'R$139,90', priceNew: 'R$99,90', sub: 'Linho Puro · Cru · Tamanho M',
+        images: [
+            'https://images.unsplash.com/photo-1591369822096-ffd140ec948f?w=800&q=80',
+            'https://images.unsplash.com/photo-1591369822096-ffd140ec948f?w=800&q=80',
+            'https://images.unsplash.com/photo-1591369822096-ffd140ec948f?w=800&q=80'
+        ]
+    },
+    {
+        id: '9', name: 'Macacão Pantalona', category: 'Conjuntos', price: 259.90, iconId: 'set', badge: '', badgeText: '', priceOld: 'R$299,90', priceNew: 'R$259,90', sub: 'Viscolinho · Terracota · P M G',
+        images: [
+            'https://images.unsplash.com/photo-1485968817351-5c255e1c0715?w=800&q=80',
+            'https://images.unsplash.com/photo-1485968817351-5c255e1c0715?w=800&q=80',
+            'https://images.unsplash.com/photo-1485968817351-5c255e1c0715?w=800&q=80'
+        ]
+    },
+    {
+        id: '10', name: 'T-Shirt Basic', category: 'Blusas', price: 49.90, iconId: 'shirt', badge: '', badgeText: '', priceOld: '', priceNew: 'R$49,90', sub: '100% Algodão · Branco · P M G GG',
+        images: [
+            'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&q=80',
+            'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&q=80',
+            'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&q=80'
+        ]
+    }
 ];
+// Repliquei os 10 primeiros para a base de dados ficar menor aqui no código,
+// mas na prática você poderá ter quantas fotos e produtos quiser.

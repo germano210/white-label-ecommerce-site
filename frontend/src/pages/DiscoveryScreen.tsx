@@ -3,29 +3,29 @@ import { SwipeCard } from '../components/domain/SwipeCard';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 
 export function DiscoveryScreen() {
-    const { history } = useDiscoveryStore();
+    const { history, activeCategory } = useDiscoveryStore();
 
-    // O segredo do Loop Infinito: Usar o resto da divisão (%)
-    const startIndex = history.length % mockProducts.length;
+    // Lógica de Filtragem conectada à Store
+    const filteredProducts = activeCategory === 'TODAS AS PEÇAS'
+        ? mockProducts
+        : mockProducts.filter(p => p.category.toLowerCase() === activeCategory.toLowerCase());
 
-    // Garantimos que a pilha tem sempre 3 cartas prontas para o swipe
+    // Trava de segurança para não quebrar se a categoria estiver vazia
+    const displayProducts = filteredProducts.length > 0 ? filteredProducts : mockProducts;
+
+    const startIndex = history.length % displayProducts.length;
+
     const currentStack = [
-        mockProducts[startIndex],
-        mockProducts[(startIndex + 1) % mockProducts.length],
-        mockProducts[(startIndex + 2) % mockProducts.length],
+        displayProducts[startIndex],
+        displayProducts[(startIndex + 1) % displayProducts.length],
+        displayProducts[(startIndex + 2) % displayProducts.length],
     ];
 
     return (
         <div className="paravoc-screen" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
 
-            {/* Barra de Topo Centralizada (usando Flexbox) e sem o emoji */}
-            <div className="pv-topbar" style={{ padding: '15px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <span className="pv-title" style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 600, color: 'var(--dark)' }}>
-          Para Você
-        </span>
-            </div>
-
-            <div className="card-stack" style={{ flex: 1, position: 'relative', padding: '10px 16px 20px' }}>
+            {/* Removido o menu antigo. Agora os cartões ocupam todo o espaço com uma leve margem no topo */}
+            <div className="card-stack" style={{ flex: 1, position: 'relative', padding: '16px 16px 20px' }}>
                 {[...currentStack].reverse().map((product, index) => {
                     const stackIndex = currentStack.length - 1 - index;
                     return (

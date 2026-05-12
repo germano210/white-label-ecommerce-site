@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { mockProducts } from '../utils/mockProducts';
 import { getProductIcon } from '../utils/iconMap';
-import { Heart, Bookmark, Send } from 'lucide-react';
+import { Heart, Send } from 'lucide-react';
 
 interface HomeProps {
     onNavigateParaVoce: () => void;
@@ -9,6 +9,7 @@ interface HomeProps {
 
 export function Home({ onNavigateParaVoce }: HomeProps) {
     const [activeSlide, setActiveSlide] = useState(0);
+    const totalSlides = 3;
 
     const handleCarouselScroll = (e: React.UIEvent<HTMLDivElement>) => {
         const slideIndex = Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth);
@@ -59,7 +60,7 @@ export function Home({ onNavigateParaVoce }: HomeProps) {
                         <span style={{ color: 'var(--terra)' }}>Giovanna, Maria, Bianca, Ana, Gabriela</span> e outras 22 pessoas deram <span style={{ color: 'var(--terra)' }}>amei!</span>
                     </div>
 
-                    {/* CARROSSEL COM TRAVA DE SCROLL (scrollSnapStop: 'always') */}
+                    {/* CARROSSEL */}
                     <div
                         onScroll={handleCarouselScroll}
                         style={{ display: 'flex', overflowX: 'auto', height: '100%', width: '100%', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
@@ -75,32 +76,41 @@ export function Home({ onNavigateParaVoce }: HomeProps) {
                         </div>
                     </div>
 
-                    {/* Overlay Lateral: Ações do Instagram */}
-                    <div style={{ position: 'absolute', right: '16px', bottom: '40px', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', zIndex: 20 }}>
-                        <button style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><Heart size={26} strokeWidth={1.5} /><span style={{ fontSize: '11px', fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>37</span></button>
-                        <button style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><Bookmark size={26} strokeWidth={1.5} /><span style={{ fontSize: '11px', fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>22</span></button>
-                        <button style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><Send size={24} strokeWidth={1.5} style={{ transform: 'rotate(-30deg)' }} /><span style={{ fontSize: '11px', fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>12</span></button>
+                    {/* Overlay Centro Inferior: Ações (Like e Share) - Sombras removidas dos números */}
+                    <div style={{ position: 'absolute', bottom: '20px', left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: '24px', zIndex: 20 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                            <button style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255, 59, 48, 0.4)' }}>
+                                <Heart size={24} strokeWidth={2} color="white" />
+                            </button>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>37</span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                            <button style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                                <Send size={24} strokeWidth={2} color="var(--dark)" style={{ transform: 'rotate(-30deg) translateX(-2px)' }} />
+                            </button>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>12</span>
+                        </div>
                     </div>
 
-                    {/* Pontinhos do Carrossel (Dots) */}
-                    <div style={{ position: 'absolute', bottom: '16px', left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: '6px', zIndex: 20 }}>
-                        {[0, 1, 2].map((idx) => (
-                            <div key={idx} style={{ width: '6px', height: '6px', borderRadius: '50%', background: activeSlide === idx ? 'white' : 'transparent', border: '1px solid white', transition: 'background 0.3s ease' }} />
-                        ))}
+                    {/* Indicador Numérico do Carrossel (Canto Direito) - Sombras removidas */}
+                    <div style={{ position: 'absolute', bottom: '26px', right: '16px', zIndex: 20 }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>
+              {activeSlide + 1} de {totalSlides}
+            </span>
                     </div>
                 </div>
 
-                <div style={{ padding: '20px 16px', textAlign: 'center' }}>
+                {/* Legenda: Preços Todos em Preto (var(--dark)) */}
+                <div style={{ padding: '24px 16px', textAlign: 'center' }}>
                     <h3 className="font-display" style={{ fontSize: '22px', fontWeight: 600, color: 'var(--dark)', marginBottom: '4px' }}>Blusa mula manca</h3>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px' }}>
-                        de <span style={{ textDecoration: 'line-through' }}>R$119,90</span> por <strong style={{ color: 'var(--dark)', fontSize: '14px' }}>R$79,90</strong>
+                    <div style={{ fontSize: '14px', color: 'var(--dark)', marginBottom: '16px', display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ textDecoration: 'line-through' }}>R$119,90</span>
+                        <strong style={{ fontSize: '15px' }}>R$79,90</strong>
                     </div>
-                    <button
-                        onClick={() => window.open('https://wa.me/5551999999999?text=Olá!%20Quero%20a%20Blusa%20mula%20manca%20por%2079,90', '_blank')}
-                        style={{ width: '100%', background: 'var(--terra)', color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(230, 57, 143, 0.3)' }}
-                    >
-                        Ver no Zap!
-                    </button>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', letterSpacing: '0.02em' }}>
+                        Canelado · Verde Mint · P M G
+                    </div>
                 </div>
             </div>
 
@@ -108,13 +118,8 @@ export function Home({ onNavigateParaVoce }: HomeProps) {
           RESTANTE DO SITE
           ======================================================= */}
             <div style={{ background: 'var(--cream)', paddingBottom: '110px' }}>
-                <div className="trust-row" style={{ padding: '0 16px' }}>
-                    <div className="trust-chip">🚚 <strong>Entrega</strong> rápida</div>
-                    <div className="trust-chip">🔄 <strong>Troca</strong> em 7 dias</div>
-                    <div className="trust-chip">⭐ <strong>4,9</strong> de 5</div>
-                </div>
 
-                <div className="section-title-m" style={{ marginTop: '30px' }}>Mais desejados ✦</div>
+                <div className="section-title-m" style={{ marginTop: '10px' }}>Mais desejados ✦</div>
                 <div className="products-scroll">
                     {mockProducts.map((p) => (
                         <div key={p.id} className="product-card-m">
@@ -125,8 +130,8 @@ export function Home({ onNavigateParaVoce }: HomeProps) {
                             <div className="product-body-m">
                                 <div className="product-name-m">{p.name}</div>
                                 <div className="product-pricing-m">
-                                    {p.priceOld && <span className="price-old-m">{p.priceOld}</span>}
-                                    <span className="price-new-m">{p.priceNew}</span>
+                                    {p.priceOld && <span className="price-old-m" style={{ color: 'var(--dark)', textDecoration: 'line-through' }}>{p.priceOld}</span>}
+                                    <span className="price-new-m" style={{ color: 'var(--dark)' }}>{p.priceNew}</span>
                                 </div>
                                 <button className="product-cta-m">📲 Ver Peça</button>
                             </div>
