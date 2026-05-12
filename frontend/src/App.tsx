@@ -4,11 +4,25 @@ import { CurtidasScreen } from './pages/CurtidasScreen'; // Importado
 import { BottomNavigation } from './components/common/BottomNavigation';
 import { useDiscoveryStore } from './store/useDiscoveryStore';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useAdminStore } from './store/useAdminStore';
+import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
+import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
 
 export default function App() {
     const [activeTab, setActiveTab] = useState('foryou');
     const { activeCategory, setActiveCategory } = useDiscoveryStore();
     const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+    const { isAdminModeOpen, currentUser, toggleAdminMode } = useAdminStore();
+
+    const handleSecretClick = (e: React.MouseEvent) => {
+        if (e.detail === 2) { // 2 = Duplo clique rápido
+            toggleAdminMode();
+        }
+    };
+
+    if (isAdminModeOpen) {
+        return currentUser ? <AdminDashboardScreen /> : <AdminLoginScreen />;
+    }
 
     const categories = ['TODAS AS PEÇAS', 'Calças', 'Casacos', 'Moletons', 'Blusas', 'Saias', 'Conjuntos'];
 
@@ -21,7 +35,11 @@ export default function App() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '0 16px', height: '60px', maxWidth: '430px', margin: '0 auto'
             }}>
-                <div className="nav-logo" style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 600, color: 'var(--dark)' }}>
+                <div
+                    className="nav-logo"
+                    onDoubleClick={handleSecretClick} // Botão secreto!
+                    style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 600, color: 'var(--dark)', userSelect: 'none', cursor: 'pointer' }}
+                >
                     Via <span style={{ color: 'var(--terra)' }}>Brás</span>
                 </div>
 
