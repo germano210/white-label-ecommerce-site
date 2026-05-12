@@ -1,8 +1,8 @@
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
-import { Trash2, Check, Send } from 'lucide-react';
+import { Trash2, Check, Send, User } from 'lucide-react';
 
 export function CurtidasScreen() {
-    const { likedItems, itemPrefs, setItemSize, toggleSelection, removeLikedItem } = useDiscoveryStore();
+    const { likedItems, itemPrefs, setItemSize, toggleSelection, removeLikedItem, userName, setUserName } = useDiscoveryStore();
 
     // Calcula o total somando apenas as peças que estão com a checkbox marcada
     const total = likedItems.reduce((acc, item) => {
@@ -16,13 +16,13 @@ export function CurtidasScreen() {
 
     const handleWhatsApp = () => {
         const selectedItems = likedItems.filter(item => itemPrefs[item.id]?.isSelected);
-        if (selectedItems.length === 0) return;
+        if (selectedItems.length === 0 || !userName.trim()) return;
 
-        let text = "Olá Via Brás! Separei estas peças no site e gostaria de saber a disponibilidade:\n\n";
+        let text = `Olá Via Brás! Sou a *${userName}* e separei estas peças no site para saber a disponibilidade:\n\n`;
 
         selectedItems.forEach(item => {
             const pref = itemPrefs[item.id];
-            text += ` *${item.name}*\n`;
+            text += `🛍️ *${item.name}*\n`;
             text += `Tamanho: ${pref.size}\n`;
             text += `Detalhes: ${item.sub.split('·').slice(0, 2).join('·')}\n`;
             text += `Valor: ${item.priceNew}\n\n`;
@@ -32,7 +32,7 @@ export function CurtidasScreen() {
 
         const encoded = encodeURIComponent(text);
         // Substitua este número pelo WhatsApp real da loja (ex: 5511999999999)
-        window.open(`https://wa.me/5551999522296?text=${encoded}`, '_blank');
+        window.open(`https://wa.me/5551999999999?text=${encoded}`, '_blank');
     };
 
     if (likedItems.length === 0) {
@@ -52,11 +52,37 @@ export function CurtidasScreen() {
                 <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)' }}>Minhas Curtidas</h2>
             </div>
 
+            {/* CAMPO DE NOME NO CARRINHO */}
+            <div style={{ padding: '16px 16px 0' }}>
+                <div style={{
+                    background: 'white', padding: '12px 16px', borderRadius: '16px',
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    border: `1.5px solid ${!userName.trim() ? 'var(--terra)' : '#EEE'}`,
+                    transition: 'all 0.3s ease'
+                }}>
+                    <User size={20} color={!userName.trim() ? 'var(--terra)' : '#999'} />
+                    <input
+                        type="text"
+                        placeholder="Digite seu nome para separar..."
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                        style={{ flex: 1, border: 'none', outline: 'none', fontSize: '14px', background: 'transparent' }}
+                    />
+                </div>
+                {!userName.trim() && (
+                    <span style={{ fontSize: '10px', color: 'var(--terra)', marginLeft: '12px', fontWeight: 600 }}>
+                        * Precisamos do seu nome para enviar o pedido
+                    </span>
+                )}
+            </div>
+
             {/* LISTA DE PRODUTOS */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: '120px' }}>
                 {likedItems.map(item => {
                     const pref = itemPrefs[item.id];
                     const isSelected = pref?.isSelected;
+
+                    // CORREÇÃO DO TYPESCRIPT PARA AS IMAGENS
                     const images = (item as any).images || ['https://via.placeholder.com/150'];
 
                     return (
@@ -121,7 +147,7 @@ export function CurtidasScreen() {
                 })}
             </div>
 
-            {/* BARRA FIXA DE CHECKOUT (Fica exatamente em cima da BottomNavigation) */}
+            {/* BARRA FIXA DE CHECKOUT */}
             <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100,
                 background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)',
@@ -138,13 +164,14 @@ export function CurtidasScreen() {
 
                 <button
                     onClick={handleWhatsApp}
-                    disabled={total === 0}
+                    disabled={total === 0 || !userName.trim()}
                     style={{
-                        background: total > 0 ? 'var(--terra)' : '#DDDDDD',
+                        background: (total > 0 && userName.trim()) ? 'var(--terra)' : '#DDDDDD',
                         color: 'white', border: 'none', padding: '14px 24px',
                         borderRadius: '16px', fontSize: '14px', fontWeight: 700,
-                        display: 'flex', alignItems: 'center', gap: '8px', cursor: total > 0 ? 'pointer' : 'not-allowed',
-                        boxShadow: total > 0 ? '0 8px 20px rgba(230, 57, 143, 0.3)' : 'none',
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        cursor: (total > 0 && userName.trim()) ? 'pointer' : 'not-allowed',
+                        boxShadow: (total > 0 && userName.trim()) ? '0 8px 20px rgba(230, 57, 143, 0.3)' : 'none',
                         transition: 'all 0.3s ease'
                     }}
                 >
