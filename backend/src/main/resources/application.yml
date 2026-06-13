@@ -1,0 +1,4 @@
+jwt:
+  # Em producao, defina JWT_SECRET com uma chave Base64 de pelo menos 32 bytes.
+  secret: ${JWT_SECRET:d2hpdGUtbGFiZWwtZWNvbW1lcmNlLWRldi1qd3Qtc2VjcmV0LTIwMjY=}
+  expiration-minutes: ${JWT_EXPIRATION_MINUTES:43200}
