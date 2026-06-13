@@ -7,18 +7,31 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useAdminStore } from './store/useAdminStore';
 import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
 import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
+import { WelcomeModal } from './components/common/WelcomeModal';
+import { useAuthStore } from './store/useAuthStore';
 
 export default function App() {
     const [activeTab, setActiveTab] = useState('foryou');
     const { activeCategory, setActiveCategory } = useDiscoveryStore();
     const [isCategoryOpen, setIsCategoryOpen] = useState(false);
     const { isAdminModeOpen, currentUser, toggleAdminMode } = useAdminStore();
+    const token = useAuthStore((state) => state.token);
+    const user = useAuthStore((state) => state.user);
+    const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
     const handleSecretClick = (e: React.MouseEvent) => {
         if (e.detail === 2) { // 2 = Duplo clique rápido
             toggleAdminMode();
         }
     };
+
+    if (!hasHydrated) {
+        return <div style={{ minHeight: '100dvh', background: '#FAF7F2' }} aria-label="Carregando sessão" />;
+    }
+
+    if (!token || !user) {
+        return <WelcomeModal />;
+    }
 
     if (isAdminModeOpen) {
         return currentUser ? <AdminDashboardScreen /> : <AdminLoginScreen />;
