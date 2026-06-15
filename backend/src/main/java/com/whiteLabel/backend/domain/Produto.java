@@ -23,6 +23,11 @@ public class Produto {
 
     private String detalhes;
 
+    @Column(name = "imagem_url")
+    private String imagemUrl;
+
+    private String tamanho;
+
     @Column(name = "preco_venda", nullable = false)
     private BigDecimal precoVenda;
 

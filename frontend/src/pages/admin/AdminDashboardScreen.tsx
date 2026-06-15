@@ -1,14 +1,50 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useAdminStore } from '../../store/useAdminStore';
+import { type ProdutoVitrine } from '../../store/useCartStore';
 import { mockProducts } from '../../utils/mockProducts';
+import { api } from '../../utils/api';
 import {
-    LogOut, TrendingUp, PackagePlus, ShoppingBag, Users,
+    LogOut, PackagePlus, ShoppingBag, Users,
     RefreshCcw, Search, CheckCircle, Clock, Plus, Trash2,
     UploadCloud, Phone, User as UserIcon, Calendar, ArrowRight,
-    BarChart3, UserPlus, AlertTriangle, ChevronDown
+    BarChart3, UserPlus, AlertTriangle
 } from 'lucide-react';
 
 type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | null;
+type FiltroTempo = 'HOJE' | 'SEMANA' | 'MES' | 'ANO' | 'PERSONALIZADO';
+
+interface ItemVenda extends ProdutoVitrine {
+    tempId: number;
+    tamanhoSelecionado: string;
+}
+
+interface ItemDevolvido {
+    id: number;
+    nome: string;
+    preco: number;
+}
+
+interface ProdutoAdmin {
+    id: number | string;
+    nome: string;
+    precoVenda: number;
+    precoAntigo?: number | null;
+    tamanho: string;
+    imagemUrl?: string | null;
+}
+
+interface ProdutosPage {
+    content?: ProdutoAdmin[];
+}
+
+const apiBaseUrl = String(api.defaults.baseURL ?? '').replace(/\/$/, '');
+const filtrosTempo: FiltroTempo[] = ['HOJE', 'SEMANA', 'MES', 'ANO', 'PERSONALIZADO'];
+
+function getProdutoImageUrl(imagemUrl?: string | null) {
+    if (!imagemUrl) return '';
+    if (/^https?:\/\//i.test(imagemUrl)) return imagemUrl;
+    return `${apiBaseUrl}/${imagemUrl.replace(/^\/+/, '')}`;
+}
 
 export function AdminDashboardScreen() {
     const { currentUser, logout, toggleAdminMode } = useAdminStore();
@@ -19,13 +55,23 @@ export function AdminDashboardScreen() {
     const [telefoneVenda, setTelefoneVenda] = useState('');
     const [nomeVenda, setNomeVenda] = useState('');
     const [statusVenda, setStatusVenda] = useState<'PAGO' | 'RESERVADO'>('PAGO');
-    const [itensVenda, setItensVenda] = useState<any[]>([]);
+    const [itensVenda, setItensVenda] = useState<ItemVenda[]>([]);
     const [telefoneTroca, setTelefoneTroca] = useState('');
-    const [itensDevolvidos, setItensDevolvidos] = useState<any[]>([]);
-    const [estoqueGrade, setEstoqueGrade] = useState({ P: 0, M: 0, G: 0, GG: 0 });
+    const [itensDevolvidos, setItensDevolvidos] = useState<ItemDevolvido[]>([]);
+    const nextItemId = useRef(1);
+    const [nome, setNome] = useState('');
+    const [precoVenda, setPrecoVenda] = useState('');
+    const [precoAntigo, setPrecoAntigo] = useState('');
+    const [tamanho, setTamanho] = useState('');
+    const [imagem, setImagem] = useState<File | null>(null);
+    const [produtos, setProdutos] = useState<ProdutoAdmin[]>([]);
+    const [isLoadingProdutos, setIsLoadingProdutos] = useState(true);
+    const [isSavingProduto, setIsSavingProduto] = useState(false);
+    const [produtoError, setProdutoError] = useState('');
+    const [produtoSuccess, setProdutoSuccess] = useState('');
 
     // --- ESTADOS: GERENCIAL ---
-    const [filtroTempo, setFiltroTempo] = useState<'HOJE' | 'SEMANA' | 'MES' | 'ANO' | 'PERSONALIZADO'>('MES');
+    const [filtroTempo, setFiltroTempo] = useState<FiltroTempo>('MES');
     const [novoVendedor, setNovoVendedor] = useState({ nome: '', email: '', senha: '' });
 
     // --- MOCKS DE DADOS ---
@@ -38,6 +84,84 @@ export function AdminDashboardScreen() {
         { id: 1, nome: 'Ana (Vendedora)', email: 'vendedor@viabras.com', vendas: 3120.00, comissao: 156.00 },
         { id: 2, nome: 'Julia (Vendedora)', email: 'julia@viabras.com', vendas: 2450.00, comissao: 122.50 },
     ];
+
+    const carregarProdutos = useCallback(async () => {
+        setIsLoadingProdutos(true);
+        setProdutoError('');
+
+        try {
+            const { data } = await api.get<ProdutoAdmin[] | ProdutosPage>('/admin/produtos');
+            setProdutos(Array.isArray(data) ? data : data.content ?? []);
+        } catch {
+            setProdutoError('Não foi possível carregar os produtos cadastrados.');
+        } finally {
+            setIsLoadingProdutos(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            void carregarProdutos();
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [carregarProdutos]);
+
+    const cadastrarProduto = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+
+        if (!imagem) {
+            setProdutoError('Selecione uma imagem para cadastrar o produto.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('nome', nome.trim());
+        formData.append('precoVenda', precoVenda);
+        formData.append('precoAntigo', precoAntigo);
+        formData.append('tamanho', tamanho.trim());
+        formData.append('imagem', imagem);
+
+        setIsSavingProduto(true);
+        setProdutoError('');
+        setProdutoSuccess('');
+
+        try {
+            await api.post('/admin/produtos', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            setNome('');
+            setPrecoVenda('');
+            setPrecoAntigo('');
+            setTamanho('');
+            setImagem(null);
+            form.reset();
+            setProdutoSuccess('Produto cadastrado com sucesso.');
+            await carregarProdutos();
+        } catch {
+            setProdutoError('Não foi possível cadastrar o produto. Confira os dados e tente novamente.');
+        } finally {
+            setIsSavingProduto(false);
+        }
+    };
+
+    const excluirProduto = async (produtoId: ProdutoAdmin['id']) => {
+        setProdutoError('');
+        setProdutoSuccess('');
+
+        try {
+            await api.delete(`/admin/produtos/${produtoId}`);
+            setProdutos((currentProducts) => (
+                currentProducts.filter((produto) => produto.id !== produtoId)
+            ));
+        } catch {
+            setProdutoError('Não foi possível excluir o produto.');
+        }
+    };
 
 
 
@@ -52,8 +176,10 @@ export function AdminDashboardScreen() {
         setItensDevolvidos([...itensDevolvidos, { id: Date.now(), nome: 'Peça do Histórico (Exemplo)', preco: 89.90 }]);
     };
 
-    const adicionarAoCarrinho = (produto: any) => {
-        setItensVenda([...itensVenda, { ...produto, tempId: Date.now(), tamanhoSelecionado: 'M' }]);
+    const adicionarAoCarrinho = (produto: ProdutoVitrine) => {
+        const tempId = nextItemId.current;
+        nextItemId.current += 1;
+        setItensVenda([...itensVenda, { ...produto, tempId, tamanhoSelecionado: 'M' }]);
         setBuscaProduto('');
     };
 
@@ -120,8 +246,8 @@ export function AdminDashboardScreen() {
 
                     {/* Filtros de Tempo */}
                     <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '10px', scrollbarWidth: 'none' }}>
-                        {['HOJE', 'SEMANA', 'MES', 'ANO', 'PERSONALIZADO'].map(t => (
-                            <button key={t} onClick={() => setFiltroTempo(t as any)} style={{ padding: '8px 14px', borderRadius: '20px', border: `1px solid ${filtroTempo === t ? '#8A2BE2' : '#EEE'}`, background: filtroTempo === t ? '#8A2BE2' : 'white', color: filtroTempo === t ? 'white' : '#999', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                        {filtrosTempo.map(t => (
+                            <button key={t} onClick={() => setFiltroTempo(t)} style={{ padding: '8px 14px', borderRadius: '20px', border: `1px solid ${filtroTempo === t ? '#8A2BE2' : '#EEE'}`, background: filtroTempo === t ? '#8A2BE2' : 'white', color: filtroTempo === t ? 'white' : '#999', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
                                 {t}
                             </button>
                         ))}
@@ -453,53 +579,109 @@ export function AdminDashboardScreen() {
                         <PackagePlus size={20} color="#4A90E2" /> Cadastrar Peça
                     </h3>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        {/* Upload de Fotos */}
-                        <div style={{ width: '100%', height: '120px', borderRadius: '16px', border: '2px dashed #DDD', background: '#F9F9F9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#999', cursor: 'pointer' }}>
+                    <form onSubmit={cadastrarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <label style={{ minHeight: '120px', padding: '18px', borderRadius: '16px', border: '2px dashed #DDD', background: '#F9F9F9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: imagem ? '#4A90E2' : '#999', cursor: 'pointer', textAlign: 'center' }}>
                             <UploadCloud size={32} />
-                            <span style={{ fontSize: '13px', fontWeight: 600 }}>Toque para adicionar fotos</span>
-                        </div>
+                            <span style={{ fontSize: '13px', fontWeight: 700 }}>
+                                {imagem ? imagem.name : 'Selecionar imagem do produto'}
+                            </span>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(event) => setImagem(event.target.files?.[0] ?? null)}
+                                style={{ width: '100%', fontSize: '12px' }}
+                                required
+                            />
+                        </label>
 
-                        {/* Dados Básicos */}
-                        <div>
-                            <input type="text" placeholder="Nome da Peça (Ex: Vestido Canelado)" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #EEE', background: '#F9F9F9', fontSize: '14px', outline: 'none', marginBottom: '10px' }} />
-                            <input type="text" placeholder="Detalhes (Ex: Algodão · Preto e Branco)" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #EEE', background: '#F9F9F9', fontSize: '14px', outline: 'none' }} />
-                        </div>
+                        <input type="text" placeholder="Nome da peça" value={nome} onChange={(event) => setNome(event.target.value)} style={adminInputStyle} required />
 
                         <div style={{ display: 'flex', gap: '12px' }}>
-                            <input type="number" placeholder="Preço Venda (R$)" style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #EEE', background: '#F9F9F9', fontSize: '14px', outline: 'none' }} />
-                            <input type="number" placeholder="Preço Antigo" style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #EEE', background: '#F9F9F9', fontSize: '14px', outline: 'none' }} />
+                            <input type="number" min="0" step="0.01" placeholder="Preço de venda" value={precoVenda} onChange={(event) => setPrecoVenda(event.target.value)} style={{ ...adminInputStyle, flex: 1, minWidth: 0 }} required />
+                            <input type="number" min="0" step="0.01" placeholder="Preço antigo" value={precoAntigo} onChange={(event) => setPrecoAntigo(event.target.value)} style={{ ...adminInputStyle, flex: 1, minWidth: 0 }} />
                         </div>
 
-                        {/* Categorias (Tags Dinâmicas) */}
-                        <div>
-                            <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Categorias</label>
-                            <input type="text" placeholder="Digite e aperte Enter..." style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #EEE', marginTop: '6px', outline: 'none', fontSize: '14px' }} />
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ background: 'var(--dark)', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', cursor: 'pointer' }}>Calças ✕</span>
-                                <span style={{ background: 'var(--dark)', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', cursor: 'pointer' }}>Inverno ✕</span>
-                            </div>
-                        </div>
+                        <input type="text" placeholder="Tamanho (ex.: M ou P · M · G)" value={tamanho} onChange={(event) => setTamanho(event.target.value)} style={adminInputStyle} required />
 
-                        {/* Grade de Estoque */}
-                        <div style={{ background: '#F9F9F9', padding: '16px', borderRadius: '16px', border: '1px solid #EEE' }}>
-                            <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px', display: 'block' }}>Grade de Estoque</label>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                {['P', 'M', 'G', 'GG'].map(tamanho => (
-                                    <div key={tamanho} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--dark)' }}>{tamanho}</span>
-                                        <input type="number" min="0" value={estoqueGrade[tamanho as keyof typeof estoqueGrade]} onChange={(e) => setEstoqueGrade({...estoqueGrade, [tamanho]: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #DDD', textAlign: 'center', outline: 'none', fontSize: '16px' }} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        {produtoError && <div role="alert" style={{ padding: '11px 12px', borderRadius: '12px', color: '#A63D2F', background: '#FFF0ED', fontSize: '12px', fontWeight: 600 }}>{produtoError}</div>}
+                        {produtoSuccess && <div role="status" style={{ padding: '11px 12px', borderRadius: '12px', color: '#2D6A4F', background: '#EDF7F0', fontSize: '12px', fontWeight: 600 }}>{produtoSuccess}</div>}
 
-                        <button style={{ background: '#4A90E2', color: 'white', padding: '16px', borderRadius: '16px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
-                            Salvar Produto e Estoque
+                        <button type="submit" disabled={isSavingProduto} style={{ background: '#4A90E2', color: 'white', padding: '16px', borderRadius: '16px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: isSavingProduto ? 'wait' : 'pointer', opacity: isSavingProduto ? 0.65 : 1 }}>
+                            {isSavingProduto ? 'Salvando produto...' : 'Salvar produto'}
                         </button>
+                    </form>
+
+                    <div style={{ marginTop: '28px', paddingTop: '22px', borderTop: '1px solid #EEE' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--dark)' }}>Produtos cadastrados</h4>
+                            <span style={{ fontSize: '11px', color: '#999' }}>{produtos.length} itens</span>
+                        </div>
+
+                        {isLoadingProdutos ? (
+                            <div style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Carregando produtos...</div>
+                        ) : produtos.length === 0 ? (
+                            <div style={{ padding: '24px', borderRadius: '14px', background: '#F9F9F9', textAlign: 'center', color: '#999', fontSize: '13px' }}>Nenhum produto cadastrado.</div>
+                        ) : (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '430px' }}>
+                                    <thead>
+                                        <tr style={{ color: '#999', fontSize: '10px', textAlign: 'left', textTransform: 'uppercase' }}>
+                                            <th style={adminTableHeaderStyle}>Foto</th>
+                                            <th style={adminTableHeaderStyle}>Nome</th>
+                                            <th style={adminTableHeaderStyle}>Tamanho</th>
+                                            <th style={{ ...adminTableHeaderStyle, textAlign: 'right' }}>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {produtos.map((produto) => {
+                                            const imageUrl = getProdutoImageUrl(produto.imagemUrl);
+
+                                            return (
+                                                <tr key={produto.id} style={{ borderTop: '1px solid #F0F0F0' }}>
+                                                    <td style={adminTableCellStyle}>
+                                                        {imageUrl ? (
+                                                            <img src={imageUrl} alt={produto.nome} style={{ width: '48px', height: '48px', borderRadius: '10px', objectFit: 'cover', background: '#EEE' }} />
+                                                        ) : (
+                                                            <div style={{ width: '48px', height: '48px', borderRadius: '10px', display: 'grid', placeItems: 'center', background: '#EEE', color: '#AAA', fontSize: '10px' }}>Sem foto</div>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ ...adminTableCellStyle, fontSize: '13px', fontWeight: 700 }}>{produto.nome}</td>
+                                                    <td style={{ ...adminTableCellStyle, fontSize: '12px', color: '#666' }}>{produto.tamanho}</td>
+                                                    <td style={{ ...adminTableCellStyle, textAlign: 'right' }}>
+                                                        <button type="button" aria-label={`Excluir ${produto.nome}`} onClick={() => void excluirProduto(produto.id)} style={{ width: '36px', height: '36px', border: 0, borderRadius: '10px', color: '#FF3B30', background: '#FFF1F0', cursor: 'pointer' }}>
+                                                            <Trash2 size={17} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
         </div>
     );
 }
+
+const adminInputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '14px',
+    borderRadius: '12px',
+    border: '1px solid #EEE',
+    outline: 'none',
+    background: '#F9F9F9',
+    fontSize: '14px',
+};
+
+const adminTableHeaderStyle: React.CSSProperties = {
+    padding: '8px 10px',
+    fontWeight: 700,
+};
+
+const adminTableCellStyle: React.CSSProperties = {
+    padding: '10px',
+    verticalAlign: 'middle',
+};

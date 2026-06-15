@@ -1,192 +1,487 @@
 import { useState } from 'react';
-import { motion, useMotionValue, useTransform, useAnimation, type PanInfo } from 'framer-motion';
+import {
+    animate,
+    motion,
+    useAnimation,
+    useMotionValue,
+    useTransform,
+    type PanInfo,
+} from 'framer-motion';
+import { Heart, Send, Undo2, X } from 'lucide-react';
+import { type ProdutoVitrine } from '../../store/useCartStore';
 import { useDiscoveryStore } from '../../store/useDiscoveryStore';
-import { Undo2, X, Heart, Send } from 'lucide-react';
 
 interface SwipeCardProps {
-    product: any;
+    product: ProdutoVitrine;
     isTop: boolean;
     index: number;
-    onSwipeEnd: () => void;
+    onSwipe: (direction: 'like' | 'dislike') => void;
+    onUndo: () => void;
 }
 
-export function SwipeCard({ product, isTop, index, onSwipeEnd }: SwipeCardProps) {
-    const [currentPhoto, setCurrentPhoto] = useState(0);
-    const [isHeartClicked, setIsHeartClicked] = useState(false);
+const fallbackImage =
+    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80';
 
-    const productImages = product.images || ['https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80'];
+export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardProps) {
+    const [currentPhoto, setCurrentPhoto] = useState(0);
+    const [isSwiping, setIsSwiping] = useState(false);
+
+    const productImages = product.images?.length ? product.images : [fallbackImage];
     const totalPhotos = productImages.length;
     const activeImageSrc = productImages[currentPhoto];
 
-    const swipeRight = useDiscoveryStore((state) => state.swipeRight);
-    const swipeLeft = useDiscoveryStore((state) => state.swipeLeft);
-    const undoLastSwipe = useDiscoveryStore((state) => state.undoLastSwipe);
+    const reactionCounts = useDiscoveryStore(
+        (state) => state.productReactionCounts[product.id],
+    );
 
     const x = useMotionValue(0);
-    const rotate = useTransform(x, [-200, 200], [-25, 25]);
-    const overlayOpacityLike = useTransform(x, [20, 100], [0, 1]);
-    const overlayOpacityNope = useTransform(x, [-20, -100], [0, 1]);
+    const rotate = useTransform(x, [-220, 220], [-16, 16]);
+    const overlayOpacityLike = useTransform(x, [20, 110], [0, 1]);
+    const overlayOpacityNope = useTransform(x, [-20, -110], [0, 1]);
+    const heartControls = useAnimation();
 
-    const controls = useAnimation();
-    const heartControls = useAnimation(); // Controla o coração voando
+    const scale = isTop ? 1 : 1 - index * 0.025;
+    const yOffset = isTop ? 0 : index * 7;
+    const likesCount = reactionCounts?.likes ?? product.curtidas;
+    const dislikesCount = reactionCounts?.dislikes ?? product.dislikes ?? 0;
 
-    const scale = isTop ? 1 : 1 - (index * 0.04);
-    const yOffset = isTop ? 0 : index * 10;
+    const handlePhotoTap = (event: React.MouseEvent | React.TouchEvent) => {
+        if (!isTop || isSwiping) return;
 
-    const handlePhotoTap = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isTop || isHeartClicked) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-        const clickX = clientX - rect.left;
-        if (clickX > rect.width / 2) {
-            if (currentPhoto < totalPhotos - 1) setCurrentPhoto(prev => prev + 1);
-        } else {
-            if (currentPhoto > 0) setCurrentPhoto(prev => prev - 1);
+        const rect = event.currentTarget.getBoundingClientRect();
+        const clientX = 'touches' in event
+            ? event.touches[0].clientX
+            : event.clientX;
+        const clickedRightSide = clientX - rect.left > rect.width / 2;
+
+        if (clickedRightSide && currentPhoto < totalPhotos - 1) {
+            setCurrentPhoto((photo) => photo + 1);
+        } else if (!clickedRightSide && currentPhoto > 0) {
+            setCurrentPhoto((photo) => photo - 1);
         }
     };
 
-    const handleDragEnd = async (_event: any, info: PanInfo) => {
-        if (isHeartClicked) return;
-        const offset = info.offset.x;
-        const velocity = info.velocity.x;
-        if (offset > 100 || velocity > 500) await triggerSwipe('like');
-        else if (offset < -100 || velocity < -500) await triggerSwipe('nope');
-        else controls.start({ x: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
-    };
+    const triggerSwipe = async (type: 'like' | 'nope', hasInteractionLock = false) => {
+        if (!hasInteractionLock && (!isTop || isSwiping)) return;
 
-    const triggerSwipe = async (type: 'like' | 'nope') => {
-        const xOut = type === 'like' ? window.innerWidth : -window.innerWidth;
-        await controls.start({ x: xOut, transition: { duration: 0.3 } });
-        if (type === 'like') swipeRight(product);
-        else swipeLeft(product);
-        onSwipeEnd();
-    };
+        if (!hasInteractionLock) setIsSwiping(true);
+        const direction = type === 'like' ? 1 : -1;
+        const xOut = direction * Math.max(window.innerWidth * 1.35, 560);
 
-    const handleHeartClick = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!isTop || isHeartClicked) return;
-        setIsHeartClicked(true); // Preenche o coração de branco
-
-        // A trajetória suave em arco para a aba "Curtidas" (Canto inferior direito)
-        await heartControls.start({
-            y: [0, 100, 350],
-            x: [0, 50, 120],
-            scale: [1, 1.3, 0.4],
-            opacity: [1, 1, 0],
-            transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] }
+        await animate(x, xOut, {
+            duration: 0.34,
+            ease: [0.22, 1, 0.36, 1],
         });
 
-        swipeRight(product); // Isso vai disparar o pulso na BottomNav
-        onSwipeEnd();
+        onSwipe(type === 'like' ? 'like' : 'dislike');
+    };
+
+    const handleDragEnd = async (
+        _event: MouseEvent | TouchEvent | PointerEvent,
+        info: PanInfo,
+    ) => {
+        if (isSwiping) return;
+
+        if (info.offset.x > 100 || info.velocity.x > 500) {
+            await triggerSwipe('like');
+        } else if (info.offset.x < -100 || info.velocity.x < -500) {
+            await triggerSwipe('nope');
+        } else {
+            await animate(x, 0, {
+                type: 'spring',
+                stiffness: 320,
+                damping: 22,
+            });
+        }
+    };
+
+    const handleHeartClick = async (event: React.MouseEvent) => {
+        event.stopPropagation();
+        if (!isTop || isSwiping) return;
+
+        setIsSwiping(true);
+        await heartControls.start({
+            scale: [1, 1.18, 0.92],
+            transition: { duration: 0.32, ease: 'easeOut' },
+        });
+
+        await triggerSwipe('like', true);
     };
 
     return (
-        <motion.div
+        <motion.article
             className={`swipe-card ${isTop ? 'on-top' : ''}`}
             style={{
-                x, rotate, scale, y: yOffset, zIndex: isTop ? 10 : 10 - index,
-                position: 'absolute', inset: 0,
-                display: 'flex', flexDirection: 'column',
-                background: 'white', borderRadius: '24px', overflow: 'hidden',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.08)'
+                x,
+                rotate,
+                scale,
+                y: yOffset,
+                zIndex: isTop ? 10 : 10 - index,
+                position: 'absolute',
+                inset: 0,
+                overflow: 'hidden',
+                borderRadius: 'var(--radius-card)',
+                background: '#DDD8CF',
+                boxShadow: '0 8px 24px rgba(35, 31, 24, 0.14)',
+                fontFamily: "'DM Sans', sans-serif",
+                touchAction: 'none',
             }}
-            animate={controls}
-            drag={isTop && !isHeartClicked ? "x" : false}
+            drag={isTop && !isSwiping ? 'x' : false}
             dragConstraints={{ left: 0, right: 0 }}
             onDragEnd={handleDragEnd}
         >
             <div
-                className="card-img"
                 onClick={handlePhotoTap}
                 style={{
-                    position: 'relative', flex: 1, minHeight: 0, background: '#F5F5F5',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: isTop ? 'pointer' : 'default', overflow: 'hidden'
+                    position: 'absolute',
+                    inset: 0,
+                    overflow: 'hidden',
+                    cursor: isTop ? 'pointer' : 'default',
                 }}
             >
-                {/* Filtros de Drag (CURTI / PASSO) */}
-                <motion.div style={{ position: 'absolute', inset: 0, background: 'rgba(45, 106, 79, 0.75)', opacity: overlayOpacityLike, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
-                    <div style={{ color: 'white', fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-display)', border: '4px solid white', padding: '10px 30px', borderRadius: '16px', transform: 'rotate(-15deg)' }}>
-                        CURTI
-                    </div>
-                </motion.div>
-                <motion.div style={{ position: 'absolute', inset: 0, background: 'rgba(166, 61, 47, 0.75)', opacity: overlayOpacityNope, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
-                    <div style={{ color: 'white', fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-display)', border: '4px solid white', padding: '10px 30px', borderRadius: '16px', transform: 'rotate(15deg)' }}>
-                        PASSO
-                    </div>
-                </motion.div>
+                <img
+                    src={activeImageSrc}
+                    alt={product.name}
+                    draggable={false}
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        userSelect: 'none',
+                    }}
+                />
 
-                {/* Barrinhas de Progresso */}
-                <div style={{ position: 'absolute', top: '12px', left: '12px', right: '12px', display: 'flex', gap: '4px', zIndex: 45 }}>
-                    {Array.from({ length: totalPhotos }).map((_, i) => (
-                        <div key={i} style={{
-                            flex: 1, height: '3px', borderRadius: '2px',
-                            background: i === currentPhoto ? 'var(--terra)' : 'rgba(255,255,255,0.5)',
-                            transition: 'background 0.3s ease'
-                        }} />
+                <div
+                    aria-hidden="true"
+                    style={{
+                        position: 'absolute',
+                        inset: '0 0 auto',
+                        height: '185px',
+                        zIndex: 20,
+                        pointerEvents: 'none',
+                        background:
+                            'linear-gradient(180deg, rgba(16, 18, 15, 0.58) 0%, rgba(16, 18, 15, 0.12) 72%, transparent 100%)',
+                    }}
+                />
+
+                <div
+                    aria-label={`Foto ${currentPhoto + 1} de ${totalPhotos}`}
+                    style={{
+                        position: 'absolute',
+                        top: '13px',
+                        left: '10px',
+                        right: '10px',
+                        zIndex: 45,
+                        display: 'flex',
+                        gap: '4px',
+                    }}
+                >
+                    {Array.from({ length: totalPhotos }).map((_, photoIndex) => (
+                        <span
+                            key={photoIndex}
+                            style={{
+                                flex: 1,
+                                height: '3px',
+                                borderRadius: 'var(--radius-button)',
+                                background: photoIndex === currentPhoto
+                                    ? 'var(--color-action-button)'
+                                    : 'rgba(255, 255, 255, 0.45)',
+                            }}
+                        />
                     ))}
                 </div>
 
-                {/* Imagem Real */}
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
-                    <img src={activeImageSrc} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
+                <header
+                    style={{
+                        position: 'absolute',
+                        top: '31px',
+                        left: '1px',
+                        right: '38px',
+                        zIndex: 30,
+                        padding: '9px 10px 10px',
+                        borderRadius: '0 13px 13px 0',
+                        color: 'var(--color-action-button)',
+                        background: 'rgba(8, 9, 8, 0.72)',
+                        backdropFilter: 'blur(6px)',
+                        pointerEvents: 'none',
+                    }}
+                >
+                    <p
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            margin: '0 0 5px',
+                            fontSize: '9px',
+                            fontWeight: 600,
+                            lineHeight: 1.25,
+                        }}
+                    >
+                        <Heart size={9} fill="currentColor" strokeWidth={0} />
+                        Curtido por Bianca, Fernanda e mais {Math.max(likesCount - 2, 1)} pessoas.
+                    </p>
 
-                {/* Gradiente de fundo para botões */}
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '150px', background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)', zIndex: 20, pointerEvents: 'none' }} />
+                    <div
+                        style={{
+                            display: 'flex',
+                            width: '100%',
+                            alignItems: 'baseline',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            minWidth: 0,
+                            textAlign: 'left',
+                        }}
+                    >
+                        <h2
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                margin: 0,
+                                fontSize: 'clamp(17px, 5.2vw, 22px)',
+                                fontWeight: 700,
+                                lineHeight: 1.12,
+                                letterSpacing: '-0.03em',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {product.name}
+                        </h2>
+                        <span
+                            style={{
+                                color: 'rgba(255, 255, 255, 0.72)',
+                                flexShrink: 0,
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                textAlign: 'left',
+                            }}
+                        >
+                            Tam. {product.tamanho.toLowerCase()}
+                        </span>
+                    </div>
+                </header>
+
+                <span
+                    className="bg-[var(--color-success-badge)] text-white"
+                    style={{
+                        position: 'absolute',
+                        top: '121px',
+                        left: '8px',
+                        zIndex: 31,
+                        minWidth: '54px',
+                        padding: '4px 11px',
+                        borderRadius: 'var(--radius-button)',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        textAlign: 'center',
+                        pointerEvents: 'none',
+                    }}
+                >
+                    {currentPhoto + 1} de {totalPhotos}
+                </span>
+
+                <div
+                    aria-hidden="true"
+                    style={{
+                        position: 'absolute',
+                        inset: 'auto 0 0',
+                        height: '178px',
+                        zIndex: 20,
+                        pointerEvents: 'none',
+                        background:
+                            'linear-gradient(0deg, rgba(13, 14, 12, 0.48) 0%, rgba(13, 14, 12, 0.05) 76%, transparent 100%)',
+                    }}
+                />
+
+                <motion.div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 40,
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: 'var(--color-action-button)',
+                        background: 'rgba(104, 113, 82, 0.68)',
+                        opacity: overlayOpacityLike,
+                        pointerEvents: 'none',
+                    }}
+                >
+                    <strong style={swipeStampStyle}>CURTI</strong>
+                </motion.div>
+
+                <motion.div
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 40,
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: 'var(--color-action-button)',
+                        background: 'rgba(142, 59, 59, 0.64)',
+                        opacity: overlayOpacityNope,
+                        pointerEvents: 'none',
+                    }}
+                >
+                    <strong style={{ ...swipeStampStyle, transform: 'rotate(11deg)' }}>
+                        PASSO
+                    </strong>
+                </motion.div>
 
                 {isTop && (
-                    <div style={{ position: 'absolute', bottom: '24px', left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '20px', zIndex: 50 }}>
-                        {/* Botão Voltar */}
-                        <div style={{ marginTop: '18px' }}>
-                            <button onClick={(e) => { e.stopPropagation(); undoLastSwipe(); }} style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: 'var(--dark)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                                <Undo2 size={20} />
-                            </button>
+                    <div
+                        className="flex w-full items-center justify-between"
+                        style={{
+                            position: 'absolute',
+                            bottom: '18px',
+                            left: '50%',
+                            zIndex: 50,
+                            width: 'min(84%, 340px)',
+                            transform: 'translateX(-50%)',
+                        }}
+                    >
+                        <div
+                            className="flex items-center justify-center"
+                            style={{ width: '25%' }}
+                        >
+                            <ActionButton
+                                label="Desfazer último swipe"
+                                size="small"
+                                tone="neutral"
+                                onClick={onUndo}
+                                icon={<Undo2 size={18} />}
+                            />
                         </div>
 
-                        {/* Botão X */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                            <button onClick={(e) => { e.stopPropagation(); triggerSwipe('nope'); }} style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: 'var(--dark)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                                <X size={32} strokeWidth={1.5} />
-                            </button>
+                        <div
+                            className="flex items-center justify-around"
+                            style={{ width: '50%' }}
+                        >
+                            <ActionButton
+                                label="Passar peça"
+                                count={dislikesCount}
+                                tone="dislike"
+                                onClick={() => void triggerSwipe('nope')}
+                                icon={<X size={29} strokeWidth={1.35} />}
+                            />
+                            <ActionButton
+                                label="Curtir peça"
+                                count={likesCount}
+                                tone="like"
+                                motionControls={heartControls}
+                                onClick={(event) => void handleHeartClick(event)}
+                                icon={
+                                    <Heart
+                                        size={28}
+                                        strokeWidth={1.45}
+                                        fill={isSwiping ? 'currentColor' : 'none'}
+                                    />
+                                }
+                            />
                         </div>
 
-                        {/* Botão Coração Simplificado */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                            <motion.button
-                                animate={heartControls}
-                                onClick={handleHeartClick}
-                                style={{
-                                    width: '56px', height: '56px', borderRadius: '50%',
-                                    background: '#FF3B30',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    border: 'none', color: 'white', cursor: 'pointer',
-                                    zIndex: 100
-                                }}
-                            >
-                                <Heart size={32} strokeWidth={1.5} fill={isHeartClicked ? 'white' : 'none'} />
-                            </motion.button>
-                        </div>
-
-                        {/* Botão Compartilhar */}
-                        <div style={{ marginTop: '18px' }}>
-                            <button onClick={(e) => e.stopPropagation()} style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: 'var(--dark)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                                <Send size={20} />
-                            </button>
+                        <div
+                            className="flex items-center justify-center"
+                            style={{ width: '25%' }}
+                        >
+                            <ActionButton
+                                label="Compartilhar peça"
+                                size="small"
+                                onClick={() => undefined}
+                                icon={<Send size={18} />}
+                            />
                         </div>
                     </div>
                 )}
             </div>
-
-            {/* Info do Produto */}
-            <div style={{ flexShrink: 0, padding: '28px 16px', textAlign: 'center', background: 'white' }}>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 500, color: 'var(--dark)', marginBottom: '6px', letterSpacing: '0.02em' }}>
-                    {product.name}
-                </h3>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--muted)', textTransform: 'lowercase', letterSpacing: '0.1em' }}>
-                    {product.sub.split('·').slice(0, 2).join('·')}
-                </div>
-            </div>
-        </motion.div>
+        </motion.article>
     );
 }
+
+interface ActionButtonProps {
+    label: string;
+    icon: React.ReactNode;
+    count?: number;
+    tone?: 'neutral' | 'like' | 'dislike';
+    size?: 'small' | 'large';
+    motionControls?: ReturnType<typeof useAnimation>;
+    onClick: (event: React.MouseEvent) => void;
+}
+
+function ActionButton({
+    label,
+    icon,
+    count,
+    tone = 'neutral',
+    size = 'large',
+    motionControls,
+    onClick,
+}: ActionButtonProps) {
+    const dimension = size === 'small' ? 38 : 54;
+    const isLike = tone === 'like';
+    const buttonClassName = isLike
+        ? 'bg-[var(--color-primary-like)] text-white'
+        : 'bg-[var(--color-action-button)] text-[var(--text-dark)]';
+
+    return (
+        <div
+            style={{
+                display: 'flex',
+                minWidth: `${dimension}px`,
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '5px',
+                marginTop: size === 'small' ? '17px' : 0,
+            }}
+        >
+            <motion.button
+                className={buttonClassName}
+                type="button"
+                aria-label={label}
+                animate={motionControls}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onClick(event);
+                }}
+                whileTap={{ scale: 0.92 }}
+                style={{
+                    display: 'grid',
+                    width: `${dimension}px`,
+                    height: `${dimension}px`,
+                    placeItems: 'center',
+                    border: 0,
+                    borderRadius: 'var(--radius-button)',
+                    boxShadow: isLike
+                        ? '0 8px 20px color-mix(in srgb, var(--color-primary-like) 30%, transparent)'
+                        : '0 7px 18px rgba(0, 0, 0, 0.16)',
+                    cursor: 'pointer',
+                }}
+            >
+                {icon}
+            </motion.button>
+
+            {count !== undefined && size === 'large' && (
+                <span
+                    style={{
+                        color: 'var(--color-action-button)',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        textShadow: '0 1px 5px rgba(0, 0, 0, 0.45)',
+                    }}
+                >
+                    {count}
+                </span>
+            )}
+        </div>
+    );
+}
+
+const swipeStampStyle: React.CSSProperties = {
+    padding: '9px 25px',
+    border: '3px solid currentColor',
+    borderRadius: 'var(--radius-card)',
+    fontSize: '31px',
+    transform: 'rotate(-11deg)',
+};

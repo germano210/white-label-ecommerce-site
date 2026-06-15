@@ -1,16 +1,24 @@
-import { motion } from 'framer-motion'; // Importamos o motion
-import { Search, Heart } from 'lucide-react';
-import { useDiscoveryStore } from '../../store/useDiscoveryStore'; // Importamos a store
+import { motion } from 'framer-motion';
+import {
+    Grid3X3,
+    Heart,
+    Search,
+    UserRound,
+    type LucideIcon,
+} from 'lucide-react';
+import { useDiscoveryStore } from '../../store/useDiscoveryStore';
 
 interface NavItem {
     id: string;
     label: string;
-    icon: any;
+    icon: LucideIcon;
 }
 
 const navItems: NavItem[] = [
-    { id: 'foryou', label: 'For You', icon: Search },
+    { id: 'foryou', label: 'Início', icon: Grid3X3 },
+    { id: 'pesquisa', label: 'Pesquisa', icon: Search },
     { id: 'curtidas', label: 'Curtidas', icon: Heart },
+    { id: 'perfil', label: 'Perfil', icon: UserRound },
 ];
 
 interface Props {
@@ -19,74 +27,101 @@ interface Props {
     isVisible: boolean;
 }
 
+const activeColor = 'var(--text-dark)';
+const neutralColor = 'var(--text-muted)';
+
 export function BottomNavigation({ activeTab, setActiveTab, isVisible }: Props) {
-    // Escuta o estado de pulso da store
     const pulseLikes = useDiscoveryStore((state) => state.pulseLikes);
 
     return (
         <div
-            className="bottom-nav"
+            className="bottom-nav bg-[var(--background-navbar)]"
+            role="navigation"
+            aria-label="Navegação principal"
             style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
-                transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
+                position: 'fixed',
+                right: 0,
+                bottom: 0,
+                left: 0,
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                width: '100%',
+                maxWidth: '430px',
+                height: '52px',
+                margin: '0 auto',
+                padding: '0 18px max(2px, env(safe-area-inset-bottom))',
+                borderTop: '1px solid var(--border-subtle)',
                 opacity: isVisible ? 1 : 0,
-                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                display: 'flex', alignItems: 'center', padding: '0 20px', height: '72px',
-                background: 'rgba(255, 255, 255, 0.98)', backdropFilter: 'blur(14px)',
-                borderTop: '0.5px solid #EEEEEE', maxWidth: '430px', margin: '0 auto'
+                transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
+                transition: 'var(--transition-smooth)',
             }}
         >
             {navItems.map((item) => {
+                const isActive = activeTab === item.id;
                 const isLikesTab = item.id === 'curtidas';
+                const shouldPulse = isLikesTab && pulseLikes;
+                const Icon = item.icon;
 
                 return (
                     <button
                         key={item.id}
+                        type="button"
+                        title={item.label}
+                        aria-label={item.label}
+                        aria-current={isActive ? 'page' : undefined}
                         onClick={() => setActiveTab(item.id)}
                         style={{
-                            flex: 1, border: 'none', background: 'none',
-                            display: 'flex', flexDirection: 'column',
-                            alignItems: 'center', gap: '4px', cursor: 'pointer',
-                            position: 'relative' // Para o pulso ficar centralizado
+                            position: 'relative',
+                            display: 'grid',
+                            flex: 1,
+                            height: '100%',
+                            minWidth: 0,
+                            placeItems: 'center',
+                            padding: 0,
+                            border: 0,
+                            color: isActive || shouldPulse ? activeColor : neutralColor,
+                            background: 'transparent',
+                            cursor: 'pointer',
                         }}
                     >
-                        {/* Contentor Animado para o Ícone */}
-                        <motion.div
+                        <motion.span
                             style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                width: '40px', height: '40px', borderRadius: '50%',
-                                position: 'relative', zIndex: 2
+                                position: 'relative',
+                                display: 'grid',
+                                width: '38px',
+                                height: '38px',
+                                placeItems: 'center',
                             }}
-                            // ANIMAÇÃO DE PULSO: Ativa quando pulseLikes for true na aba Curtidas
-                            animate={isLikesTab && pulseLikes ? {
-                                scale: [1, 1.4, 1], // Aumenta e diminui
-                                background: ['rgba(255,255,255,0)', 'rgba(255,255,255,1)', 'rgba(255,255,255,0)'], // Fundo branco temporário
-                            } : { scale: 1, background: 'rgba(255,255,255,0)' }}
-                            transition={{ duration: 0.6, ease: "easeInOut" }}
+                            animate={shouldPulse
+                                ? { scale: [1, 1.3, 1] }
+                                : { scale: isActive ? 1.06 : 1 }}
+                            transition={{ duration: 0.55, ease: 'easeInOut' }}
                         >
-                            <item.icon
-                                size={24}
-                                strokeWidth={activeTab === item.id ? 2.5 : 1.5}
-                                // Se estiver a pulsar, a cor fica mais forte (var(--terra))
-                                color={(activeTab === item.id || (isLikesTab && pulseLikes)) ? 'var(--terra)' : '#999999'}
+                            <Icon
+                                size={22}
+                                strokeWidth={isActive ? 2.5 : 1.8}
+                                fill={isActive && (isLikesTab || item.id === 'foryou')
+                                    ? 'currentColor'
+                                    : 'none'}
                             />
-                        </motion.div>
 
-                        <span style={{
-                            fontSize: '10px', fontFamily: 'var(--font-body)',
-                            fontWeight: activeTab === item.id ? 700 : 500,
-                            color: activeTab === item.id ? 'var(--terra)' : '#999999',
-                            zIndex: 2
-                        }}>
-                            {item.label}
-                        </span>
-
-                        {activeTab === item.id && (
-                            <div style={{
-                                width: '4px', height: '4px', borderRadius: '50%',
-                                background: 'var(--terra)', marginTop: '2px'
-                            }} />
-                        )}
+                            {shouldPulse && (
+                                <motion.span
+                                    aria-hidden="true"
+                                    initial={{ opacity: 0.45, scale: 0.65 }}
+                                    animate={{ opacity: 0, scale: 1.65 }}
+                                    transition={{ duration: 0.62 }}
+                                    style={{
+                                        position: 'absolute',
+                                        width: '25px',
+                                        height: '25px',
+                                        border: `1px solid ${activeColor}`,
+                                        borderRadius: 'var(--radius-button)',
+                                    }}
+                                />
+                            )}
+                        </motion.span>
                     </button>
                 );
             })}

@@ -22,7 +22,11 @@ export interface ProdutoVitrine {
     category: string;
     iconId: string;        // Representação visual simplificada (Ícone)
     sub: string;          // Subtítulo descritivo (ex: "Linho · Off white")
-    social: string;       // Prova social (ex: "👁 23 pessoas viram agora")
+    social?: string;       // Prova social (ex: "👁 23 pessoas viram agora")
+    tamanho: string;
+    curtidas: number;
+    dislikes?: number;
+    images?: string[];
 
     // Propriedades de Display (Opcionais para flexibilidade do catálogo)
     priceNew: string;     // String formatada para exibição (ex: "R$129")

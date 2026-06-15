@@ -2,6 +2,23 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root {
+  /* Brand Colors */
+  --background-app: #fff7e6;
+  --background-navbar: #fffefc;
+  --color-primary-like: #ff5757;
+  --color-success-badge: #068949;
+  --color-action-button: #ffffff;
+
+  /* Neutral Colors */
+  --text-dark: #1a1a1a;
+  --text-muted: #666666;
+  --border-subtle: #e5e5e5;
+
+  /* Border Radius & Animations Pattern */
+  --radius-card: 16px;
+  --radius-button: 9999px;
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
   --cream: #FFFFFF;
   --dark: #1A1A1A;
   --terra: #E6398F;
@@ -21,6 +38,26 @@
   --bottom-h: 72px;
   --top-offset: calc(var(--nav-h) + var(--strip-h));
 }
+
+/* Utilities compatíveis com a sintaxe arbitrária do Tailwind. */
+.bg-\[var\(--background-app\)\]{background-color:var(--background-app)!important}
+.bg-\[var\(--background-navbar\)\]{background-color:var(--background-navbar)!important}
+.bg-\[var\(--color-success-badge\)\]{background-color:var(--color-success-badge)!important}
+.bg-\[var\(--color-primary-like\)\]{background-color:var(--color-primary-like)!important}
+.bg-\[var\(--color-action-button\)\]{background-color:var(--color-action-button)!important}
+.text-\[var\(--text-dark\)\]{color:var(--text-dark)!important}
+.text-white{color:#fff!important}
+.flex{display:flex}
+.flex-1{flex:1 1 0%}
+.w-full{width:100%}
+.items-center{align-items:center}
+.justify-start{justify-content:flex-start}
+.justify-center{justify-content:center}
+.justify-end{justify-content:flex-end}
+.justify-between{justify-content:space-between}
+.justify-around{justify-content:space-around}
+.gap-4{gap:1rem}
+
 html,body{height:100%;overflow:hidden}
 body{font-family:var(--font-body);background:var(--cream);color:var(--dark);font-size:15px;line-height:1.6;max-width:430px;margin:0 auto;position:relative}
 *::-webkit-scrollbar{display:none}

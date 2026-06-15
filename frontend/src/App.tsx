@@ -1,32 +1,33 @@
 import { useState } from 'react';
-import { DiscoveryScreen } from './pages/DiscoveryScreen';
-import { CurtidasScreen } from './pages/CurtidasScreen'; // Importado
 import { BottomNavigation } from './components/common/BottomNavigation';
-import { useDiscoveryStore } from './store/useDiscoveryStore';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useAdminStore } from './store/useAdminStore';
-import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
-import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
 import { WelcomeModal } from './components/common/WelcomeModal';
+import { CurtidasScreen } from './pages/CurtidasScreen';
+import { DiscoveryScreen } from './pages/DiscoveryScreen';
+import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
+import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
+import { useAdminStore } from './store/useAdminStore';
 import { useAuthStore } from './store/useAuthStore';
 
 export default function App() {
     const [activeTab, setActiveTab] = useState('foryou');
-    const { activeCategory, setActiveCategory } = useDiscoveryStore();
-    const [isCategoryOpen, setIsCategoryOpen] = useState(false);
     const { isAdminModeOpen, currentUser, toggleAdminMode } = useAdminStore();
     const token = useAuthStore((state) => state.token);
     const user = useAuthStore((state) => state.user);
     const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
-    const handleSecretClick = (e: React.MouseEvent) => {
-        if (e.detail === 2) { // 2 = Duplo clique rápido
+    const handleSecretClick = (event: React.MouseEvent) => {
+        if (event.detail === 2) {
             toggleAdminMode();
         }
     };
 
     if (!hasHydrated) {
-        return <div style={{ minHeight: '100dvh', background: '#FAF7F2' }} aria-label="Carregando sessão" />;
+        return (
+            <div
+                style={{ minHeight: '100dvh', background: '#FAF7F2' }}
+                aria-label="Carregando sessão"
+            />
+        );
     }
 
     if (!token || !user) {
@@ -37,84 +38,78 @@ export default function App() {
         return currentUser ? <AdminDashboardScreen /> : <AdminLoginScreen />;
     }
 
-    const categories = ['TODAS AS PEÇAS', 'Calças', 'Casacos', 'Moletons', 'Blusas', 'Saias', 'Conjuntos'];
-
     return (
-        <div style={{ background: 'var(--cream)', position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, overflow: 'hidden' }}>
-
-            <nav style={{
-                position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1100,
-                background: 'rgba(255, 255, 255, 0.98)', backdropFilter: 'blur(10px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '0 16px', height: '60px', maxWidth: '430px', margin: '0 auto'
-            }}>
-                <div
-                    className="nav-logo"
-                    onDoubleClick={handleSecretClick} // Botão secreto!
-                    style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 600, color: 'var(--dark)', userSelect: 'none', cursor: 'pointer' }}
+        <div
+            style={{
+                position: 'fixed',
+                inset: 0,
+                overflow: 'hidden',
+                background: '#FAF7F2',
+            }}
+        >
+            <nav
+                style={{
+                    position: 'fixed',
+                    top: 0,
+                    right: 0,
+                    left: 0,
+                    zIndex: 1100,
+                    display: 'flex',
+                    width: '100%',
+                    maxWidth: '430px',
+                    height: '45px',
+                    alignItems: 'center',
+                    margin: '0 auto',
+                    padding: '0 15px',
+                    background: '#FAF7F2',
+                }}
+            >
+                <button
+                    type="button"
+                    onDoubleClick={handleSecretClick}
+                    aria-label="Brechó da Cami"
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        padding: 0,
+                        border: 0,
+                        color: '#687152',
+                        background: 'transparent',
+                        fontFamily: "'Cormorant Garamond', serif",
+                        fontSize: '16px',
+                        fontStyle: 'italic',
+                        fontWeight: 600,
+                        lineHeight: 0.76,
+                        cursor: 'pointer',
+                    }}
                 >
-                    Via <span style={{ color: 'var(--terra)' }}>Brás</span>
-                </div>
-
-                {activeTab === 'foryou' && (
-                    <button
-                        onClick={() => setIsCategoryOpen(!isCategoryOpen)}
-                        style={{
-                            background: 'var(--soft)', color: 'var(--terra)', padding: '6px 14px',
-                            borderRadius: '20px', fontSize: '10px', fontWeight: 700, border: 'none',
-                            display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
-                            fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.05em'
-                        }}
-                    >
-                        <span style={{ fontSize: '12px', lineHeight: 0 }}>✦</span>
-                        {activeCategory}
-                        {isCategoryOpen ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
-                    </button>
-                )}
+                    <span>Brechó</span>
+                    <span>da Cami</span>
+                </button>
             </nav>
 
-            {isCategoryOpen && activeTab === 'foryou' && (
-                <div style={{
-                    position: 'absolute', top: '60px', left: 0, right: 0, zIndex: 1050,
-                    background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)',
-                    borderBottom: '1px solid var(--soft)', padding: '12px 16px',
-                    display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none',
-                    WebkitOverflowScrolling: 'touch', maxWidth: '430px', margin: '0 auto'
-                }}>
-                    {categories.map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => {
-                                setActiveCategory(cat);
-                                setIsCategoryOpen(false);
-                            }}
-                            style={{
-                                whiteSpace: 'nowrap', background: activeCategory === cat ? 'var(--terra)' : 'white',
-                                color: activeCategory === cat ? 'white' : 'var(--terra)',
-                                border: `1px solid ${activeCategory === cat ? 'var(--terra)' : 'var(--soft)'}`,
-                                padding: '6px 14px', borderRadius: '16px', fontSize: '10px', fontWeight: 700,
-                                cursor: 'pointer', fontFamily: 'var(--font-body)', transition: 'all 0.2s ease',
-                                boxShadow: activeCategory === cat ? '0 4px 12px rgba(230, 57, 143, 0.2)' : 'none'
-                            }}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            <div className="screens" style={{ position: 'absolute', top: '60px', left: 0, right: 0, bottom: '72px' }}>
+            <div
+                className="screens"
+                style={{
+                    position: 'absolute',
+                    top: '45px',
+                    right: 0,
+                    bottom: '52px',
+                    left: 0,
+                }}
+            >
                 <div style={{ height: '100%', overflow: 'hidden' }}>
-
                     {activeTab === 'foryou' && <DiscoveryScreen />}
-
-                    {/* Renderizamos a nova tela aqui! */}
                     {activeTab === 'curtidas' && <CurtidasScreen />}
-
                 </div>
             </div>
 
-            <BottomNavigation activeTab={activeTab} setActiveTab={setActiveTab} isVisible={true} />
+            <BottomNavigation
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                isVisible
+            />
         </div>
     );
 }
