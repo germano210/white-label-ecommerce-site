@@ -24,7 +24,10 @@ export interface ProdutoVitrine {
     sub: string;          // Subtítulo descritivo (ex: "Linho · Off white")
     social?: string;       // Prova social (ex: "👁 23 pessoas viram agora")
     tamanho: string;
-    curtidas: number;
+    curtidasCount: number;
+    passosCount: number;
+    nomesCurtidas?: string[];
+    curtidas?: number;
     dislikes?: number;
     images?: string[];
 

@@ -9,7 +9,6 @@ import {
 } from 'framer-motion';
 import { Heart, Send, Undo2, X } from 'lucide-react';
 import { type ProdutoVitrine } from '../../store/useCartStore';
-import { useDiscoveryStore } from '../../store/useDiscoveryStore';
 
 interface SwipeCardProps {
     product: ProdutoVitrine;
@@ -22,6 +21,28 @@ interface SwipeCardProps {
 const fallbackImage =
     'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80';
 
+function getSocialProofText(product: ProdutoVitrine) {
+    const [firstName, secondName] = product.nomesCurtidas ?? [];
+
+    if (product.curtidasCount === 0) {
+        return 'Peça adicionada agora!';
+    }
+
+    if (product.curtidasCount === 1 && firstName) {
+        return `Curtido por ${firstName}`;
+    }
+
+    if (product.curtidasCount === 2 && firstName && secondName) {
+        return `Curtido por ${firstName} e ${secondName}.`;
+    }
+
+    if (product.curtidasCount > 2 && firstName && secondName) {
+        return `Curtido por ${firstName}, ${secondName} e mais ${product.curtidasCount - 2} pessoas.`;
+    }
+
+    return `Curtido por ${product.curtidasCount} pessoa${product.curtidasCount > 1 ? 's' : ''}.`;
+}
+
 export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardProps) {
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
@@ -29,10 +50,6 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
     const productImages = product.images?.length ? product.images : [fallbackImage];
     const totalPhotos = productImages.length;
     const activeImageSrc = productImages[currentPhoto];
-
-    const reactionCounts = useDiscoveryStore(
-        (state) => state.productReactionCounts[product.id],
-    );
 
     const x = useMotionValue(0);
     const rotate = useTransform(x, [-220, 220], [-16, 16]);
@@ -42,8 +59,7 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
 
     const scale = isTop ? 1 : 1 - index * 0.025;
     const yOffset = isTop ? 0 : index * 7;
-    const likesCount = reactionCounts?.likes ?? product.curtidas;
-    const dislikesCount = reactionCounts?.dislikes ?? product.dislikes ?? 0;
+    const socialProofText = getSocialProofText(product);
 
     const handlePhotoTap = (event: React.MouseEvent | React.TouchEvent) => {
         if (!isTop || isSwiping) return;
@@ -206,20 +222,22 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                         pointerEvents: 'none',
                     }}
                 >
-                    <p
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            margin: '0 0 5px',
-                            fontSize: '9px',
-                            fontWeight: 600,
-                            lineHeight: 1.25,
-                        }}
-                    >
-                        <Heart size={9} fill="currentColor" strokeWidth={0} />
-                        Curtido por Bianca, Fernanda e mais {Math.max(likesCount - 2, 1)} pessoas.
-                    </p>
+                    {socialProofText && (
+                        <p
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                margin: '0 0 5px',
+                                fontSize: '9px',
+                                fontWeight: 600,
+                                lineHeight: 1.25,
+                            }}
+                        >
+                            <Heart size={9} fill="currentColor" strokeWidth={0} />
+                            {socialProofText}
+                        </p>
+                    )}
 
                     <div
                         style={{
@@ -360,14 +378,14 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                         >
                             <ActionButton
                                 label="Passar peça"
-                                count={dislikesCount}
+                                count={product.passosCount}
                                 tone="dislike"
                                 onClick={() => void triggerSwipe('nope')}
                                 icon={<X size={29} strokeWidth={1.35} />}
                             />
                             <ActionButton
                                 label="Curtir peça"
-                                count={likesCount}
+                                count={product.curtidasCount}
                                 tone="like"
                                 motionControls={heartControls}
                                 onClick={(event) => void handleHeartClick(event)}

@@ -87,8 +87,8 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                 const alreadyLiked = likedItems.some(item => item.id === product.id);
                 const nextSessionLikes = sessionLikes + 1;
                 const currentCounts = productReactionCounts[product.id] ?? {
-                    likes: product.curtidas,
-                    dislikes: product.dislikes ?? 0,
+                    likes: product.curtidasCount,
+                    dislikes: product.passosCount,
                 };
 
                 set({
@@ -120,13 +120,12 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                     ...state.productReactionCounts,
                     [product.id]: {
                         ...(state.productReactionCounts[product.id] ?? {
-                            likes: product.curtidas,
-                            dislikes: product.dislikes ?? 0,
+                            likes: product.curtidasCount,
+                            dislikes: product.passosCount,
                         }),
                         dislikes: (
                             state.productReactionCounts[product.id]?.dislikes
-                            ?? product.dislikes
-                            ?? 0
+                            ?? product.passosCount
                         ) + 1,
                     },
                 },

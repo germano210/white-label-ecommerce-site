@@ -13,6 +13,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$79,90',
         sub: 'Canelado · Verde Mint · P M G',
         tamanho: 'P · M · G',
+        curtidasCount: 284,
+        passosCount: 0,
         curtidas: 284,
         images: [
             'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80',
@@ -32,6 +34,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$159,90',
         sub: 'Jeans 100% Algodão · Lavagem Clara',
         tamanho: '36 · 38 · 40',
+        curtidasCount: 197,
+        passosCount: 0,
         curtidas: 197,
         images: [
             'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800&q=80',
@@ -48,6 +52,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$219,00',
         sub: 'Toque de Seda · Estampa Floral · M G',
         tamanho: 'M · G',
+        curtidasCount: 321,
+        passosCount: 0,
         curtidas: 321,
         images: [
             'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=800&q=80',
@@ -67,6 +73,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$289,00',
         sub: 'Alfaiataria Premium · Preto · P M',
         tamanho: 'P · M',
+        curtidasCount: 412,
+        passosCount: 0,
         curtidas: 412,
         images: [
             'https://images.unsplash.com/photo-1550614000-4b9a9d701a2e?w=800&q=80',
@@ -84,6 +92,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$119,90',
         sub: 'Crepe Leve · Nude · Cintura Alta',
         tamanho: 'P · M · G',
+        curtidasCount: 168,
+        passosCount: 0,
         curtidas: 168,
         images: [
             'https://images.unsplash.com/photo-1583496661160-c5d014f9714d?w=800&q=80',
@@ -102,6 +112,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$189,90',
         sub: 'Moletom Premium · Cinza Mescla',
         tamanho: 'M · G · GG',
+        curtidasCount: 236,
+        passosCount: 0,
         curtidas: 236,
         images: [
             'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80',
@@ -121,6 +133,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$89,90',
         sub: 'Renda com Elastano · Preto · P M G',
         tamanho: 'P · M · G',
+        curtidasCount: 389,
+        passosCount: 0,
         curtidas: 389,
         images: [
             'https://images.unsplash.com/photo-1434389678392-f0b472f616e1?w=800&q=80',
@@ -140,6 +154,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$99,90',
         sub: 'Linho Puro · Cru · Tamanho M',
         tamanho: 'M',
+        curtidasCount: 145,
+        passosCount: 0,
         curtidas: 145,
         images: [
             'https://images.unsplash.com/photo-1591369822096-ffd140ec948f?w=800&q=80',
@@ -157,6 +173,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$259,90',
         sub: 'Viscolinho · Terracota · P M G',
         tamanho: 'P · M · G',
+        curtidasCount: 274,
+        passosCount: 0,
         curtidas: 274,
         images: [
             'https://images.unsplash.com/photo-1485968817351-5c255e1c0715?w=800&q=80',
@@ -173,6 +191,8 @@ export const mockProducts: ProdutoVitrine[] = [
         priceNew: 'R$49,90',
         sub: '100% Algodão · Branco · P M G GG',
         tamanho: 'P · M · G · GG',
+        curtidasCount: 503,
+        passosCount: 0,
         curtidas: 503,
         images: [
             'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&q=80',

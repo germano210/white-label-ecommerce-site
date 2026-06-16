@@ -13,8 +13,9 @@ interface ProdutoApi {
     precoAntigo?: number | string | null;
     tamanho: string;
     imagemUrl?: string | null;
-    curtidasCount?: number | null;
-    passosCount?: number | null;
+    curtidasCount: number;
+    passosCount: number;
+    nomesCurtidas?: string[] | null;
     categoria?: string | null;
 }
 
@@ -62,8 +63,11 @@ function mapProduto(produto: ProdutoApi): ProdutoVitrine {
         iconId: 'shirt',
         sub: '',
         tamanho: produto.tamanho || 'Único',
-        curtidas: produto.curtidasCount ?? 0,
-        dislikes: produto.passosCount ?? 0,
+        curtidasCount: produto.curtidasCount,
+        passosCount: produto.passosCount,
+        nomesCurtidas: produto.nomesCurtidas ?? [],
+        curtidas: produto.curtidasCount,
+        dislikes: produto.passosCount,
         images: imageUrl ? [imageUrl] : [],
         priceNew: formatPrice(price),
         priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
