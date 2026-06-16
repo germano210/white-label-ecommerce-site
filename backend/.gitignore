@@ -1,9 +1,23 @@
 HELP.md
 target/
-uploads/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+# Uploads e Media
+uploads/
+/uploads/
+**/uploads/*
+
+# Ficheiros de Ambiente e Segredos
+.env
+.env.*
+*.env
+
+# IDEs e SO (Garantia extra)
+.idea/
+.DS_Store
+Thumbs.db
 
 ### STS ###
 .apt_generated
