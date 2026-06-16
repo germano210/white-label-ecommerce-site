@@ -1,9 +1,7 @@
 # ==========================================
 # 1. SEGURANÇA E AMBIENTE (CRÍTICO)
 # ==========================================
-# Nunca comite arquivos de ambiente. Um vazamento de credenciais
-# de banco ou chaves do gateway de pagamento destrói a operação.
-.env
+.env.*
 .env.local
 .env.*.local
 application-dev.properties
@@ -43,6 +41,7 @@ logs/
 # ==========================================
 pgdata/
 docker-compose.override.yml
+uploads/
 
 # ==========================================
 # 5. IDEs E SISTEMA OPERACIONAL
