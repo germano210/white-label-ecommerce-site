@@ -284,7 +284,7 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                     className="bg-[var(--color-success-badge)] text-white"
                     style={{
                         position: 'absolute',
-                        top: '121px',
+                        top: '100px',
                         left: '8px',
                         zIndex: 31,
                         minWidth: '54px',
