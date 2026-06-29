@@ -4,6 +4,8 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 export interface AuthUser {
     name: string;
     phone: string;
+    nome?: string | null;
+    telefone?: string | null;
     [key: string]: unknown;
 }
 
@@ -12,6 +14,7 @@ interface AuthState {
     user: AuthUser | null;
     hasHydrated: boolean;
     setSession: (token: string, user: AuthUser) => void;
+    updateUser: (userPatch: Partial<AuthUser>) => void;
     logout: () => void;
     setHasHydrated: (hasHydrated: boolean) => void;
 }
@@ -23,6 +26,9 @@ export const useAuthStore = create<AuthState>()(
             user: null,
             hasHydrated: false,
             setSession: (token, user) => set({ token, user }),
+            updateUser: (userPatch) => set((state) => ({
+                user: state.user ? { ...state.user, ...userPatch } : state.user,
+            })),
             logout: () => set({ token: null, user: null }),
             setHasHydrated: (hasHydrated) => set({ hasHydrated }),
         }),

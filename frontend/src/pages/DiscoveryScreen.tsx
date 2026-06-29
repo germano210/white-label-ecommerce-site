@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, X } from 'lucide-react';
 import { SwipeCard } from '../components/domain/SwipeCard';
 import { type ProdutoVitrine } from '../store/useCartStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { api } from '../utils/api';
 
@@ -19,6 +20,12 @@ export function DiscoveryScreen() {
     const undoLastSwipe = useDiscoveryStore((state) => state.undoLastSwipe);
     const matchAlertVisible = useDiscoveryStore((state) => state.matchAlertVisible);
     const dismissMatchAlert = useDiscoveryStore((state) => state.dismissMatchAlert);
+    const namePromptVisible = useDiscoveryStore((state) => state.namePromptVisible);
+    const dismissNamePrompt = useDiscoveryStore((state) => state.dismissNamePrompt);
+    const updateUser = useAuthStore((state) => state.updateUser);
+    const [profileName, setProfileName] = useState('');
+    const [profileNameError, setProfileNameError] = useState('');
+    const [isSavingProfileName, setIsSavingProfileName] = useState(false);
 
     useEffect(() => {
         void fetchProducts();
@@ -71,6 +78,29 @@ export function DiscoveryScreen() {
 
         restoreProductToStack(restoredProduct);
     }, [restoreProductToStack, undoLastSwipe]);
+
+    const handleSaveProfileName = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const nextProfileName = profileName.trim();
+        if (nextProfileName.length < 2) {
+            setProfileNameError('Digite seu nome para continuar.');
+            return;
+        }
+
+        setProfileNameError('');
+        setIsSavingProfileName(true);
+
+        try {
+            await api.put('/api/auth/atualizar-nome', { nome: nextProfileName });
+            updateUser({ name: nextProfileName, nome: nextProfileName });
+            dismissNamePrompt();
+        } catch {
+            setProfileNameError('Não conseguimos salvar seu nome agora. Tente novamente.');
+        } finally {
+            setIsSavingProfileName(false);
+        }
+    }, [dismissNamePrompt, profileName, updateUser]);
 
     return (
         <main
@@ -130,6 +160,127 @@ export function DiscoveryScreen() {
                         >
                             <X size={18} />
                         </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {namePromptVisible && (
+                    <motion.div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="profile-name-title"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            zIndex: 1200,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '20px',
+                            background: 'rgba(26, 26, 26, 0.38)',
+                            backdropFilter: 'blur(8px)',
+                        }}
+                    >
+                        <motion.form
+                            onSubmit={handleSaveProfileName}
+                            noValidate
+                            initial={{ y: 18, scale: 0.96 }}
+                            animate={{ y: 0, scale: 1 }}
+                            exit={{ y: 14, scale: 0.97 }}
+                            transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+                            style={{
+                                width: 'min(100%, 342px)',
+                                borderRadius: '26px',
+                                background: 'var(--background-app)',
+                                padding: '24px',
+                                boxShadow: '0 22px 48px rgba(25, 21, 16, 0.24)',
+                                textAlign: 'center',
+                            }}
+                        >
+                            <h2
+                                id="profile-name-title"
+                                style={{
+                                    margin: 0,
+                                    color: 'var(--text-dark)',
+                                    fontSize: '22px',
+                                    fontWeight: 800,
+                                    letterSpacing: '-0.03em',
+                                }}
+                            >
+                                Qual é o seu nome?
+                            </h2>
+                            <p
+                                style={{
+                                    margin: '8px 0 18px',
+                                    color: 'var(--text-muted)',
+                                    fontSize: '13px',
+                                    lineHeight: 1.45,
+                                }}
+                            >
+                                Assim conseguimos deixar seus matchs e ofertas com a sua cara.
+                            </p>
+                            <input
+                                value={profileName}
+                                onChange={(event) => {
+                                    setProfileName(event.target.value.slice(0, 50));
+                                    setProfileNameError('');
+                                }}
+                                placeholder="Digite seu nome"
+                                autoComplete="name"
+                                style={{
+                                    width: '100%',
+                                    border: '1px solid var(--border-subtle)',
+                                    borderRadius: '16px',
+                                    background: '#fffefc',
+                                    color: 'var(--text-dark)',
+                                    font: 'inherit',
+                                    fontSize: '15px',
+                                    outline: 'none',
+                                    padding: '14px 15px',
+                                }}
+                            />
+                            {profileNameError && (
+                                <p
+                                    role="alert"
+                                    style={{
+                                        margin: '10px 0 0',
+                                        color: '#b42318',
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        lineHeight: 1.35,
+                                        textAlign: 'left',
+                                    }}
+                                >
+                                    {profileNameError}
+                                </p>
+                            )}
+                            <button
+                                type="submit"
+                                disabled={isSavingProfileName}
+                                style={{
+                                    width: '100%',
+                                    minHeight: '52px',
+                                    marginTop: '18px',
+                                    border: 0,
+                                    borderRadius: '16px',
+                                    background: '#687152',
+                                    color: '#fff',
+                                    font: 'inherit',
+                                    fontSize: '14px',
+                                    fontWeight: 800,
+                                    cursor: isSavingProfileName ? 'wait' : 'pointer',
+                                    opacity: isSavingProfileName ? 0.72 : 1,
+                                    transition: 'var(--transition-smooth)',
+                                }}
+                            >
+                                {isSavingProfileName ? 'Salvando...' : 'Continuar'}
+                            </button>
+                        </motion.form>
                     </motion.div>
                 )}
             </AnimatePresence>

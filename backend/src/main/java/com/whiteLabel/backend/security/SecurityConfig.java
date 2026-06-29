@@ -46,6 +46,7 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers("/api/auth/atualizar-nome").authenticated()
                         .requestMatchers("/curtidas/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(

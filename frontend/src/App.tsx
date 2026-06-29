@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BottomNavigation } from './components/common/BottomNavigation';
-import { WelcomeModal } from './components/common/WelcomeModal';
+import { LoginModal } from './components/common/LoginModal';
 import { CurtidasScreen } from './pages/CurtidasScreen';
 import { DiscoveryScreen } from './pages/DiscoveryScreen';
 import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
@@ -30,13 +30,11 @@ export default function App() {
         );
     }
 
-    if (!token || !user) {
-        return <WelcomeModal />;
-    }
-
     if (isAdminModeOpen) {
         return currentUser ? <AdminDashboardScreen /> : <AdminLoginScreen />;
     }
+
+    const isAuthenticated = Boolean(token && user);
 
     return (
         <div
@@ -110,6 +108,8 @@ export default function App() {
                 setActiveTab={setActiveTab}
                 isVisible
             />
+
+            {!isAuthenticated && <LoginModal />}
         </div>
     );
 }

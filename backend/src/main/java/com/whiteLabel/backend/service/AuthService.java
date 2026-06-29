@@ -1,12 +1,17 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.dto.AtualizarNomeRequest;
 import com.whiteLabel.backend.dto.RequestOtpRequest;
+import com.whiteLabel.backend.dto.RequestOtpResponse;
 import com.whiteLabel.backend.dto.TokenResponse;
+import com.whiteLabel.backend.dto.UsuarioResponse;
 import com.whiteLabel.backend.dto.VerifyOtpRequest;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -14,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -45,9 +51,11 @@ public class AuthService {
     }
 
     @Transactional
-    public void requestOtp(RequestOtpRequest request) {
+    public RequestOtpResponse requestOtp(RequestOtpRequest request) {
         String telefone = normalize(request.telefone());
-        Usuario usuario = usuarioRepository.findByTelefone(telefone)
+        var usuarioExistente = usuarioRepository.findByTelefone(telefone);
+        boolean existingUser = usuarioExistente.isPresent();
+        Usuario usuario = usuarioExistente
                 .orElseGet(() -> createNewUser(request.nome(), telefone));
 
         if (request.nome() != null && !request.nome().isBlank()) {
@@ -61,6 +69,12 @@ public class AuthService {
         usuarioRepository.save(usuario);
 
         System.out.println("OTP do WhatsApp para " + telefone + ": " + otp);
+
+        if (existingUser) {
+            return new RequestOtpResponse("EXISTING_USER", "USUARIO_JA_CADASTRADO");
+        }
+
+        return new RequestOtpResponse("NEW_USER", "OTP_ENVIADO");
     }
 
     @Transactional
@@ -82,6 +96,18 @@ public class AuthService {
 
         String token = jwtService.generateToken(usuario);
         return TokenResponse.from(token, usuario);
+    }
+
+    @Transactional
+    public UsuarioResponse atualizarNome(AtualizarNomeRequest request) {
+        Usuario usuario = usuarioRepository.findById(obterUsuarioAutenticadoId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Usuario autenticado nao encontrado"
+                ));
+
+        usuario.setNome(request.nome().trim());
+        return UsuarioResponse.from(usuarioRepository.save(usuario));
     }
 
     private Usuario createNewUser(String nome, String telefone) {
@@ -107,5 +133,23 @@ public class AuthService {
 
     private ResponseStatusException invalidOtp() {
         return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "OTP invalido ou expirado");
+    }
+
+    private UUID obterUsuarioAutenticadoId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario nao autenticado");
+        }
+
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Token de autenticacao invalido",
+                    exception
+            );
+        }
     }
 }

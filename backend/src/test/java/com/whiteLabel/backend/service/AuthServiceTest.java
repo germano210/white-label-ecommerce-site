@@ -2,6 +2,7 @@ package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.dto.RequestOtpRequest;
+import com.whiteLabel.backend.dto.RequestOtpResponse;
 import com.whiteLabel.backend.dto.TokenResponse;
 import com.whiteLabel.backend.dto.VerifyOtpRequest;
 import com.whiteLabel.backend.repository.UsuarioRepository;
@@ -47,8 +48,12 @@ class AuthServiceTest {
     void shouldCreateUserAndGenerateOtp() {
         when(repository.findByTelefone("5511999999999")).thenReturn(Optional.empty());
 
-        authService.requestOtp(new RequestOtpRequest("5511999999999", "Maria"));
+        RequestOtpResponse response = authService.requestOtp(
+                new RequestOtpRequest("5511999999999", "Maria")
+        );
 
+        assertEquals("NEW_USER", response.status());
+        assertEquals("OTP_ENVIADO", response.message());
         ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
         verify(repository).save(captor.capture());
         assertEquals("000042", captor.getValue().getOtp());
@@ -81,8 +86,12 @@ class AuthServiceTest {
         Usuario usuario = new Usuario("Maria", "5511999999999");
         when(repository.findByTelefone("5511999999999")).thenReturn(Optional.of(usuario));
 
-        authService.requestOtp(new RequestOtpRequest("5511999999999", "Maria Atualizada"));
+        RequestOtpResponse response = authService.requestOtp(
+                new RequestOtpRequest("5511999999999", "Maria Atualizada")
+        );
 
+        assertEquals("EXISTING_USER", response.status());
+        assertEquals("USUARIO_JA_CADASTRADO", response.message());
         verify(repository).save(usuario);
         assertEquals("Maria Atualizada", usuario.getNome());
         assertEquals("5511999999999", usuario.getTelefone());

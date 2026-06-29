@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { type ProdutoVitrine } from './useCartStore';
+import { useAuthStore, type AuthUser } from './useAuthStore';
 import { api } from '../utils/api';
 
 interface ItemPreference {
@@ -49,6 +50,7 @@ interface DiscoveryState {
     pulseLikes: boolean;
     sessionLikes: number;
     matchAlertVisible: boolean;
+    namePromptVisible: boolean;
     activeCategory: string;
     itemPrefs: Record<string, ItemPreference>;
     userName: string;
@@ -59,6 +61,7 @@ interface DiscoveryState {
     restoreProductToStack: (product: ProdutoVitrine) => void;
     triggerLikesPulse: () => void;
     dismissMatchAlert: () => void;
+    dismissNamePrompt: () => void;
     setActiveCategory: (category: string) => void;
     swipeRight: (product: ProdutoVitrine) => void;
     swipeLeft: (product: ProdutoVitrine) => void;
@@ -93,6 +96,17 @@ function formatPrice(value: number) {
         style: 'currency',
         currency: 'BRL',
     });
+}
+
+function hasValidUserName(user: AuthUser | null) {
+    const nome = typeof user?.nome === 'string' ? user.nome.trim() : '';
+    const name = typeof user?.name === 'string' ? user.name.trim() : '';
+    const telefone = typeof user?.telefone === 'string' ? user.telefone.trim() : '';
+    const phone = typeof user?.phone === 'string' ? user.phone.trim() : '';
+    const savedName = nome || name;
+    const savedPhone = telefone || phone;
+
+    return Boolean(savedName && savedName !== savedPhone);
 }
 
 function mapProduto(produto: ProdutoApi): ProdutoVitrine {
@@ -134,6 +148,7 @@ export const useDiscoveryStore = create<DiscoveryState>()(
             pulseLikes: false,
             sessionLikes: 0,
             matchAlertVisible: false,
+            namePromptVisible: false,
             activeCategory: 'TODAS AS PEÇAS',
             itemPrefs: {},
             userName: '',
@@ -180,6 +195,8 @@ export const useDiscoveryStore = create<DiscoveryState>()(
 
             dismissMatchAlert: () => set({ matchAlertVisible: false }),
 
+            dismissNamePrompt: () => set({ namePromptVisible: false }),
+
             swipeRight: (product) => {
                 const {
                     likedItems,
@@ -187,6 +204,7 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                     itemPrefs,
                     sessionLikes,
                     matchAlertVisible,
+                    namePromptVisible,
                     swipeDirections,
                     swipedCards,
                     productReactionCounts,
@@ -195,6 +213,8 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                 triggerLikesPulse();
                 const alreadyLiked = likedItems.some(item => item.id === product.id);
                 const nextSessionLikes = sessionLikes + 1;
+                const shouldAskForName = nextSessionLikes === 3
+                    && !hasValidUserName(useAuthStore.getState().user);
                 const currentCounts = productReactionCounts[product.id] ?? {
                     likes: product.curtidasCount,
                     dislikes: product.passosCount,
@@ -218,6 +238,7 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                     },
                     sessionLikes: nextSessionLikes,
                     matchAlertVisible: nextSessionLikes === 3 ? true : matchAlertVisible,
+                    namePromptVisible: nextSessionLikes === 3 ? shouldAskForName : namePromptVisible,
                 });
             },
 
@@ -286,6 +307,9 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                     matchAlertVisible: lastDirection === 'like'
                         ? false
                         : state.matchAlertVisible,
+                    namePromptVisible: lastDirection === 'like' && state.sessionLikes <= 3
+                        ? false
+                        : state.namePromptVisible,
                 });
 
                 return lastSwipe.product;
