@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { type ProdutoVitrine } from './useCartStore';
+import { api } from '../utils/api';
 
 interface ItemPreference {
     size: string;
@@ -19,7 +20,27 @@ interface SwipedCard {
     direction: SwipeDirection;
 }
 
+interface ProdutoApi {
+    id: number | string;
+    nome: string;
+    precoVenda: number | string;
+    precoAntigo?: number | string | null;
+    tamanho: string;
+    imagemUrl?: string | null;
+    curtidasCount: number;
+    passosCount: number;
+    nomesCurtidas?: string[] | null;
+    categoria?: string | null;
+}
+
+interface ProdutosPage {
+    content?: ProdutoApi[];
+}
+
 interface DiscoveryState {
+    products: ProdutoVitrine[];
+    isProductsLoading: boolean;
+    productsError: string;
     likedItems: ProdutoVitrine[];
     history: string[];
     swipeDirections: SwipeDirection[];
@@ -33,6 +54,9 @@ interface DiscoveryState {
     userName: string;
 
     setUserName: (name: string) => void;
+    fetchProducts: () => Promise<void>;
+    removeProductFromStack: (id: string) => void;
+    restoreProductToStack: (product: ProdutoVitrine) => void;
     triggerLikesPulse: () => void;
     dismissMatchAlert: () => void;
     setActiveCategory: (category: string) => void;
@@ -44,10 +68,64 @@ interface DiscoveryState {
     removeLikedItem: (id: string) => void;
 }
 
+const apiBaseUrl = String(api.defaults.baseURL ?? '').replace(/\/$/, '');
+
+function getImageUrl(imagePath?: string | null) {
+    if (!imagePath) return undefined;
+    if (/^https?:\/\//i.test(imagePath)) return imagePath;
+    return `${apiBaseUrl}/${imagePath.replace(/^\/+/, '')}`;
+}
+
+function parsePrice(value?: number | string | null) {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+
+    const normalizedValue = value
+        .replace(/[^\d,.-]/g, '')
+        .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+        .replace(',', '.');
+
+    return Number(normalizedValue) || 0;
+}
+
+function formatPrice(value: number) {
+    return value.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    });
+}
+
+function mapProduto(produto: ProdutoApi): ProdutoVitrine {
+    const price = parsePrice(produto.precoVenda);
+    const oldPrice = parsePrice(produto.precoAntigo);
+    const imageUrl = getImageUrl(produto.imagemUrl);
+
+    return {
+        id: String(produto.id),
+        name: produto.nome,
+        price,
+        category: produto.categoria?.trim() || 'Todas',
+        iconId: 'shirt',
+        sub: '',
+        tamanho: produto.tamanho || 'Único',
+        curtidasCount: produto.curtidasCount,
+        passosCount: produto.passosCount,
+        nomesCurtidas: produto.nomesCurtidas ?? [],
+        curtidas: produto.curtidasCount,
+        dislikes: produto.passosCount,
+        images: imageUrl ? [imageUrl] : [],
+        priceNew: formatPrice(price),
+        priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
+    };
+}
+
 // Envolvemos a criação da store com o persist()
 export const useDiscoveryStore = create<DiscoveryState>()(
     persist(
         (set, get) => ({
+            products: [],
+            isProductsLoading: true,
+            productsError: '',
             likedItems: [],
             history: [],
             swipeDirections: [],
@@ -63,6 +141,37 @@ export const useDiscoveryStore = create<DiscoveryState>()(
             setUserName: (name) => set({ userName: name }),
 
             setActiveCategory: (category) => set({ activeCategory: category }),
+
+            fetchProducts: async () => {
+                set({ isProductsLoading: true, productsError: '' });
+
+                try {
+                    const { data } = await api.get<ProdutoApi[] | ProdutosPage>('/admin/produtos');
+                    const apiProducts = Array.isArray(data) ? data : data.content ?? [];
+                    set({
+                        products: apiProducts.map(mapProduto),
+                        isProductsLoading: false,
+                    });
+                } catch {
+                    set({
+                        productsError: 'Não foi possível carregar as peças agora.',
+                        isProductsLoading: false,
+                    });
+                }
+            },
+
+            removeProductFromStack: (id) => set((state) => ({
+                products: state.products.filter((product) => product.id !== id),
+            })),
+
+            restoreProductToStack: (product) => set((state) => ({
+                products: [
+                    product,
+                    ...state.products.filter((currentProduct) => (
+                        currentProduct.id !== product.id
+                    )),
+                ],
+            })),
 
             triggerLikesPulse: () => {
                 set({ pulseLikes: true });

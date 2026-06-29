@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, X } from 'lucide-react';
 import { SwipeCard } from '../components/domain/SwipeCard';
@@ -6,107 +6,23 @@ import { type ProdutoVitrine } from '../store/useCartStore';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { api } from '../utils/api';
 
-interface ProdutoApi {
-    id: number | string;
-    nome: string;
-    precoVenda: number | string;
-    precoAntigo?: number | string | null;
-    tamanho: string;
-    imagemUrl?: string | null;
-    curtidasCount: number;
-    passosCount: number;
-    nomesCurtidas?: string[] | null;
-    categoria?: string | null;
-}
-
-interface ProdutosPage {
-    content?: ProdutoApi[];
-}
-
-const apiBaseUrl = String(api.defaults.baseURL ?? '').replace(/\/$/, '');
-
-function getImageUrl(imagePath?: string | null) {
-    if (!imagePath) return undefined;
-    if (/^https?:\/\//i.test(imagePath)) return imagePath;
-    return `${apiBaseUrl}/${imagePath.replace(/^\/+/, '')}`;
-}
-
-function parsePrice(value?: number | string | null) {
-    if (typeof value === 'number') return value;
-    if (!value) return 0;
-
-    const normalizedValue = value
-        .replace(/[^\d,.-]/g, '')
-        .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-        .replace(',', '.');
-
-    return Number(normalizedValue) || 0;
-}
-
-function formatPrice(value: number) {
-    return value.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-    });
-}
-
-function mapProduto(produto: ProdutoApi): ProdutoVitrine {
-    const price = parsePrice(produto.precoVenda);
-    const oldPrice = parsePrice(produto.precoAntigo);
-    const imageUrl = getImageUrl(produto.imagemUrl);
-
-    return {
-        id: String(produto.id),
-        name: produto.nome,
-        price,
-        category: produto.categoria?.trim() || 'Todas',
-        iconId: 'shirt',
-        sub: '',
-        tamanho: produto.tamanho || 'Único',
-        curtidasCount: produto.curtidasCount,
-        passosCount: produto.passosCount,
-        nomesCurtidas: produto.nomesCurtidas ?? [],
-        curtidas: produto.curtidasCount,
-        dislikes: produto.passosCount,
-        images: imageUrl ? [imageUrl] : [],
-        priceNew: formatPrice(price),
-        priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
-    };
-}
-
 export function DiscoveryScreen() {
+    const products = useDiscoveryStore((state) => state.products);
+    const isLoading = useDiscoveryStore((state) => state.isProductsLoading);
+    const error = useDiscoveryStore((state) => state.productsError);
+    const fetchProducts = useDiscoveryStore((state) => state.fetchProducts);
+    const removeProductFromStack = useDiscoveryStore((state) => state.removeProductFromStack);
+    const restoreProductToStack = useDiscoveryStore((state) => state.restoreProductToStack);
     const activeCategory = useDiscoveryStore((state) => state.activeCategory);
     const swipeRight = useDiscoveryStore((state) => state.swipeRight);
     const swipeLeft = useDiscoveryStore((state) => state.swipeLeft);
     const undoLastSwipe = useDiscoveryStore((state) => state.undoLastSwipe);
     const matchAlertVisible = useDiscoveryStore((state) => state.matchAlertVisible);
     const dismissMatchAlert = useDiscoveryStore((state) => state.dismissMatchAlert);
-    const [products, setProducts] = useState<ProdutoVitrine[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
-
-    const loadProducts = useCallback(async () => {
-        setIsLoading(true);
-        setError('');
-
-        try {
-            const { data } = await api.get<ProdutoApi[] | ProdutosPage>('/admin/produtos');
-            const apiProducts = Array.isArray(data) ? data : data.content ?? [];
-            setProducts(apiProducts.map(mapProduto));
-        } catch {
-            setError('Não foi possível carregar as peças agora.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
 
     useEffect(() => {
-        const timeoutId = window.setTimeout(() => {
-            void loadProducts();
-        }, 0);
-
-        return () => window.clearTimeout(timeoutId);
-    }, [loadProducts]);
+        void fetchProducts();
+    }, [fetchProducts]);
 
     useEffect(() => {
         if (!matchAlertVisible) return;
@@ -133,9 +49,7 @@ export function DiscoveryScreen() {
         product: ProdutoVitrine,
         direction: 'like' | 'dislike',
     ) => {
-        setProducts((currentProducts) => (
-            currentProducts.filter((item) => item.id !== product.id)
-        ));
+        removeProductFromStack(product.id);
 
         switch (direction) {
             case 'dislike':
@@ -149,17 +63,14 @@ export function DiscoveryScreen() {
                 });
                 break;
         }
-    }, [swipeLeft, swipeRight]);
+    }, [removeProductFromStack, swipeLeft, swipeRight]);
 
     const handleUndo = useCallback(() => {
         const restoredProduct = undoLastSwipe();
         if (!restoredProduct) return;
 
-        setProducts((currentProducts) => [
-            restoredProduct,
-            ...currentProducts.filter((product) => product.id !== restoredProduct.id),
-        ]);
-    }, [undoLastSwipe]);
+        restoreProductToStack(restoredProduct);
+    }, [restoreProductToStack, undoLastSwipe]);
 
     return (
         <main
@@ -245,7 +156,7 @@ export function DiscoveryScreen() {
                         title="Não conseguimos carregar as peças"
                         description={error}
                         actionLabel="Tentar novamente"
-                        onAction={() => void loadProducts()}
+                        onAction={() => void fetchProducts()}
                     />
                 )}
 
