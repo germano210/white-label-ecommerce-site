@@ -161,7 +161,7 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                 set({ isProductsLoading: true, productsError: '' });
 
                 try {
-                    const { data } = await api.get<ProdutoApi[] | ProdutosPage>('/admin/produtos');
+                    const { data } = await api.get<ProdutoApi[] | ProdutosPage>('/produtos');
                     const apiProducts = Array.isArray(data) ? data : data.content ?? [];
                     set({
                         products: apiProducts.map(mapProduto),

@@ -7,14 +7,17 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.UUID;
 
+/**
+ * Traduz o JWT recebido em um contexto autenticado com authorities, permitindo
+ * que as rotas administrativas validem ADMIN sem acoplar controllers ao token bruto.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -24,6 +27,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
     }
 
+    /**
+     * Popula o SecurityContext com o usuario e suas permissoes antes das regras de admin.
+     */
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -36,11 +42,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 && authorization.startsWith("Bearer ")
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
-                UUID userId = jwtService.extractUserId(authorization.substring(7));
+                JwtService.JwtPrincipal principal =
+                        jwtService.extractPrincipal(authorization.substring(7));
+                var authorities = principal.authorities()
+                        .stream()
+                        .map(SimpleGrantedAuthority::new)
+                        .toList();
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        userId.toString(),
+                        principal.userId().toString(),
                         null,
-                        List.of()
+                        authorities
                 );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException | IllegalArgumentException ignored) {

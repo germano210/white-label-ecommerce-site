@@ -2,6 +2,8 @@ package com.whiteLabel.backend.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
@@ -29,6 +31,10 @@ public class Usuario {
 
     @Column(name = "otp_expiracao")
     private LocalDateTime otpExpiracao;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "perfil_acesso", length = 30)
+    private UsuarioRole role = UsuarioRole.USER;
 
     @Column(name = "data_criacao", nullable = false, updatable = false)
     private LocalDateTime dataCriacao;
@@ -71,6 +77,14 @@ public class Usuario {
 
     public void setOtpExpiracao(LocalDateTime otpExpiracao) {
         this.otpExpiracao = otpExpiracao;
+    }
+
+    public UsuarioRole getRole() {
+        return role == null ? UsuarioRole.USER : role;
+    }
+
+    public void setRole(UsuarioRole role) {
+        this.role = role == null ? UsuarioRole.USER : role;
     }
 
     public LocalDateTime getDataCriacao() {

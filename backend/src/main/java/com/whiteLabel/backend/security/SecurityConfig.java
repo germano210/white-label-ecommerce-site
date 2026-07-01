@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -16,9 +17,18 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Configura a seguranca stateless da API e separa rotas administrativas por autoridade
+ * para que somente JWTs com ADMIN possam operar dados sensiveis do painel.
+ */
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
+    /**
+     * Protege o namespace administrativo antes das demais regras para impedir que rotas
+     * de gestao sejam acessadas por tokens comuns emitidos pelo fluxo OTP do cliente.
+     */
     @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
@@ -37,10 +47,12 @@ public class SecurityConfig {
                                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/admin/**", "/admin/**")
+                        .hasAnyAuthority("ROLE_ADMIN", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/produtos", "/produtos/").permitAll()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
-                        .requestMatchers("/admin/**").permitAll()
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",

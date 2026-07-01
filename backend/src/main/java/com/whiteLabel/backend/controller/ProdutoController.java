@@ -18,7 +18,7 @@ public class ProdutoController {
         this.produtoService = produtoService;
     }
 
-    @GetMapping
+    @GetMapping({"", "/"})
     public List<ProdutoResponseDTO> listarProdutosAtivos() {
         return produtoService.listarAtivos();
     }

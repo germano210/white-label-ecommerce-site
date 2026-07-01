@@ -22,27 +22,41 @@ const fallbackImage =
     'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80';
 
 function getSocialProofText(product: ProdutoVitrine) {
-    const [firstName, secondName] = product.nomesCurtidas ?? [];
+    const likedNames = (product.nomesCurtidas ?? [])
+        .map((name) => name.trim())
+        .filter(Boolean)
+        .slice(0, 4);
 
     if (product.curtidasCount === 0) {
         return 'Peça adicionada agora!';
     }
 
-    if (product.curtidasCount === 1 && firstName) {
-        return `Curtido por ${firstName}`;
+    if (likedNames.length === 0) {
+        return `Curtido por ${product.curtidasCount} pessoa${product.curtidasCount === 1 ? '' : 's'}.`;
     }
 
-    if (product.curtidasCount === 2 && firstName && secondName) {
-        return `Curtido por ${firstName} e ${secondName}.`;
+    const remainingLikes = Math.max(product.curtidasCount - likedNames.length, 0);
+
+    if (remainingLikes > 0) {
+        return `Curtido por ${likedNames.join(', ')} e mais ${remainingLikes} pessoa${remainingLikes === 1 ? '' : 's'}.`;
     }
 
-    if (product.curtidasCount > 2 && firstName && secondName) {
-        return `Curtido por ${firstName}, ${secondName} e mais ${product.curtidasCount - 2} pessoas.`;
+    if (likedNames.length === 1) {
+        return `Curtido por ${likedNames[0]}.`;
     }
 
-    return `Curtido por ${product.curtidasCount} pessoa${product.curtidasCount > 1 ? 's' : ''}.`;
+    const lastName = likedNames.at(-1);
+    const previousNames = likedNames.slice(0, -1).join(', ');
+
+    return `Curtido por ${previousNames} e ${lastName}.`;
 }
 
+/**
+ * O card mantém a foto como superfície principal e reposiciona os metadados.
+ * Os botões de ação ficam sobre a imagem e o bloco de título/tamanho/curtidas
+ * foi movido para uma faixa inferior, criando a ordem visual pedida: foto,
+ * ações e, abaixo delas, detalhes do produto.
+ */
 export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardProps) {
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
@@ -211,11 +225,13 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                     style={{
                         position: 'absolute',
                         top: '31px',
-                        left: '1px',
-                        right: '38px',
+                        left: '0',
+                        right: 'auto',
                         zIndex: 30,
-                        padding: '9px 10px 10px',
-                        borderRadius: '0 13px 13px 0',
+                        width: 'fit-content',
+                        maxWidth: 'calc(100% - 10px)',
+                        padding: '8px 11px',
+                        borderRadius: '0 999px 999px 0',
                         color: 'var(--color-action-button)',
                         background: 'rgba(8, 9, 8, 0.72)',
                         backdropFilter: 'blur(6px)',
@@ -227,78 +243,21 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '4px',
-                                margin: '0 0 5px',
-                                fontSize: '9px',
-                                fontWeight: 600,
-                                lineHeight: 1.25,
-                            }}
-                        >
-                            <Heart size={9} fill="currentColor" strokeWidth={0} />
-                            {socialProofText}
-                        </p>
-                    )}
-
-                    <div
-                        style={{
-                            display: 'flex',
-                            width: '100%',
-                            alignItems: 'baseline',
-                            justifyContent: 'space-between',
-                            gap: '10px',
-                            minWidth: 0,
-                            textAlign: 'left',
-                        }}
-                    >
-                        <h2
-                            style={{
-                                flex: 1,
-                                minWidth: 0,
-                                overflow: 'hidden',
+                                gap: '5px',
                                 margin: 0,
-                                fontSize: 'clamp(17px, 5.2vw, 22px)',
+                                overflow: 'hidden',
+                                fontSize: '9px',
                                 fontWeight: 700,
-                                lineHeight: 1.12,
-                                letterSpacing: '-0.03em',
+                                lineHeight: 1.25,
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
                             }}
                         >
-                            {product.name}
-                        </h2>
-                        <span
-                            style={{
-                                color: 'rgba(255, 255, 255, 0.72)',
-                                flexShrink: 0,
-                                fontSize: '10px',
-                                fontWeight: 500,
-                                textAlign: 'left',
-                            }}
-                        >
-                            Tam. {product.tamanho.toLowerCase()}
-                        </span>
-                    </div>
+                            <Heart size={12} fill="currentColor" strokeWidth={0} />
+                            {socialProofText}
+                        </p>
+                    )}
                 </header>
-
-                <span
-                    className="bg-[var(--color-success-badge)] text-white"
-                    style={{
-                        position: 'absolute',
-                        top: '100px',
-                        left: '8px',
-                        zIndex: 31,
-                        minWidth: '54px',
-                        padding: '4px 11px',
-                        borderRadius: 'var(--radius-button)',
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        textAlign: 'center',
-                        pointerEvents: 'none',
-                    }}
-                >
-                    {currentPhoto + 1} de {totalPhotos}
-                </span>
 
                 <div
                     aria-hidden="true"
@@ -352,7 +311,7 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                         className="flex w-full items-center justify-between"
                         style={{
                             position: 'absolute',
-                            bottom: '18px',
+                            bottom: '72px',
                             left: '50%',
                             zIndex: 50,
                             width: 'min(84%, 340px)',
@@ -412,6 +371,56 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                         </div>
                     </div>
                 )}
+
+                <footer
+                    style={{
+                        position: 'absolute',
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                        zIndex: 48,
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        alignItems: 'end',
+                        gap: '10px',
+                        minHeight: '45px',
+                        padding: '12px 12px 10px',
+                        color: 'var(--color-action-button)',
+                        background: 'rgba(13, 14, 12, 0.66)',
+                        pointerEvents: 'none',
+                    }}
+                >
+                    <div style={{ minWidth: 0 }}>
+                        <h2
+                            style={{
+                                overflow: 'hidden',
+                                margin: 0,
+                                fontSize: 'clamp(16px, 4.8vw, 19px)',
+                                fontWeight: 800,
+                                lineHeight: 1.08,
+                                letterSpacing: '-0.03em',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {product.name}
+                        </h2>
+                    </div>
+
+                    <span
+                        style={{
+                            color: 'rgba(255, 255, 255, 0.72)',
+                            flexShrink: 0,
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            lineHeight: 1,
+                            textAlign: 'right',
+                            whiteSpace: 'nowrap',
+                        }}
+                    >
+                        Tam. {product.tamanho.toLowerCase()}
+                    </span>
+                </footer>
             </div>
         </motion.article>
     );
