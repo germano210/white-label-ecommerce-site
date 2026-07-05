@@ -3,14 +3,16 @@ import { useAdminStore } from '../../store/useAdminStore';
 import { type ProdutoVitrine } from '../../store/useCartStore';
 import { mockProducts } from '../../utils/mockProducts';
 import { api } from '../../utils/api';
+import { apiRoutes } from '../../utils/apiRoutes';
+import { MissoesAdminPanel } from '../../components/admin/MissoesAdminPanel';
 import {
     LogOut, PackagePlus, ShoppingBag, Users,
     RefreshCcw, Search, CheckCircle, Clock, Plus, Trash2,
     UploadCloud, Phone, User as UserIcon, Calendar, ArrowRight,
-    BarChart3, UserPlus, AlertTriangle
+    BarChart3, UserPlus, AlertTriangle, Sparkles
 } from 'lucide-react';
 
-type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | null;
+type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | 'MISSOES' | null;
 type FiltroTempo = 'HOJE' | 'SEMANA' | 'MES' | 'ANO' | 'PERSONALIZADO';
 
 interface ItemVenda extends ProdutoVitrine {
@@ -90,7 +92,9 @@ export function AdminDashboardScreen() {
         setProdutoError('');
 
         try {
-            const { data } = await api.get<ProdutoAdmin[] | ProdutosPage>('/admin/produtos');
+            const { data } = await api.get<ProdutoAdmin[] | ProdutosPage>(
+                apiRoutes.admin.produtos.list,
+            );
             setProdutos(Array.isArray(data) ? data : data.content ?? []);
         } catch {
             setProdutoError('Não foi possível carregar os produtos cadastrados.');
@@ -128,7 +132,7 @@ export function AdminDashboardScreen() {
         setProdutoSuccess('');
 
         try {
-            await api.post('/admin/produtos', formData, {
+            await api.post(apiRoutes.admin.produtos.create, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -154,7 +158,7 @@ export function AdminDashboardScreen() {
         setProdutoSuccess('');
 
         try {
-            await api.delete(`/admin/produtos/${produtoId}`);
+            await api.delete(apiRoutes.admin.produtos.delete(produtoId));
             setProdutos((currentProducts) => (
                 currentProducts.filter((produto) => produto.id !== produtoId)
             ));
@@ -211,6 +215,9 @@ export function AdminDashboardScreen() {
                         </button>
                         <button onClick={() => setActiveAction('EQUIPE')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'EQUIPE' ? '#007AFF' : 'white', color: activeAction === 'EQUIPE' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                             <UserPlus size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Equipe</span>
+                        </button>
+                        <button onClick={() => setActiveAction('MISSOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'MISSOES' ? '#687152' : 'white', color: activeAction === 'MISSOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                            <Sparkles size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Missões</span>
                         </button>
                     </div>
                 </div>
@@ -322,6 +329,10 @@ export function AdminDashboardScreen() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {activeAction === 'MISSOES' && currentUser?.role === 'ADMIN' && (
+                <MissoesAdminPanel />
             )}
 
             {/* AS SEÇÕES EXISTENTES CONTINUAM AQUI (Ocultadas para o código focar no novo) */}

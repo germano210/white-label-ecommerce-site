@@ -19,6 +19,14 @@ public record MissaoRequest(
 
         @NotBlank
         @JsonProperty("tipo_acao")
-        String tipoAcao
+        String tipoAcao,
+
+        @NotNull
+        @Min(1)
+        Integer valorBase,
+
+        @NotNull
+        @Min(1)
+        Integer peso
 ) {
 }

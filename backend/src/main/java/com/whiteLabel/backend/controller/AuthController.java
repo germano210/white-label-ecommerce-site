@@ -12,9 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/auth")
 public class AuthController {
 
     private final AuthService authService;
@@ -23,21 +25,21 @@ public class AuthController {
         this.authService = authService;
     }
 
-    @PostMapping("/auth/request-otp")
+    @PostMapping("/request-otp")
     public ResponseEntity<RequestOtpResponse> requestOtp(
             @Valid @RequestBody RequestOtpRequest request
     ) {
         return ResponseEntity.ok(authService.requestOtp(request));
     }
 
-    @PostMapping("/auth/verify-otp")
+    @PostMapping("/verify-otp")
     public ResponseEntity<TokenResponse> verifyOtp(
             @Valid @RequestBody VerifyOtpRequest request
     ) {
         return ResponseEntity.ok(authService.verifyOtp(request));
     }
 
-    @PutMapping("/api/auth/atualizar-nome")
+    @PutMapping("/atualizar-nome")
     public ResponseEntity<UsuarioResponse> atualizarNome(
             @Valid @RequestBody AtualizarNomeRequest request
     ) {

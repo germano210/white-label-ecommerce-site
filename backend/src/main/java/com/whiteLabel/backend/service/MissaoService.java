@@ -1,6 +1,7 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Missao;
+import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.dto.MissaoRequest;
 import com.whiteLabel.backend.dto.MissaoResponse;
 import com.whiteLabel.backend.repository.MissaoRepository;
@@ -15,9 +16,11 @@ import java.util.List;
 public class MissaoService {
 
     private final MissaoRepository missaoRepository;
+    private final UsuarioService usuarioService;
 
-    public MissaoService(MissaoRepository missaoRepository) {
+    public MissaoService(MissaoRepository missaoRepository, UsuarioService usuarioService) {
         this.missaoRepository = missaoRepository;
+        this.usuarioService = usuarioService;
     }
 
     @Transactional
@@ -26,7 +29,9 @@ public class MissaoService {
                 request.titulo().trim(),
                 request.icone().trim(),
                 request.metaProgresso(),
-                request.tipoAcao().trim()
+                request.tipoAcao().trim(),
+                request.valorBase(),
+                request.peso()
         );
 
         return MissaoResponse.from(missaoRepository.save(missao));
@@ -47,8 +52,21 @@ public class MissaoService {
         missao.setIcone(request.icone().trim());
         missao.setMetaProgresso(request.metaProgresso());
         missao.setTipoAcao(request.tipoAcao().trim());
+        missao.setValorBase(request.valorBase());
+        missao.setPeso(request.peso());
 
         return MissaoResponse.from(missaoRepository.save(missao));
+    }
+
+    @Transactional
+    public Usuario concluir(Long id, Usuario usuario) {
+        Missao missao = buscarMissaoAtiva(id);
+
+        return usuarioService.adicionarXp(
+                usuario,
+                missao.getValorBase(),
+                missao.getPeso()
+        );
     }
 
     @Transactional

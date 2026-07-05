@@ -18,7 +18,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
-@RequestMapping("/admin/produtos")
+@RequestMapping("/api/admin/produtos")
 public class AdminProdutoController {
 
     private final ProdutoService produtoService;

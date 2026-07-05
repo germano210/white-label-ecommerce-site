@@ -30,6 +30,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { type Missao, useMissaoStore } from '../store/useMissaoStore';
 import { api } from '../utils/api';
+import { apiRoutes } from '../utils/apiRoutes';
 
 interface DiscoveryScreenProps {
     onLogoDoubleClick?: MouseEventHandler<HTMLButtonElement>;
@@ -92,7 +93,7 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
 
             case 'like':
                 swipeRight(product);
-                void api.post(`/curtidas/${encodeURIComponent(product.id)}`).catch(() => {
+                void api.post(apiRoutes.curtidas.create(product.id)).catch(() => {
                     // Mantém o swipe otimista para não interromper a experiência.
                 });
                 break;
@@ -119,7 +120,7 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
         setIsSavingProfileName(true);
 
         try {
-            await api.put('/api/auth/atualizar-nome', { nome: nextProfileName });
+            await api.put(apiRoutes.auth.updateName, { nome: nextProfileName });
             updateUser({ name: nextProfileName, nome: nextProfileName });
             dismissNamePrompt();
         } catch {

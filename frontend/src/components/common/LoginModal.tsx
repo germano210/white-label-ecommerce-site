@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { useDiscoveryStore } from '../../store/useDiscoveryStore';
 import { api } from '../../utils/api';
+import { apiRoutes } from '../../utils/apiRoutes';
 import './LoginModal.css';
 
 type LoginStep = 'choice' | 'details' | 'otp';
@@ -145,7 +146,7 @@ export function LoginModal() {
         setIsLoading(true);
 
         try {
-            const { data } = await api.post<RequestOtpResponse>('/auth/request-otp', {
+            const { data } = await api.post<RequestOtpResponse>(apiRoutes.auth.requestOtp, {
                 telefone: phoneDigits,
             });
 
@@ -184,7 +185,7 @@ export function LoginModal() {
         setIsLoading(true);
 
         try {
-            const { data } = await api.post<VerifyOtpResponse>('/auth/verify-otp', {
+            const { data } = await api.post<VerifyOtpResponse>(apiRoutes.auth.verifyOtp, {
                 telefone: phoneDigits,
                 codigo: otp,
             });

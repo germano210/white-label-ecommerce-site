@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/curtidas")
+@RequestMapping("/api/curtidas")
 public class CurtidaController {
 
     private final CurtidaService curtidaService;

@@ -11,6 +11,8 @@ public record MissaoResponse(
         Integer metaProgresso,
         @JsonProperty("tipo_acao")
         String tipoAcao,
+        Integer valorBase,
+        Integer peso,
         Boolean ativa
 ) {
 
@@ -21,6 +23,8 @@ public record MissaoResponse(
                 missao.getIcone(),
                 missao.getMetaProgresso(),
                 missao.getTipoAcao(),
+                missao.getValorBase(),
+                missao.getPeso(),
                 missao.getAtiva()
         );
     }

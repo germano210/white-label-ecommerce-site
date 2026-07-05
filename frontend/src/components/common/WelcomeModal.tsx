@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { api } from '../../utils/api';
+import { apiRoutes } from '../../utils/apiRoutes';
 import './WelcomeModal.css';
 
 type Step = 1 | 2 | 3 | 4;
@@ -101,7 +102,7 @@ export function WelcomeModal() {
         setIsLoading(true);
 
         try {
-            await api.post('/auth/request-otp', {
+            await api.post(apiRoutes.auth.requestOtp, {
                 telefone: phoneDigits,
                 nome: name,
             });
@@ -134,7 +135,7 @@ export function WelcomeModal() {
                 codigo: otp,
             };
 
-            const { data } = await api.post<VerifyOtpResponse>('/auth/verify-otp', payload);
+            const { data } = await api.post<VerifyOtpResponse>(apiRoutes.auth.verifyOtp, payload);
             const token = data.token ?? data.accessToken;
 
             if (!token) {

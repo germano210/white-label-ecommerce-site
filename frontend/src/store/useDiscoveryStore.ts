@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { type ProdutoVitrine } from './useCartStore';
 import { useAuthStore, type AuthUser } from './useAuthStore';
 import { api } from '../utils/api';
+import { apiRoutes } from '../utils/apiRoutes';
 
 interface ItemPreference {
     size: string;
@@ -161,7 +162,9 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                 set({ isProductsLoading: true, productsError: '' });
 
                 try {
-                    const { data } = await api.get<ProdutoApi[] | ProdutosPage>('/produtos');
+                    const { data } = await api.get<ProdutoApi[] | ProdutosPage>(
+                        apiRoutes.produtos.list,
+                    );
                     const apiProducts = Array.isArray(data) ? data : data.content ?? [];
                     set({
                         products: apiProducts.map(mapProduto),

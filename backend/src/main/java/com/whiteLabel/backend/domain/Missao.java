@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
@@ -27,17 +28,32 @@ public class Missao {
     @Column(name = "tipo_acao", nullable = false, length = 80)
     private String tipoAcao;
 
+    @Column(name = "valor_base", nullable = false)
+    private Integer valorBase;
+
+    @Column(nullable = false)
+    private Integer peso = 1;
+
     @Column(nullable = false)
     private Boolean ativa = true;
 
     protected Missao() {
     }
 
-    public Missao(String titulo, String icone, Integer metaProgresso, String tipoAcao) {
+    public Missao(
+            String titulo,
+            String icone,
+            Integer metaProgresso,
+            String tipoAcao,
+            Integer valorBase,
+            Integer peso
+    ) {
         this.titulo = titulo;
         this.icone = icone;
         this.metaProgresso = metaProgresso;
         this.tipoAcao = tipoAcao;
+        this.valorBase = valorBase;
+        this.peso = peso == null ? 1 : peso;
     }
 
     public Long getId() {
@@ -76,11 +92,34 @@ public class Missao {
         this.tipoAcao = tipoAcao;
     }
 
+    public Integer getValorBase() {
+        return valorBase == null ? 0 : valorBase;
+    }
+
+    public void setValorBase(Integer valorBase) {
+        this.valorBase = valorBase;
+    }
+
+    public Integer getPeso() {
+        return peso == null ? 1 : peso;
+    }
+
+    public void setPeso(Integer peso) {
+        this.peso = peso == null ? 1 : peso;
+    }
+
     public Boolean getAtiva() {
         return ativa;
     }
 
     public void desativar() {
         this.ativa = false;
+    }
+
+    @PrePersist
+    void preencherDefaultsGamificacao() {
+        if (peso == null) {
+            peso = 1;
+        }
     }
 }

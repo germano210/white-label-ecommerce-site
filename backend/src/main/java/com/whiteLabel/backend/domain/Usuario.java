@@ -36,6 +36,12 @@ public class Usuario {
     @Column(name = "perfil_acesso", length = 30)
     private UsuarioRole role = UsuarioRole.USER;
 
+    @Column
+    private Integer xp = 0;
+
+    @Column
+    private Integer nivel = 1;
+
     @Column(name = "data_criacao", nullable = false, updatable = false)
     private LocalDateTime dataCriacao;
 
@@ -87,12 +93,36 @@ public class Usuario {
         this.role = role == null ? UsuarioRole.USER : role;
     }
 
+    public Integer getXp() {
+        return xp == null ? 0 : xp;
+    }
+
+    public void setXp(Integer xp) {
+        this.xp = xp == null ? 0 : xp;
+    }
+
+    public Integer getNivel() {
+        return nivel == null ? 1 : nivel;
+    }
+
+    public void setNivel(Integer nivel) {
+        this.nivel = nivel == null ? 1 : nivel;
+    }
+
     public LocalDateTime getDataCriacao() {
         return dataCriacao;
     }
 
     @PrePersist
     void preencherDataCriacao() {
+        if (xp == null) {
+            xp = 0;
+        }
+
+        if (nivel == null) {
+            nivel = 1;
+        }
+
         if (dataCriacao == null) {
             dataCriacao = LocalDateTime.now();
         }
