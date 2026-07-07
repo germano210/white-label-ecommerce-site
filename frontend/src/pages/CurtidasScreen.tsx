@@ -1,8 +1,25 @@
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
+import { useEffect } from 'react';
 import { Trash2, Check, Send, User } from 'lucide-react';
+import { getImageUrl } from '../utils/imageUtils';
 
 export function CurtidasScreen() {
-    const { likedItems, itemPrefs, setItemSize, toggleSelection, removeLikedItem, userName, setUserName } = useDiscoveryStore();
+    const {
+        likedItems,
+        itemPrefs,
+        isCurtidasLoading,
+        curtidasError,
+        fetchCurtidas,
+        setItemSize,
+        toggleSelection,
+        removeLikedItem,
+        userName,
+        setUserName,
+    } = useDiscoveryStore();
+
+    useEffect(() => {
+        void fetchCurtidas();
+    }, [fetchCurtidas]);
 
     // Calcula o total somando apenas as peças que estão com a checkbox marcada
     const total = likedItems.reduce((acc, item) => {
@@ -34,6 +51,28 @@ export function CurtidasScreen() {
         // Substitua este número pelo WhatsApp real da loja (ex: 5511999999999)
         window.open(`https://wa.me/5551999999999?text=${encoded}`, '_blank');
     };
+
+    if (isCurtidasLoading) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px 20px', textAlign: 'center' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '50%', border: '3px solid #E8DED6', borderTopColor: 'var(--terra)', animation: 'spin 0.8s linear infinite' }} />
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)', marginTop: '20px' }}>Carregando curtidas</h2>
+                <p style={{ fontSize: '14px', color: 'var(--muted)', marginTop: '10px' }}>Estamos buscando suas peças separadas.</p>
+            </div>
+        );
+    }
+
+    if (curtidasError) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px 20px', textAlign: 'center' }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)', marginTop: '20px' }}>Não conseguimos carregar</h2>
+                <p style={{ fontSize: '14px', color: 'var(--muted)', marginTop: '10px' }}>{curtidasError}</p>
+                <button type="button" onClick={() => void fetchCurtidas()} style={{ marginTop: '18px', padding: '12px 18px', border: 0, borderRadius: '14px', color: 'white', background: 'var(--terra)', fontWeight: 700, cursor: 'pointer' }}>
+                    Tentar novamente
+                </button>
+            </div>
+        );
+    }
 
     if (likedItems.length === 0) {
         return (
@@ -82,8 +121,7 @@ export function CurtidasScreen() {
                     const pref = itemPrefs[item.id];
                     const isSelected = pref?.isSelected;
 
-                    // CORREÇÃO DO TYPESCRIPT PARA AS IMAGENS
-                    const images = (item as any).images || ['https://via.placeholder.com/150'];
+                    const imageUrl = getImageUrl(item.images?.[0]);
 
                     return (
                         <div key={item.id} style={{ display: 'flex', gap: '12px', background: 'white', padding: '12px', borderRadius: '20px', marginBottom: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
@@ -102,7 +140,7 @@ export function CurtidasScreen() {
                             </div>
 
                             {/* Imagem (Thumbnail) */}
-                            <img src={images[0]} alt={item.name} style={{ width: '80px', height: '110px', objectFit: 'cover', borderRadius: '12px' }} />
+                            <img src={imageUrl} alt={item.name} style={{ width: '80px', height: '110px', objectFit: 'cover', borderRadius: '12px' }} />
 
                             {/* Detalhes e Controles */}
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>

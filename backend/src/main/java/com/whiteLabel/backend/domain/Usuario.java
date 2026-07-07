@@ -23,7 +23,13 @@ public class Usuario {
     @Column(length = 150)
     private String nome;
 
-    @Column(nullable = false, unique = true, length = 15)
+    @Column(unique = true, length = 180)
+    private String email;
+
+    @Column(length = 120)
+    private String password;
+
+    @Column(unique = true, length = 15)
     private String telefone;
 
     @Column(length = 6)
@@ -63,6 +69,22 @@ public class Usuario {
 
     public void setNome(String nome) {
         this.nome = nome;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     public String getTelefone() {
@@ -115,6 +137,10 @@ public class Usuario {
 
     @PrePersist
     void preencherDataCriacao() {
+        if (role == null) {
+            role = UsuarioRole.USER;
+        }
+
         if (xp == null) {
             xp = 0;
         }

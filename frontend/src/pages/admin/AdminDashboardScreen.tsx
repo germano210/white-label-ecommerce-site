@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useAdminStore } from '../../store/useAdminStore';
 import { type ProdutoVitrine } from '../../store/useCartStore';
-import { mockProducts } from '../../utils/mockProducts';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
+import { getImageUrl } from '../../utils/imageUtils';
 import { MissoesAdminPanel } from '../../components/admin/MissoesAdminPanel';
 import {
     LogOut, PackagePlus, ShoppingBag, Users,
@@ -29,8 +29,8 @@ interface ItemDevolvido {
 interface ProdutoAdmin {
     id: number | string;
     nome: string;
-    precoVenda: number;
-    precoAntigo?: number | null;
+    precoVenda: number | string;
+    precoAntigo?: number | string | null;
     tamanho: string;
     imagemUrl?: string | null;
 }
@@ -39,13 +39,40 @@ interface ProdutosPage {
     content?: ProdutoAdmin[];
 }
 
-const apiBaseUrl = String(api.defaults.baseURL ?? '').replace(/\/$/, '');
 const filtrosTempo: FiltroTempo[] = ['HOJE', 'SEMANA', 'MES', 'ANO', 'PERSONALIZADO'];
 
-function getProdutoImageUrl(imagemUrl?: string | null) {
-    if (!imagemUrl) return '';
-    if (/^https?:\/\//i.test(imagemUrl)) return imagemUrl;
-    return `${apiBaseUrl}/${imagemUrl.replace(/^\/+/, '')}`;
+function parsePrice(value: number | string | null | undefined) {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+
+    return Number(String(value).replace(',', '.')) || 0;
+}
+
+function formatPrice(value: number) {
+    return value.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    });
+}
+
+function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
+    const price = parsePrice(produto.precoVenda);
+    const oldPrice = parsePrice(produto.precoAntigo);
+
+    return {
+        id: String(produto.id),
+        name: produto.nome,
+        price,
+        category: 'Todas',
+        iconId: 'shirt',
+        sub: '',
+        tamanho: produto.tamanho,
+        curtidasCount: 0,
+        passosCount: 0,
+        images: [getImageUrl(produto.imagemUrl)],
+        priceNew: formatPrice(price),
+        priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
+    };
 }
 
 export function AdminDashboardScreen() {
@@ -76,16 +103,19 @@ export function AdminDashboardScreen() {
     const [filtroTempo, setFiltroTempo] = useState<FiltroTempo>('MES');
     const [novoVendedor, setNovoVendedor] = useState({ nome: '', email: '', senha: '' });
 
-    // --- MOCKS DE DADOS ---
-    const mockClientes = [
-        { nome: 'Mariana Oliveira', tel: '5199887766', compras: 12, total: 1450.90, ultima: '12/05/2026' },
-        { nome: 'Beatriz Souza', tel: '5198877554', compras: 3, total: 380.00, ultima: '10/05/2026' },
-    ];
-
-    const mockEquipe = [
-        { id: 1, nome: 'Ana (Vendedora)', email: 'vendedor@viabras.com', vendas: 3120.00, comissao: 156.00 },
-        { id: 2, nome: 'Julia (Vendedora)', email: 'julia@viabras.com', vendas: 2450.00, comissao: 122.50 },
-    ];
+    const clientes: Array<{
+        nome: string;
+        tel: string;
+        compras: number;
+        total: number;
+        ultima: string;
+    }> = [];
+    const equipe: Array<{
+        id: number | string;
+        nome: string;
+        vendas: number;
+        comissao: number;
+    }> = [];
 
     const carregarProdutos = useCallback(async () => {
         setIsLoadingProdutos(true);
@@ -172,12 +202,20 @@ export function AdminDashboardScreen() {
     // --- LÓGICA DA BAIXA ---
     const produtosFiltrados = useMemo(() => {
         if (!buscaProduto) return [];
-        return mockProducts.filter(p => p.name.toLowerCase().includes(buscaProduto.toLowerCase()) || p.id.toString() === buscaProduto).slice(0, 5);
-    }, [buscaProduto]);
+        const normalizedSearch = buscaProduto.trim().toLowerCase();
+
+        return produtos
+            .filter((produto) => (
+                produto.nome.toLowerCase().includes(normalizedSearch)
+                || String(produto.id) === normalizedSearch
+            ))
+            .slice(0, 5)
+            .map(mapProdutoAdminToVitrine);
+    }, [buscaProduto, produtos]);
 
     // --- LÓGICA DA TROCA ---
-    const adicionarItemTrocaTeste = () => {
-        setItensDevolvidos([...itensDevolvidos, { id: Date.now(), nome: 'Peça do Histórico (Exemplo)', preco: 89.90 }]);
+    const carregarHistoricoTroca = () => {
+        setProdutoError('O histórico de trocas ainda não está disponível na API.');
     };
 
     const adicionarAoCarrinho = (produto: ProdutoVitrine) => {
@@ -263,10 +301,9 @@ export function AdminDashboardScreen() {
                     {/* KPI Principal */}
                     <div style={{ background: '#F8F0FF', padding: '20px', borderRadius: '16px', marginTop: '10px', border: '1px solid #EEDFFF' }}>
                         <div style={{ fontSize: '12px', color: '#8A2BE2', fontWeight: 700, textTransform: 'uppercase' }}>Faturamento ({filtroTempo})</div>
-                        <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--dark)', fontFamily: 'var(--font-display)', marginTop: '4px' }}>R$ 14.250,00</div>
+                        <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--dark)', fontFamily: 'var(--font-display)', marginTop: '4px' }}>--</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '12px', color: '#666' }}>
-                            <span><strong>124</strong> Peças vendidas</span>
-                            <span>Ticket Médio: <strong>R$ 114,90</strong></span>
+                            <span>Dados financeiros aguardando API.</span>
                         </div>
                     </div>
 
@@ -276,13 +313,13 @@ export function AdminDashboardScreen() {
                             <AlertTriangle size={20} color="#FF3B30" />
                             <div>
                                 <div style={{ fontSize: '13px', fontWeight: 700, color: '#FF3B30' }}>Estoque Crítico</div>
-                                <div style={{ fontSize: '12px', color: '#666' }}>O "Vestido Canelado (M)" tem apenas 1 unidade restante.</div>
+                                <div style={{ fontSize: '12px', color: '#666' }}>Sem alertas reais carregados pela API.</div>
                             </div>
                         </div>
 
                         <div style={{ padding: '16px', background: '#F9F9F9', borderRadius: '16px', border: '1px solid #EEE' }}>
                             <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--dark)', marginBottom: '8px' }}>Métricas de Rejeição (App)</div>
-                            <div style={{ fontSize: '12px', color: '#666' }}>A "Blusa de Lã Azul" teve <strong style={{ color: '#FF3B30' }}>85% de rejeição</strong> (Passos) esta semana. Sugestão: Criar promoção.</div>
+                            <div style={{ fontSize: '12px', color: '#666' }}>Sem métricas reais carregadas pela API.</div>
                         </div>
                     </div>
                 </div>
@@ -291,7 +328,7 @@ export function AdminDashboardScreen() {
             {/* ========================================== */}
             {/* SEÇÃO ADMIN: EQUIPE & VENDEDORES           */}
             {/* ========================================== */}
-            {activeAction === 'EQUIPE' && currentUser?.role === 'ADMIN' && (
+            {false && activeAction === 'EQUIPE' && currentUser?.role === 'ADMIN' && (
                 <div style={{ margin: '0 20px', background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
                     <h3 style={{ fontSize: '18px', color: 'var(--dark)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <UserPlus size={20} color="#007AFF" /> Gestão de Equipe
@@ -301,7 +338,12 @@ export function AdminDashboardScreen() {
                     <div style={{ marginBottom: '24px' }}>
                         <div style={{ fontSize: '12px', color: '#999', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>Ranking do Mês (Vendas)</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {mockEquipe.map((vendedor, index) => (
+                            {equipe.length === 0 && (
+                                <div style={{ padding: '16px', borderRadius: '12px', background: '#F9F9F9', color: '#999', fontSize: '13px', textAlign: 'center' }}>
+                                    Nenhum vendedor carregado pela API.
+                                </div>
+                            )}
+                            {equipe.map((vendedor, index) => (
                                 <div key={vendedor.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9F9F9', padding: '12px 16px', borderRadius: '12px', border: '1px solid #EEE' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: index === 0 ? '#FFD700' : '#E0E0E0', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>{index + 1}</div>
@@ -335,10 +377,42 @@ export function AdminDashboardScreen() {
                 <MissoesAdminPanel />
             )}
 
+            {activeAction === 'EQUIPE' && currentUser?.role === 'ADMIN' && (
+                <UnsupportedModulePanel
+                    title="Gestão de Equipe"
+                    description="Dados indisponíveis enquanto o módulo de equipe não está integrado à API."
+                    icon={<UserPlus size={20} color="#007AFF" />}
+                />
+            )}
+
+            {activeAction === 'BAIXA' && (
+                <UnsupportedModulePanel
+                    title="Baixa de Estoque"
+                    description="Dados indisponíveis enquanto o módulo de vendas e baixa de estoque não está integrado à API."
+                    icon={<ShoppingBag size={20} color="var(--terra)" />}
+                />
+            )}
+
+            {activeAction === 'CRM' && (
+                <UnsupportedModulePanel
+                    title="Clientes"
+                    description="Dados indisponíveis enquanto o CRM de clientes não está integrado à API."
+                    icon={<Users size={20} color="#2D6A4F" />}
+                />
+            )}
+
+            {activeAction === 'TROCA' && (
+                <UnsupportedModulePanel
+                    title="Trocas / Devoluções"
+                    description="Dados indisponíveis enquanto o módulo de trocas e devoluções não está integrado à API."
+                    icon={<RefreshCcw size={20} color="#F5A623" />}
+                />
+            )}
+
             {/* AS SEÇÕES EXISTENTES CONTINUAM AQUI (Ocultadas para o código focar no novo) */}
             {/* Pode colar as seções de BAIXA, CRM, TROCA e NOVO_ITEM do código anterior logo abaixo desta linha */}
 
-            {activeAction === 'BAIXA' && (
+            {false && activeAction === 'BAIXA' && (
                 <div style={{ margin: '0 20px', background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
                     <div style={{ marginBottom: '20px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 700, color: '#AAA', textTransform: 'uppercase' }}>1. Cliente</label>
@@ -409,7 +483,7 @@ export function AdminDashboardScreen() {
             {/* ========================================== */}
             {/* SEÇÃO: BAIXA (VENDA)                       */}
             {/* ========================================== */}
-            {activeAction === 'BAIXA' && (
+            {false && activeAction === 'BAIXA' && (
                 <div style={{ margin: '0 20px', background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
                     <div style={{ marginBottom: '20px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 700, color: '#AAA', textTransform: 'uppercase' }}>1. Cliente</label>
@@ -481,16 +555,21 @@ export function AdminDashboardScreen() {
             {/* ========================================== */}
             {/* SEÇÃO: CRM (PAINEL DE CLIENTES)            */}
             {/* ========================================== */}
-            {activeAction === 'CRM' && (
+            {false && activeAction === 'CRM' && (
                 <div style={{ padding: '0 20px' }}>
                     <div style={{ background: 'white', borderRadius: '24px', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ fontSize: '16px', margin: 0 }}>Fidelidade Clientes</h3>
-                            <span style={{ fontSize: '11px', background: '#EEE', padding: '4px 8px', borderRadius: '8px' }}>{mockClientes.length} cadastradas</span>
+                            <span style={{ fontSize: '11px', background: '#EEE', padding: '4px 8px', borderRadius: '8px' }}>{clientes.length} cadastradas</span>
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {mockClientes.map(c => (
+                            {clientes.length === 0 && (
+                                <div style={{ padding: '16px', borderRadius: '12px', background: '#F9F9F9', color: '#999', fontSize: '13px', textAlign: 'center' }}>
+                                    Nenhum cliente carregado pela API.
+                                </div>
+                            )}
+                            {clientes.map(c => (
                                 <div key={c.tel} style={{ padding: '16px', border: '1px solid #F0F0F0', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <div>
@@ -520,7 +599,7 @@ export function AdminDashboardScreen() {
             {/* ========================================== */}
             {/* SEÇÃO: TROCA / DEVOLUÇÃO                   */}
             {/* ========================================== */}
-            {activeAction === 'TROCA' && (
+            {false && activeAction === 'TROCA' && (
                 <div style={{ margin: '0 20px', padding: '24px', background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
                     <h3 style={{ fontSize: '18px', color: 'var(--dark)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <RefreshCcw size={20} color="#F5A623" /> Trocas / Devoluções
@@ -540,7 +619,7 @@ export function AdminDashboardScreen() {
                         <div style={{ border: '1px solid #EEE', borderRadius: '16px', padding: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                                 <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Peças a Devolver</label>
-                                <button onClick={adicionarItemTrocaTeste} style={{ background: '#FFF5E5', color: '#D08A1E', border: 'none', padding: '6px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                <button onClick={carregarHistoricoTroca} style={{ background: '#FFF5E5', color: '#D08A1E', border: 'none', padding: '6px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                                     <Plus size={14} /> Histórico
                                 </button>
                             </div>
@@ -645,16 +724,12 @@ export function AdminDashboardScreen() {
                                     </thead>
                                     <tbody>
                                         {produtos.map((produto) => {
-                                            const imageUrl = getProdutoImageUrl(produto.imagemUrl);
+                                            const imageUrl = getImageUrl(produto.imagemUrl);
 
                                             return (
                                                 <tr key={produto.id} style={{ borderTop: '1px solid #F0F0F0' }}>
                                                     <td style={adminTableCellStyle}>
-                                                        {imageUrl ? (
-                                                            <img src={imageUrl} alt={produto.nome} style={{ width: '48px', height: '48px', borderRadius: '10px', objectFit: 'cover', background: '#EEE' }} />
-                                                        ) : (
-                                                            <div style={{ width: '48px', height: '48px', borderRadius: '10px', display: 'grid', placeItems: 'center', background: '#EEE', color: '#AAA', fontSize: '10px' }}>Sem foto</div>
-                                                        )}
+                                                        <img src={imageUrl} alt={produto.nome} style={{ width: '48px', height: '48px', borderRadius: '10px', objectFit: 'cover', background: '#EEE' }} />
                                                     </td>
                                                     <td style={{ ...adminTableCellStyle, fontSize: '13px', fontWeight: 700 }}>{produto.nome}</td>
                                                     <td style={{ ...adminTableCellStyle, fontSize: '12px', color: '#666' }}>{produto.tamanho}</td>
@@ -673,6 +748,30 @@ export function AdminDashboardScreen() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+interface UnsupportedModulePanelProps {
+    title: string;
+    description: string;
+    icon: React.ReactNode;
+}
+
+function UnsupportedModulePanel({
+    title,
+    description,
+    icon,
+}: UnsupportedModulePanelProps) {
+    return (
+        <div style={{ margin: '0 20px', background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: '18px', color: 'var(--dark)', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {icon}
+                {title}
+            </h3>
+            <div style={{ padding: '18px', borderRadius: '16px', background: '#F9F9F9', color: '#777', fontSize: '13px', lineHeight: 1.5, textAlign: 'center' }}>
+                {description}
+            </div>
         </div>
     );
 }

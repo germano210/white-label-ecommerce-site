@@ -4,6 +4,7 @@ import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { useDiscoveryStore } from '../../store/useDiscoveryStore';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
+import { getImageUrl } from '../../utils/imageUtils';
 import './LoginModal.css';
 
 type LoginStep = 'choice' | 'details' | 'otp';
@@ -32,18 +33,6 @@ interface RequestOtpResponse {
     status?: string;
     message?: string;
 }
-
-const fallbackImages = [
-    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=500&q=80',
-    'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=500&q=80',
-    'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=500&q=80',
-];
-
-const purchaseNotifications = [
-    'Fernanda resgatou 5 tentativas',
-    'Manuela resgatou Jaqueta Ferrari',
-    'Maria comprou há 2 min',
-];
 
 function onlyDigits(value: string) {
     return value.replace(/\D/g, '');
@@ -122,9 +111,17 @@ export function LoginModal() {
         const productImages = products
             .flatMap((product) => product.images ?? [])
             .filter(Boolean)
+            .map((imageUrl) => getImageUrl(imageUrl))
             .slice(0, 3);
 
-        return [...productImages, ...fallbackImages].slice(0, 3);
+        if (productImages.length === 0) {
+            return Array.from({ length: 3 }, () => getImageUrl(null));
+        }
+
+        return [
+            ...productImages,
+            ...Array.from({ length: 3 - productImages.length }, () => getImageUrl(null)),
+        ].slice(0, 3);
     }, [products]);
 
     const startAuthFlow = (mode: AccessMode) => {
@@ -227,15 +224,6 @@ export function LoginModal() {
             <div className="login-modal__card bg-white rounded-[28px] shadow-2xl p-6">
                 {step === 'choice' && (
                     <>
-                        <div className="login-modal__proof">
-                            {purchaseNotifications.map((notification) => (
-                                <span key={notification} className="login-modal__notification">
-                                    <span className="login-modal__bell" aria-hidden="true" />
-                                    {notification}
-                                </span>
-                            ))}
-                        </div>
-
                         <h1 id="login-modal-title" className="login-modal__brand">
                             Brechó da Cami
                         </h1>

@@ -9,6 +9,7 @@ import {
 } from 'framer-motion';
 import { Heart, Send, Undo2, X } from 'lucide-react';
 import { type ProdutoVitrine } from '../../store/useCartStore';
+import { getImageUrl } from '../../utils/imageUtils';
 
 interface SwipeCardProps {
     product: ProdutoVitrine;
@@ -17,9 +18,6 @@ interface SwipeCardProps {
     onSwipe: (direction: 'like' | 'dislike') => void;
     onUndo: () => void;
 }
-
-const fallbackImage =
-    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80';
 
 function getSocialProofText(product: ProdutoVitrine) {
     const likedNames = (product.nomesCurtidas ?? [])
@@ -61,9 +59,9 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
 
-    const productImages = product.images?.length ? product.images : [fallbackImage];
+    const productImages = product.images?.length ? product.images : [getImageUrl(null)];
     const totalPhotos = productImages.length;
-    const activeImageSrc = productImages[currentPhoto];
+    const activeImageSrc = getImageUrl(productImages[currentPhoto]);
 
     const x = useMotionValue(0);
     const rotate = useTransform(x, [-220, 220], [-16, 16]);

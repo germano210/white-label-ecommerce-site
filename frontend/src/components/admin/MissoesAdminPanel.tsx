@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import axios from 'axios';
 import { Edit3, Plus, Save, Sparkles, Trash2, X } from 'lucide-react';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
@@ -100,6 +101,16 @@ function buildPayload(formState: MissaoFormState): MissaoPayload {
     };
 }
 
+function getAdminMissionErrorMessage(error: unknown, fallback: string) {
+    if (!axios.isAxiosError(error)) return fallback;
+
+    if (error.response?.status === 401 || error.response?.status === 403) {
+        return 'Sua sessão administrativa expirou ou não possui permissão para gerenciar missões. Faça login como ADMIN e tente novamente.';
+    }
+
+    return fallback;
+}
+
 export function MissoesAdminPanel() {
     const [missoes, setMissoes] = useState<AdminMissao[]>([]);
     const [editingMissao, setEditingMissao] = useState<AdminMissao | null>(null);
@@ -124,8 +135,11 @@ export function MissoesAdminPanel() {
             );
             const apiMissoes = Array.isArray(data) ? data : data.content ?? [];
             setMissoes(apiMissoes.map(normalizeMissao));
-        } catch {
-            setError('Não foi possível carregar as missões cadastradas.');
+        } catch (loadError) {
+            setError(getAdminMissionErrorMessage(
+                loadError,
+                'Não foi possível carregar as missões cadastradas.',
+            ));
         } finally {
             setIsLoading(false);
         }
@@ -186,8 +200,11 @@ export function MissoesAdminPanel() {
 
             fecharFormulario();
             await carregarMissoes();
-        } catch {
-            setError('Não foi possível salvar a missão. Confira os dados e tente novamente.');
+        } catch (saveError) {
+            setError(getAdminMissionErrorMessage(
+                saveError,
+                'Não foi possível salvar a missão. Confira os dados e tente novamente.',
+            ));
         } finally {
             setIsSaving(false);
         }
@@ -203,8 +220,11 @@ export function MissoesAdminPanel() {
                 currentMissoes.filter((missao) => missao.id !== missaoId)
             ));
             setSuccess('Missão removida com sucesso.');
-        } catch {
-            setError('Não foi possível remover a missão.');
+        } catch (deleteError) {
+            setError(getAdminMissionErrorMessage(
+                deleteError,
+                'Não foi possível remover a missão.',
+            ));
         }
     };
 

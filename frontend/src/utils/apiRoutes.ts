@@ -14,9 +14,11 @@ export const apiRoutes = {
     auth: {
         requestOtp: '/api/auth/request-otp',
         verifyOtp: '/api/auth/verify-otp',
+        adminLogin: '/api/auth/admin/login',
         updateName: '/api/auth/atualizar-nome',
     },
     curtidas: {
+        list: '/api/curtidas',
         create: (produtoId: RouteId) => `/api/curtidas/${routeId(produtoId)}`,
     },
     admin: {

@@ -6,21 +6,31 @@ import com.whiteLabel.backend.dto.MissaoRequest;
 import com.whiteLabel.backend.dto.MissaoResponse;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class MissaoService {
 
     private final MissaoRepository missaoRepository;
     private final UsuarioService usuarioService;
+    private final MissaoProgressService missaoProgressService;
 
-    public MissaoService(MissaoRepository missaoRepository, UsuarioService usuarioService) {
+    public MissaoService(
+            MissaoRepository missaoRepository,
+            UsuarioService usuarioService,
+            MissaoProgressService missaoProgressService
+    ) {
         this.missaoRepository = missaoRepository;
         this.usuarioService = usuarioService;
+        this.missaoProgressService = missaoProgressService;
     }
 
     @Transactional
@@ -39,6 +49,11 @@ public class MissaoService {
 
     @Transactional(readOnly = true)
     public List<MissaoResponse> listar() {
+        return missaoProgressService.listarMissoesAtivas(obterUsuarioAutenticadoOpcional());
+    }
+
+    @Transactional(readOnly = true)
+    public List<MissaoResponse> listarAdmin() {
         return missaoRepository.findAllByAtivaTrueOrderByIdAsc()
                 .stream()
                 .map(MissaoResponse::from)
@@ -82,5 +97,21 @@ public class MissaoService {
                         HttpStatus.NOT_FOUND,
                         "Missao nao encontrada"
                 ));
+    }
+
+    private UUID obterUsuarioAutenticadoOpcional() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 }

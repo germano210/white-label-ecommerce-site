@@ -1,6 +1,8 @@
 package com.whiteLabel.backend.controller;
 
 import com.whiteLabel.backend.dto.AtualizarNomeRequest;
+import com.whiteLabel.backend.dto.AdminLoginRequest;
+import com.whiteLabel.backend.dto.AdminLoginResponse;
 import com.whiteLabel.backend.dto.RequestOtpRequest;
 import com.whiteLabel.backend.dto.RequestOtpResponse;
 import com.whiteLabel.backend.dto.TokenResponse;
@@ -37,6 +39,13 @@ public class AuthController {
             @Valid @RequestBody VerifyOtpRequest request
     ) {
         return ResponseEntity.ok(authService.verifyOtp(request));
+    }
+
+    @PostMapping("/admin/login")
+    public ResponseEntity<AdminLoginResponse> loginAdmin(
+            @Valid @RequestBody AdminLoginRequest request
+    ) {
+        return ResponseEntity.ok(authService.loginAdmin(request));
     }
 
     @PutMapping("/atualizar-nome")

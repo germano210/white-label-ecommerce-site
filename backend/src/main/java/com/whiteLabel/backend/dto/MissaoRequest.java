@@ -1,5 +1,6 @@
 package com.whiteLabel.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -23,6 +24,7 @@ public record MissaoRequest(
 
         @NotNull
         @Min(1)
+        @JsonAlias("valor_base")
         Integer valorBase,
 
         @NotNull

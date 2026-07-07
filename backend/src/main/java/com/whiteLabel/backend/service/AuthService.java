@@ -1,6 +1,9 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.domain.UsuarioRole;
+import com.whiteLabel.backend.dto.AdminLoginRequest;
+import com.whiteLabel.backend.dto.AdminLoginResponse;
 import com.whiteLabel.backend.dto.AtualizarNomeRequest;
 import com.whiteLabel.backend.dto.RequestOtpRequest;
 import com.whiteLabel.backend.dto.RequestOtpResponse;
@@ -12,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -32,10 +36,21 @@ public class AuthService {
     private final JwtService jwtService;
     private final SecureRandom secureRandom;
     private final Clock clock;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public AuthService(UsuarioRepository usuarioRepository, JwtService jwtService) {
-        this(usuarioRepository, jwtService, new SecureRandom(), Clock.systemDefaultZone());
+    public AuthService(
+            UsuarioRepository usuarioRepository,
+            JwtService jwtService,
+            PasswordEncoder passwordEncoder
+    ) {
+        this(
+                usuarioRepository,
+                jwtService,
+                new SecureRandom(),
+                Clock.systemDefaultZone(),
+                passwordEncoder
+        );
     }
 
     AuthService(
@@ -44,10 +59,21 @@ public class AuthService {
             SecureRandom secureRandom,
             Clock clock
     ) {
+        this(usuarioRepository, jwtService, secureRandom, clock, null);
+    }
+
+    AuthService(
+            UsuarioRepository usuarioRepository,
+            JwtService jwtService,
+            SecureRandom secureRandom,
+            Clock clock,
+            PasswordEncoder passwordEncoder
+    ) {
         this.usuarioRepository = usuarioRepository;
         this.jwtService = jwtService;
         this.secureRandom = secureRandom;
         this.clock = clock;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
@@ -98,6 +124,29 @@ public class AuthService {
         return TokenResponse.from(token, usuario);
     }
 
+    @Transactional(readOnly = true)
+    public AdminLoginResponse loginAdmin(AdminLoginRequest request) {
+        String email = normalizarEmail(request.email());
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(this::credenciaisAdminInvalidas);
+
+        if (usuario.getPassword() == null
+                || passwordEncoder == null
+                || !passwordEncoder.matches(request.senha(), usuario.getPassword())) {
+            throw credenciaisAdminInvalidas();
+        }
+
+        if (usuario.getRole() != UsuarioRole.ADMIN) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Usuario sem permissao administrativa"
+            );
+        }
+
+        String token = jwtService.generateToken(usuario);
+        return AdminLoginResponse.from(token, usuario);
+    }
+
     @Transactional
     public UsuarioResponse atualizarNome(AtualizarNomeRequest request) {
         Usuario usuario = usuarioRepository.findById(obterUsuarioAutenticadoId())
@@ -133,6 +182,14 @@ public class AuthService {
 
     private ResponseStatusException invalidOtp() {
         return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "OTP invalido ou expirado");
+    }
+
+    private String normalizarEmail(String email) {
+        return email.trim().toLowerCase();
+    }
+
+    private ResponseStatusException credenciaisAdminInvalidas() {
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciais invalidas");
     }
 
     private UUID obterUsuarioAutenticadoId() {

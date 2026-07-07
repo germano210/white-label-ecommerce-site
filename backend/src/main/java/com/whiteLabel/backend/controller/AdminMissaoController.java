@@ -47,7 +47,7 @@ public class AdminMissaoController {
      */
     @GetMapping({"", "/"})
     public List<MissaoResponse> listar() {
-        return missaoService.listar();
+        return missaoService.listarAdmin();
     }
 
     /**

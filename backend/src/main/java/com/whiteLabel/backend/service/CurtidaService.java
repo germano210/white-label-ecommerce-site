@@ -4,6 +4,7 @@ import com.whiteLabel.backend.domain.Curtida;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.dto.CurtidaResponseDTO;
+import com.whiteLabel.backend.dto.MissaoResponse;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -22,15 +24,18 @@ public class CurtidaService {
     private final CurtidaRepository curtidaRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProdutoRepository produtoRepository;
+    private final MissaoProgressService missaoProgressService;
 
     public CurtidaService(
             CurtidaRepository curtidaRepository,
             UsuarioRepository usuarioRepository,
-            ProdutoRepository produtoRepository
+            ProdutoRepository produtoRepository,
+            MissaoProgressService missaoProgressService
     ) {
         this.curtidaRepository = curtidaRepository;
         this.usuarioRepository = usuarioRepository;
         this.produtoRepository = produtoRepository;
+        this.missaoProgressService = missaoProgressService;
     }
 
     @Transactional
@@ -63,7 +68,10 @@ public class CurtidaService {
         produto.setCurtidasCount(curtidasAtuais + 1);
         produtoRepository.save(produto);
 
-        return CurtidaResponseDTO.from(curtida);
+        List<MissaoResponse> missoes =
+                missaoProgressService.registrarAcao(usuario, "CURTIR_ITEM");
+
+        return CurtidaResponseDTO.from(curtida, missoes);
     }
 
     private UUID obterUsuarioAutenticadoId() {

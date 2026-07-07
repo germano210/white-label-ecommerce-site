@@ -1,6 +1,7 @@
 package com.whiteLabel.backend.controller;
 
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,8 +28,12 @@ class ApiRouteStandardizationTest {
     @Autowired
     private ProdutoRepository produtoRepository;
 
+    @Autowired
+    private CurtidaRepository curtidaRepository;
+
     @BeforeEach
     void setUp() {
+        curtidaRepository.deleteAll();
         produtoRepository.deleteAll();
     }
 

@@ -2,6 +2,7 @@ package com.whiteLabel.backend.controller;
 
 import com.whiteLabel.backend.domain.Missao;
 import com.whiteLabel.backend.repository.MissaoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +25,12 @@ class MissaoControllerTest {
     @Autowired
     private MissaoRepository missaoRepository;
 
+    @Autowired
+    private UsuarioMissaoRepository usuarioMissaoRepository;
+
     @BeforeEach
     void setUp() {
+        usuarioMissaoRepository.deleteAll();
         missaoRepository.deleteAll();
     }
 
@@ -35,7 +40,7 @@ class MissaoControllerTest {
                 "Curtir tres pecas",
                 "heart",
                 3,
-                "CURTIR",
+                "CURTIR_ITEM",
                 100,
                 1
         ));
@@ -54,7 +59,9 @@ class MissaoControllerTest {
         mockMvc.perform(get("/api/missoes").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].titulo").value("Curtir tres pecas"));
+                .andExpect(jsonPath("$[0].titulo").value("Curtir tres pecas"))
+                .andExpect(jsonPath("$[0].progresso").value(0))
+                .andExpect(jsonPath("$[0].concluida").value(false));
     }
 
     @Test

@@ -1,8 +1,8 @@
 /**
  * DiscoveryScreen concentra a nova composição mobile-first da vitrine.
  * O card de produto continua usando a pilha de swipe existente, enquanto o
- * rodapé fixo de missões escuta Zustand e atualiza os níveis preenchidos a
- * cada curtida sem duplicar estado local.
+ * rodapé fixo de missões escuta o progresso oficial retornado pelo backend
+ * em `/api/missoes`, sem derivar progresso de curtidas locais.
  */
 import {
     useCallback,
@@ -28,7 +28,7 @@ import { SwipeCard } from '../components/domain/SwipeCard';
 import { type ProdutoVitrine } from '../store/useCartStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
-import { type Missao, useMissaoStore } from '../store/useMissaoStore';
+import { type Missao, type MissaoApiPayload, useMissaoStore } from '../store/useMissaoStore';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 
@@ -36,11 +36,15 @@ interface DiscoveryScreenProps {
     onLogoDoubleClick?: MouseEventHandler<HTMLButtonElement>;
 }
 
+interface CurtidaResponse {
+    missoes?: MissaoApiPayload;
+}
+
 export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
     const products = useDiscoveryStore((state) => state.products);
-    const isLoading = useDiscoveryStore((state) => state.isProductsLoading);
-    const error = useDiscoveryStore((state) => state.productsError);
-    const fetchProducts = useDiscoveryStore((state) => state.fetchProducts);
+    const isLoading = useDiscoveryStore((state) => state.isLoading);
+    const error = useDiscoveryStore((state) => state.error);
+    const fetchProdutos = useDiscoveryStore((state) => state.fetchProdutos);
     const removeProductFromStack = useDiscoveryStore((state) => state.removeProductFromStack);
     const restoreProductToStack = useDiscoveryStore((state) => state.restoreProductToStack);
     const activeCategory = useDiscoveryStore((state) => state.activeCategory);
@@ -51,14 +55,16 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
     const dismissMatchAlert = useDiscoveryStore((state) => state.dismissMatchAlert);
     const namePromptVisible = useDiscoveryStore((state) => state.namePromptVisible);
     const dismissNamePrompt = useDiscoveryStore((state) => state.dismissNamePrompt);
+    const fetchMissoes = useMissaoStore((state) => state.fetchMissoes);
+    const setMissoesFromApi = useMissaoStore((state) => state.setMissoesFromApi);
     const updateUser = useAuthStore((state) => state.updateUser);
     const [profileName, setProfileName] = useState('');
     const [profileNameError, setProfileNameError] = useState('');
     const [isSavingProfileName, setIsSavingProfileName] = useState(false);
 
     useEffect(() => {
-        void fetchProducts();
-    }, [fetchProducts]);
+        void fetchProdutos();
+    }, [fetchProdutos]);
 
     useEffect(() => {
         if (!matchAlertVisible) return;
@@ -93,12 +99,21 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
 
             case 'like':
                 swipeRight(product);
-                void api.post(apiRoutes.curtidas.create(product.id)).catch(() => {
-                    // Mantém o swipe otimista para não interromper a experiência.
-                });
+                void api.post<CurtidaResponse>(apiRoutes.curtidas.create(product.id))
+                    .then(async ({ data }) => {
+                        if (data.missoes) {
+                            setMissoesFromApi(data.missoes);
+                            return;
+                        }
+
+                        await fetchMissoes();
+                    })
+                    .catch(() => {
+                        // A missão só muda com sucesso da API; falhas não geram progresso local definitivo.
+                    });
                 break;
         }
-    }, [removeProductFromStack, swipeLeft, swipeRight]);
+    }, [fetchMissoes, removeProductFromStack, setMissoesFromApi, swipeLeft, swipeRight]);
 
     const handleUndo = useCallback(() => {
         const restoredProduct = undoLastSwipe();
@@ -191,7 +206,7 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
                         title="Não conseguimos carregar as peças"
                         description={error}
                         actionLabel="Tentar novamente"
-                        onAction={() => void fetchProducts()}
+                        onAction={() => void fetchProdutos()}
                     />
                 )}
 
@@ -257,7 +272,6 @@ function DiscoveryHeader({ onLogoDoubleClick }: DiscoveryHeaderProps) {
 function MissionsRail() {
     const missoes = useMissaoStore((state) => state.missoes);
     const fetchMissoes = useMissaoStore((state) => state.fetchMissoes);
-    const likedItemsCount = useDiscoveryStore((state) => state.likedItems.length);
 
     useEffect(() => {
         void fetchMissoes();
@@ -271,7 +285,6 @@ function MissionsRail() {
                         key={missao.id}
                         missao={missao}
                         index={index}
-                        likedItemsCount={likedItemsCount}
                     />
                 ))}
             </div>
@@ -282,45 +295,67 @@ function MissionsRail() {
 interface MissionCardProps {
     missao: Missao;
     index: number;
-    likedItemsCount: number;
 }
 
-function MissionCard({ missao, index, likedItemsCount }: MissionCardProps) {
+function MissionCard({ missao, index }: MissionCardProps) {
     const Icon = missionIconMap[missao.icone] ?? Heart;
-    const isLikeMission = /curtid|like/i.test(`${missao.tipo} ${missao.descricao}`);
-    const progress = Math.min(isLikeMission ? likedItemsCount : missao.progresso, missao.meta);
+    const progress = Math.min(missao.progresso, missao.meta);
+    const isCompact = missao.meta > 3;
+    const filledColor = missao.icone === 'heart' ? '#ff5757' : '#687152';
 
     return (
         <article
             style={{
                 ...missionCardStyle,
                 opacity: index === 0 ? 1 : 0.38,
+                border: missao.concluida ? '1px solid rgba(104, 113, 82, 0.34)' : '1px solid transparent',
             }}
         >
             <div style={missionTextStyle}>
                 <div style={missionTitleRowStyle}>
-                    <span style={missionBadgeStyle}>{index + 1}</span>
+                    <span style={{
+                        ...missionBadgeStyle,
+                        background: missao.concluida ? '#687152' : '#2f3328',
+                    }}>
+                        {index + 1}
+                    </span>
                     <strong style={missionTitleStyle}>{missao.titulo}</strong>
+                    {missao.concluida && (
+                        <CheckCircle2 size={12} color="#687152" fill="#687152" strokeWidth={0} />
+                    )}
                 </div>
                 <p style={missionDescriptionStyle}>{missao.descricao}</p>
             </div>
 
-            <div style={missionLevelsStyle} aria-label={`${progress} de ${missao.meta} níveis`}>
-                {Array.from({ length: missao.meta }, (_, levelIndex) => {
-                    const isFilled = levelIndex < progress;
-                    const filledColor = missao.icone === 'heart' ? '#ff5757' : '#687152';
+            <div
+                style={{
+                    ...missionLevelsStyle,
+                    ...(isCompact ? missionLevelsCompactStyle : null),
+                }}
+                aria-label={`${progress} de ${missao.meta} níveis`}
+            >
+                {isCompact && (
+                    <span style={missionProgressCounterStyle}>
+                        {progress}/{missao.meta}
+                    </span>
+                )}
+                <div style={isCompact ? missionIconsScrollStyle : missionIconsInlineStyle}>
+                    {Array.from({ length: missao.meta }, (_, levelIndex) => {
+                        const isFilled = levelIndex < progress;
 
-                    return (
-                        <Icon
-                            key={levelIndex}
-                            size={15}
-                            strokeWidth={1.7}
-                            color={isFilled ? filledColor : '#2f3328'}
-                            fill={isFilled ? filledColor : 'none'}
-                            aria-hidden="true"
-                        />
-                    );
-                })}
+                        return (
+                            <Icon
+                                key={levelIndex}
+                                size={15}
+                                strokeWidth={1.7}
+                                color={isFilled ? filledColor : '#2f3328'}
+                                fill={isFilled ? filledColor : 'none'}
+                                style={missionIconStyle}
+                                aria-hidden="true"
+                            />
+                        );
+                    })}
+                </div>
             </div>
         </article>
     );
@@ -611,6 +646,45 @@ const missionLevelsStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
+    minWidth: 0,
+    maxWidth: '92px',
+};
+
+const missionLevelsCompactStyle: CSSProperties = {
+    width: '92px',
+    maxWidth: '92px',
+};
+
+const missionProgressCounterStyle: CSSProperties = {
+    flex: '0 0 auto',
+    color: '#687152',
+    fontSize: '8px',
+    fontWeight: 900,
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+};
+
+const missionIconsInlineStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexWrap: 'nowrap',
+};
+
+const missionIconsScrollStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    maxWidth: '48px',
+    minWidth: 0,
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    flexWrap: 'nowrap',
+    scrollbarWidth: 'none',
+};
+
+const missionIconStyle: CSSProperties = {
+    flex: '0 0 auto',
 };
 
 const modalOverlayStyle: CSSProperties = {

@@ -4,6 +4,7 @@ import { type ProdutoVitrine } from './useCartStore';
 import { useAuthStore, type AuthUser } from './useAuthStore';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
+import { getImageUrl } from '../utils/imageUtils';
 
 interface ItemPreference {
     size: string;
@@ -39,10 +40,23 @@ interface ProdutosPage {
     content?: ProdutoApi[];
 }
 
+interface CurtidaApi {
+    produto?: ProdutoApi | null;
+    produtoId?: number | string;
+}
+
+interface CurtidasPage {
+    content?: Array<CurtidaApi | ProdutoApi>;
+}
+
 interface DiscoveryState {
     products: ProdutoVitrine[];
+    isLoading: boolean;
+    error: string | null;
     isProductsLoading: boolean;
-    productsError: string;
+    productsError: string | null;
+    isCurtidasLoading: boolean;
+    curtidasError: string | null;
     likedItems: ProdutoVitrine[];
     history: string[];
     swipeDirections: SwipeDirection[];
@@ -57,7 +71,9 @@ interface DiscoveryState {
     userName: string;
 
     setUserName: (name: string) => void;
+    fetchProdutos: () => Promise<void>;
     fetchProducts: () => Promise<void>;
+    fetchCurtidas: () => Promise<void>;
     removeProductFromStack: (id: string) => void;
     restoreProductToStack: (product: ProdutoVitrine) => void;
     triggerLikesPulse: () => void;
@@ -70,14 +86,6 @@ interface DiscoveryState {
     setItemSize: (id: string, size: string) => void;
     toggleSelection: (id: string) => void;
     removeLikedItem: (id: string) => void;
-}
-
-const apiBaseUrl = String(api.defaults.baseURL ?? '').replace(/\/$/, '');
-
-function getImageUrl(imagePath?: string | null) {
-    if (!imagePath) return undefined;
-    if (/^https?:\/\//i.test(imagePath)) return imagePath;
-    return `${apiBaseUrl}/${imagePath.replace(/^\/+/, '')}`;
 }
 
 function parsePrice(value?: number | string | null) {
@@ -134,13 +142,27 @@ function mapProduto(produto: ProdutoApi): ProdutoVitrine {
     };
 }
 
+function isProdutoApi(value: CurtidaApi | ProdutoApi): value is ProdutoApi {
+    return 'nome' in value && 'precoVenda' in value;
+}
+
+function mapCurtida(item: CurtidaApi | ProdutoApi) {
+    if (isProdutoApi(item)) return mapProduto(item);
+    if (item.produto) return mapProduto(item.produto);
+    return null;
+}
+
 // Envolvemos a criação da store com o persist()
 export const useDiscoveryStore = create<DiscoveryState>()(
     persist(
         (set, get) => ({
             products: [],
-            isProductsLoading: true,
-            productsError: '',
+            isLoading: false,
+            error: null,
+            isProductsLoading: false,
+            productsError: null,
+            isCurtidasLoading: false,
+            curtidasError: null,
             likedItems: [],
             history: [],
             swipeDirections: [],
@@ -158,8 +180,19 @@ export const useDiscoveryStore = create<DiscoveryState>()(
 
             setActiveCategory: (category) => set({ activeCategory: category }),
 
-            fetchProducts: async () => {
-                set({ isProductsLoading: true, productsError: '' });
+            /**
+             * Busca os produtos reais da API pública.
+             * O loading é ativado antes da comunicação HTTP e sempre desligado
+             * em `finally`; em caso de falha, a lista permanece vazia/atual e a
+             * mensagem amigável fica em `error`/`productsError` para a UI renderizar.
+             */
+            fetchProdutos: async () => {
+                set({
+                    isLoading: true,
+                    error: null,
+                    isProductsLoading: true,
+                    productsError: null,
+                });
 
                 try {
                     const { data } = await api.get<ProdutoApi[] | ProdutosPage>(
@@ -168,13 +201,61 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                     const apiProducts = Array.isArray(data) ? data : data.content ?? [];
                     set({
                         products: apiProducts.map(mapProduto),
+                        isLoading: false,
                         isProductsLoading: false,
                     });
                 } catch {
                     set({
+                        error: 'Não foi possível carregar as peças agora.',
                         productsError: 'Não foi possível carregar as peças agora.',
+                    });
+                } finally {
+                    set({
+                        isLoading: false,
                         isProductsLoading: false,
                     });
+                }
+            },
+
+            fetchProducts: async () => {
+                await get().fetchProdutos();
+            },
+
+            /**
+             * Busca as curtidas reais da API e substitui o estado local.
+             * A ação aceita respostas paginadas ou listas simples; erros de rede
+             * não criam dados artificiais, apenas atualizam `curtidasError` para
+             * que a tela informe o usuário sem mascarar a falha da API.
+             */
+            fetchCurtidas: async () => {
+                set({ isCurtidasLoading: true, curtidasError: null });
+
+                try {
+                    const { data } = await api.get<Array<CurtidaApi | ProdutoApi> | CurtidasPage>(
+                        apiRoutes.curtidas.list,
+                    );
+                    const apiCurtidas = Array.isArray(data) ? data : data.content ?? [];
+                    const likedItems = apiCurtidas
+                        .map(mapCurtida)
+                        .filter((item): item is ProdutoVitrine => Boolean(item));
+
+                    set((state) => ({
+                        likedItems,
+                        itemPrefs: likedItems.reduce<Record<string, ItemPreference>>((prefs, item) => ({
+                            ...prefs,
+                            [item.id]: state.itemPrefs[item.id] ?? {
+                                size: item.tamanho || 'M',
+                                isSelected: true,
+                            },
+                        }), {}),
+                        isCurtidasLoading: false,
+                    }));
+                } catch {
+                    set({
+                        curtidasError: 'Não foi possível carregar suas curtidas agora.',
+                    });
+                } finally {
+                    set({ isCurtidasLoading: false });
                 }
             },
 
@@ -337,18 +418,25 @@ export const useDiscoveryStore = create<DiscoveryState>()(
         }),
         {
             name: 'viabras-storage', // Nome que ficará salvo no LocalStorage
-            // O partialize escolhe o que deve ser salvo.
-            // Ignoramos o pulseLikes para o botão não piscar sozinho ao atualizar a página.
+            // Mantemos somente preferências leves em storage; produtos e curtidas
+            // devem ser hidratados pela API para evitar dados antigos ou fictícios.
             partialize: (state) => ({
-                likedItems: state.likedItems,
-                history: state.history,
-                swipeDirections: state.swipeDirections,
-                swipedCards: state.swipedCards,
-                productReactionCounts: state.productReactionCounts,
                 activeCategory: state.activeCategory,
-                itemPrefs: state.itemPrefs,
                 userName: state.userName
             }),
+            merge: (persistedState, currentState) => {
+                const persisted = persistedState as Partial<DiscoveryState> | undefined;
+
+                return {
+                    ...currentState,
+                    activeCategory: typeof persisted?.activeCategory === 'string'
+                        ? persisted.activeCategory
+                        : currentState.activeCategory,
+                    userName: typeof persisted?.userName === 'string'
+                        ? persisted.userName
+                        : currentState.userName,
+                };
+            },
         }
     )
 );

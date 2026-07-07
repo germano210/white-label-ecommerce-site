@@ -12,5 +12,7 @@ public interface MissaoRepository extends JpaRepository<Missao, Long> {
 
     List<Missao> findAllByAtivaTrueOrderByIdAsc();
 
+    List<Missao> findAllByAtivaTrueAndTipoAcaoOrderByIdAsc(String tipoAcao);
+
     Optional<Missao> findByIdAndAtivaTrue(Long id);
 }

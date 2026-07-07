@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {type ProdutoVitrine, useCartStore } from '../../store/useCartStore';
+import { getImageUrl } from '../../utils/imageUtils';
 
 interface ProductModalProps {
     product: ProdutoVitrine | null;
@@ -21,6 +22,8 @@ export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
     const addItem = useCartStore((state) => state.addItem);
 
     if (!isOpen || !product) return null;
+
+    const imageUrl = getImageUrl(product.images?.[0]);
 
     const handleAddToCart = () => {
         if (!selectedSize) return;
@@ -50,7 +53,7 @@ export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
                     {/* Imagem de Topo */}
                     <div className="aspect-[4/5] w-full bg-gray-100">
                         <img
-                            src={product.iconId}
+                            src={imageUrl}
                             alt={product.name}
                             className="w-full h-full object-cover"
                         />

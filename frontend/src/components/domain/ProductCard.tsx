@@ -1,4 +1,5 @@
 import  {type ProdutoVitrine} from '../../store/useCartStore';
+import { getImageUrl } from '../../utils/imageUtils';
 
 interface ProductCardProps {
     product: ProdutoVitrine;
@@ -13,6 +14,8 @@ interface ProductCardProps {
  * O clique em qualquer lugar do card deve abrir o modal de detalhes (redução de atrito).
  */
 export function ProductCard({ product, onViewDetails }: ProductCardProps) {
+    const imageUrl = getImageUrl(product.images?.[0]);
+
     return (
         <div
             className="group cursor-pointer flex flex-col gap-2"
@@ -24,7 +27,7 @@ export function ProductCard({ product, onViewDetails }: ProductCardProps) {
             {/* Container da Imagem: Aspect Ratio otimizado para moda (3:4) */}
             <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-gray-100">
                 <img
-                    src={product.iconId}
+                    src={imageUrl}
                     alt={product.name}
                     className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                     loading="lazy" // Fundamental para performance (LCP)
