@@ -4,9 +4,12 @@ import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.domain.UsuarioRole;
 import com.whiteLabel.backend.dto.RequestOtpRequest;
 import com.whiteLabel.backend.dto.VerifyOtpRequest;
+import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
+import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import com.whiteLabel.backend.service.AuthService;
@@ -41,6 +44,15 @@ class AdminAuthControllerTest {
     private UsuarioMissaoRepository usuarioMissaoRepository;
 
     @Autowired
+    private UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository;
+
+    @Autowired
+    private CompartilhamentoAberturaRepository compartilhamentoAberturaRepository;
+
+    @Autowired
+    private CompartilhamentoItemRepository compartilhamentoItemRepository;
+
+    @Autowired
     private CurtidaRepository curtidaRepository;
 
     @Autowired
@@ -60,6 +72,9 @@ class AdminAuthControllerTest {
 
     @BeforeEach
     void setUp() {
+        compartilhamentoAberturaRepository.deleteAll();
+        compartilhamentoItemRepository.deleteAll();
+        usuarioMissaoSemanalRepository.deleteAll();
         usuarioMissaoRepository.deleteAll();
         curtidaRepository.deleteAll();
         produtoRepository.deleteAll();
@@ -147,6 +162,60 @@ class AdminAuthControllerTest {
                         .header("Authorization", "Bearer " + jwtService.generateToken(usuario))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldRejectInvalidMissionActionType() throws Exception {
+        Usuario admin = criarUsuarioAdmin("germano@brechocami.com", "senhasegura@123");
+
+        mockMvc.perform(post("/api/admin/missoes")
+                        .header("Authorization", "Bearer " + jwtService.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "titulo": "Missao invalida",
+                                  "icone": "alert",
+                                  "meta_progresso": 3,
+                                  "tipo_acao": "CURTIR",
+                                  "valorBase": 100,
+                                  "peso": 1
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldCreateMissionWithOfficialActionTypes() throws Exception {
+        Usuario admin = criarUsuarioAdmin("germano@brechocami.com", "senhasegura@123");
+        String token = jwtService.generateToken(admin);
+        String[] tipos = {
+                "CURTIR_ITEM",
+                "COMPARTILHAR_ITEM",
+                "COMPRAR_ITEM",
+                "USAR_TENTATIVA",
+                "COMPLETAR_MISSOES",
+                "ALCANCAR_NIVEL",
+                "CONVIDAR_PESSOAS",
+                "BONUS_DIARIO"
+        };
+
+        for (String tipo : tipos) {
+            mockMvc.perform(post("/api/admin/missoes")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "titulo": "Missao %s",
+                                      "icone": "target",
+                                      "meta_progresso": 1,
+                                      "tipo_acao": "%s",
+                                      "valorBase": 10,
+                                      "peso": 1
+                                    }
+                                    """.formatted(tipo, tipo)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.tipo_acao").value(tipo));
+        }
     }
 
     @Test

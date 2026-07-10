@@ -74,7 +74,12 @@ public class SecurityConfig {
                                 "/swagger-ui.html"
                         ).permitAll()
                         .requestMatchers("/api/auth/atualizar-nome").authenticated()
+                        .requestMatchers(
+                                "/api/missoes/semanais",
+                                "/api/missoes/semanais/**"
+                        ).authenticated()
                         .requestMatchers("/api/curtidas/**").authenticated()
+                        .requestMatchers("/api/compartilhamentos/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(
                         jwtAuthenticationFilter,

@@ -10,6 +10,8 @@ public record MissaoRequest(
         @NotBlank
         String titulo,
 
+        String descricao,
+
         @NotBlank
         String icone,
 
@@ -22,6 +24,8 @@ public record MissaoRequest(
         @JsonProperty("tipo_acao")
         String tipoAcao,
 
+        String ciclo,
+
         @NotNull
         @Min(1)
         @JsonAlias("valor_base")
@@ -29,6 +33,9 @@ public record MissaoRequest(
 
         @NotNull
         @Min(1)
-        Integer peso
+        Integer peso,
+
+        @Min(0)
+        Integer tentativasRecompensa
 ) {
 }

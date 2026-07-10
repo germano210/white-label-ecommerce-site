@@ -9,7 +9,8 @@ public record UsuarioResponse(
         String nome,
         String telefone,
         Integer xp,
-        Integer nivel
+        Integer nivel,
+        Integer tentativas
 ) {
 
     public static UsuarioResponse from(Usuario usuario) {
@@ -18,7 +19,8 @@ public record UsuarioResponse(
                 usuario.getNome(),
                 usuario.getTelefone(),
                 usuario.getXp(),
-                usuario.getNivel()
+                usuario.getNivel(),
+                usuario.getTentativas()
         );
     }
 }

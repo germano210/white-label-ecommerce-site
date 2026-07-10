@@ -1,12 +1,17 @@
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { useEffect } from 'react';
-import { Trash2, Check, Send, User } from 'lucide-react';
+import { ArrowLeft, Trash2, Check, Send, User } from 'lucide-react';
 import { getImageUrl } from '../utils/imageUtils';
 
-export function CurtidasScreen() {
+interface CurtidasScreenProps {
+    onBack?: () => void;
+}
+
+export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
     const {
         likedItems,
         itemPrefs,
+        curtidasMode,
         isCurtidasLoading,
         curtidasError,
         fetchCurtidas,
@@ -87,8 +92,25 @@ export function CurtidasScreen() {
     return (
         <div style={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
 
-            <div style={{ padding: '20px 16px', textAlign: 'center', borderBottom: '1px solid #EEEEEE' }}>
-                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)' }}>Minhas Curtidas</h2>
+            <div style={{ position: 'relative', padding: '20px 16px', textAlign: 'center', borderBottom: '1px solid #EEEEEE' }}>
+                {onBack && (
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        aria-label="Voltar para descoberta"
+                        style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', display: 'grid', width: '34px', height: '34px', placeItems: 'center', border: 0, borderRadius: '999px', color: 'var(--dark)', background: '#F5F0EA', cursor: 'pointer' }}
+                    >
+                        <ArrowLeft size={18} />
+                    </button>
+                )}
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)' }}>
+                    {curtidasMode === 'resgate' ? 'Resgatar tentativa' : 'Minhas Curtidas'}
+                </h2>
+                {curtidasMode === 'resgate' && (
+                    <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: '12px', fontWeight: 700 }}>
+                        Escolha uma peça curtida para usar sua tentativa.
+                    </p>
+                )}
             </div>
 
             {/* CAMPO DE NOME NO CARRINHO */}

@@ -16,9 +16,14 @@ public class UsuarioService {
     private static final double MULTIPLICADOR_BONUS_CRITICO = 1.5;
 
     private final UsuarioRepository usuarioRepository;
+    private final MissaoSemanalService missaoSemanalService;
 
-    public UsuarioService(UsuarioRepository usuarioRepository) {
+    public UsuarioService(
+            UsuarioRepository usuarioRepository,
+            MissaoSemanalService missaoSemanalService
+    ) {
         this.usuarioRepository = usuarioRepository;
+        this.missaoSemanalService = missaoSemanalService;
     }
 
     /**
@@ -45,13 +50,19 @@ public class UsuarioService {
         }
 
         int novoXp = usuario.getXp() + xpGanho;
+        int nivelAnterior = usuario.getNivel();
 
         usuario.setXp(novoXp);
         while (usuario.getXp() >= calcularXpNecessarioParaProximoNivel(usuario.getNivel())) {
             usuario.setNivel(usuario.getNivel() + 1);
         }
 
-        return usuarioRepository.save(usuario);
+        Usuario usuarioAtualizado = usuarioRepository.save(usuario);
+        if (usuarioAtualizado.getNivel() > nivelAnterior) {
+            missaoSemanalService.sincronizarNivel(usuarioAtualizado);
+        }
+
+        return usuarioAtualizado;
     }
 
     private double calcularXpNecessarioParaProximoNivel(Integer nivelAtual) {

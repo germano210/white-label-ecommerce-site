@@ -1,15 +1,19 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Missao;
+import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.domain.UsuarioMissao;
 import com.whiteLabel.backend.dto.CurtidaResponseDTO;
 import com.whiteLabel.backend.dto.MissaoResponse;
+import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
+import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +52,15 @@ class MissaoProgressServiceTest {
     private UsuarioMissaoRepository usuarioMissaoRepository;
 
     @Autowired
+    private UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository;
+
+    @Autowired
+    private CompartilhamentoAberturaRepository compartilhamentoAberturaRepository;
+
+    @Autowired
+    private CompartilhamentoItemRepository compartilhamentoItemRepository;
+
+    @Autowired
     private ProdutoRepository produtoRepository;
 
     @Autowired
@@ -55,6 +68,9 @@ class MissaoProgressServiceTest {
 
     @BeforeEach
     void setUp() {
+        compartilhamentoAberturaRepository.deleteAll();
+        compartilhamentoItemRepository.deleteAll();
+        usuarioMissaoSemanalRepository.deleteAll();
         usuarioMissaoRepository.deleteAll();
         curtidaRepository.deleteAll();
         produtoRepository.deleteAll();
@@ -204,7 +220,7 @@ class MissaoProgressServiceTest {
                 titulo,
                 "heart",
                 meta,
-                "CURTIR_ITEM",
+                MissaoTipoAcao.CURTIR_ITEM.name(),
                 valorBase,
                 peso
         ));

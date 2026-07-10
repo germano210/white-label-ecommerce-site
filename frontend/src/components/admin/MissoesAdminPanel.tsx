@@ -3,13 +3,19 @@ import axios from 'axios';
 import { Edit3, Plus, Save, Sparkles, Trash2, X } from 'lucide-react';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
+import {
+    normalizeTipoAcaoMissao,
+    tipoAcaoMissaoLabels,
+    tiposAcaoMissao,
+    type TipoAcaoMissao,
+} from '../../utils/missaoTypes';
 
 interface AdminMissao {
     id: string;
     titulo: string;
     icone: string;
     metaProgresso: number;
-    tipoAcao: string;
+    tipoAcao: TipoAcaoMissao;
     valorBase: number;
     peso: number;
     ativa: boolean;
@@ -33,7 +39,7 @@ interface MissaoPayload {
     titulo: string;
     icone: string;
     meta_progresso: number;
-    tipo_acao: string;
+    tipo_acao: TipoAcaoMissao;
     valorBase: number;
     peso: number;
 }
@@ -42,7 +48,7 @@ interface MissaoFormState {
     titulo: string;
     icone: string;
     metaProgresso: string;
-    tipoAcao: string;
+    tipoAcao: TipoAcaoMissao;
     valorBase: string;
     peso: string;
 }
@@ -70,7 +76,7 @@ function normalizeMissao(missao: AdminMissaoApi): AdminMissao {
             missao.metaProgresso ?? missao.meta_progresso,
             1,
         ),
-        tipoAcao: missao.tipoAcao ?? missao.tipo_acao ?? 'CURTIR_ITEM',
+        tipoAcao: normalizeTipoAcaoMissao(missao.tipoAcao ?? missao.tipo_acao),
         valorBase: parsePositiveNumber(missao.valorBase ?? missao.valor_base, 10),
         peso: parsePositiveNumber(missao.peso, 1),
         ativa: missao.ativa ?? true,
@@ -95,7 +101,7 @@ function buildPayload(formState: MissaoFormState): MissaoPayload {
         titulo: formState.titulo.trim(),
         icone: formState.icone.trim(),
         meta_progresso: parsePositiveNumber(formState.metaProgresso, 1),
-        tipo_acao: formState.tipoAcao.trim(),
+        tipo_acao: formState.tipoAcao,
         valorBase: parsePositiveNumber(formState.valorBase, 10),
         peso: parsePositiveNumber(formState.peso, 1),
     };
@@ -278,7 +284,9 @@ export function MissoesAdminPanel() {
                                             Ícone: {missao.icone}
                                         </div>
                                     </td>
-                                    <td style={tableCellStyle}>{missao.tipoAcao}</td>
+                                    <td style={tableCellStyle}>
+                                        {tipoAcaoMissaoLabels[missao.tipoAcao]}
+                                    </td>
                                     <td style={tableCellStyle}>{missao.metaProgresso}</td>
                                     <td style={tableCellStyle}>{missao.valorBase} XP</td>
                                     <td style={tableCellStyle}>{missao.peso}x</td>
@@ -357,7 +365,10 @@ function MissaoFormModal({
     onClose,
     onSubmit,
 }: MissaoFormModalProps) {
-    const updateField = (field: keyof MissaoFormState, value: string) => {
+    const updateField = <Field extends keyof MissaoFormState>(
+        field: Field,
+        value: MissaoFormState[Field],
+    ) => {
         onChange({ ...formState, [field]: value });
     };
 
@@ -389,13 +400,17 @@ function MissaoFormModal({
                         <span style={labelStyle}>Tipo da ação</span>
                         <select
                             value={formState.tipoAcao}
-                            onChange={(event) => updateField('tipoAcao', event.target.value)}
+                            onChange={(event) => updateField(
+                                'tipoAcao',
+                                normalizeTipoAcaoMissao(event.target.value),
+                            )}
                             style={inputStyle}
                         >
-                            <option value="CURTIR_ITEM">Curtir item</option>
-                            <option value="ACESSAR_CURTIDAS">Acessar curtidas</option>
-                            <option value="ADICIONAR_SACOLA">Adicionar à sacola</option>
-                            <option value="FINALIZAR_COMPRA">Finalizar compra</option>
+                            {tiposAcaoMissao.map((tipoAcao) => (
+                                <option key={tipoAcao} value={tipoAcao}>
+                                    {tipoAcaoMissaoLabels[tipoAcao]}
+                                </option>
+                            ))}
                         </select>
                     </label>
 

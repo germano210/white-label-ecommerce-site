@@ -12,6 +12,7 @@ interface ItemPreference {
 }
 
 type SwipeDirection = 'like' | 'dislike';
+export type CurtidasMode = 'lista' | 'resgate';
 
 interface ProductReactionCount {
     likes: number;
@@ -67,6 +68,7 @@ interface DiscoveryState {
     matchAlertVisible: boolean;
     namePromptVisible: boolean;
     activeCategory: string;
+    curtidasMode: CurtidasMode;
     itemPrefs: Record<string, ItemPreference>;
     userName: string;
 
@@ -80,6 +82,7 @@ interface DiscoveryState {
     dismissMatchAlert: () => void;
     dismissNamePrompt: () => void;
     setActiveCategory: (category: string) => void;
+    setCurtidasMode: (mode: CurtidasMode) => void;
     swipeRight: (product: ProdutoVitrine) => void;
     swipeLeft: (product: ProdutoVitrine) => void;
     undoLastSwipe: () => ProdutoVitrine | null;
@@ -173,12 +176,15 @@ export const useDiscoveryStore = create<DiscoveryState>()(
             matchAlertVisible: false,
             namePromptVisible: false,
             activeCategory: 'TODAS AS PEÇAS',
+            curtidasMode: 'lista',
             itemPrefs: {},
             userName: '',
 
             setUserName: (name) => set({ userName: name }),
 
             setActiveCategory: (category) => set({ activeCategory: category }),
+
+            setCurtidasMode: (mode) => set({ curtidasMode: mode }),
 
             /**
              * Busca os produtos reais da API pública.
@@ -422,6 +428,7 @@ export const useDiscoveryStore = create<DiscoveryState>()(
             // devem ser hidratados pela API para evitar dados antigos ou fictícios.
             partialize: (state) => ({
                 activeCategory: state.activeCategory,
+                curtidasMode: state.curtidasMode,
                 userName: state.userName
             }),
             merge: (persistedState, currentState) => {
@@ -432,6 +439,9 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                     activeCategory: typeof persisted?.activeCategory === 'string'
                         ? persisted.activeCategory
                         : currentState.activeCategory,
+                    curtidasMode: persisted?.curtidasMode === 'resgate'
+                        ? 'resgate'
+                        : currentState.curtidasMode,
                     userName: typeof persisted?.userName === 'string'
                         ? persisted.userName
                         : currentState.userName,

@@ -1,6 +1,8 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Missao;
+import com.whiteLabel.backend.domain.MissaoCiclo;
+import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.domain.UsuarioMissao;
 import com.whiteLabel.backend.dto.MissaoResponse;
@@ -21,21 +23,24 @@ public class MissaoProgressService {
     private final MissaoRepository missaoRepository;
     private final UsuarioMissaoRepository usuarioMissaoRepository;
     private final UsuarioService usuarioService;
+    private final MissaoSemanalService missaoSemanalService;
 
     public MissaoProgressService(
             MissaoRepository missaoRepository,
             UsuarioMissaoRepository usuarioMissaoRepository,
-            UsuarioService usuarioService
+            UsuarioService usuarioService,
+            MissaoSemanalService missaoSemanalService
     ) {
         this.missaoRepository = missaoRepository;
         this.usuarioMissaoRepository = usuarioMissaoRepository;
         this.usuarioService = usuarioService;
+        this.missaoSemanalService = missaoSemanalService;
     }
 
     @Transactional
     public List<MissaoResponse> registrarAcao(Usuario usuario, String tipoAcao) {
         List<Missao> missoes = missaoRepository
-                .findAllByAtivaTrueAndTipoAcaoOrderByIdAsc(tipoAcao);
+                .findAllAtivasNormaisPorTipo(tipoAcao, MissaoCiclo.NORMAL);
 
         for (Missao missao : missoes) {
             UsuarioMissao progresso = buscarOuCriar(usuario, missao);
@@ -50,6 +55,10 @@ public class MissaoProgressService {
                 int xpConcedido = missao.getValorBase() * missao.getPeso();
                 progresso.concluir(xpConcedido);
                 usuarioService.adicionarXp(usuario, missao.getValorBase(), missao.getPeso());
+                missaoSemanalService.registrarAcao(
+                        usuario,
+                        MissaoTipoAcao.COMPLETAR_MISSOES.name()
+                );
             }
 
             usuarioMissaoRepository.save(progresso);
@@ -60,7 +69,7 @@ public class MissaoProgressService {
 
     @Transactional(readOnly = true)
     public List<MissaoResponse> listarMissoesAtivas(UUID usuarioId) {
-        List<Missao> missoes = missaoRepository.findAllByAtivaTrueOrderByIdAsc();
+        List<Missao> missoes = missaoRepository.findAllAtivasNormais(MissaoCiclo.NORMAL);
         Map<Long, UsuarioMissao> progressos = buscarProgressos(usuarioId);
 
         return missoes.stream()

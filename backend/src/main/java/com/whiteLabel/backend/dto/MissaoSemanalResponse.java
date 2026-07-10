@@ -2,9 +2,10 @@ package com.whiteLabel.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.whiteLabel.backend.domain.Missao;
-import com.whiteLabel.backend.domain.UsuarioMissao;
+import com.whiteLabel.backend.domain.MissaoTipoAcao;
+import com.whiteLabel.backend.domain.UsuarioMissaoSemanal;
 
-public record MissaoResponse(
+public record MissaoSemanalResponse(
         Long id,
         String titulo,
         String descricao,
@@ -13,40 +14,32 @@ public record MissaoResponse(
         Integer metaProgresso,
         @JsonProperty("tipo_acao")
         String tipoAcao,
-        String ciclo,
-        Integer valorBase,
-        Integer peso,
-        Integer xpRecompensa,
-        Integer tentativasRecompensa,
-        Boolean ativa,
         Integer progresso,
         Boolean concluida,
+        Boolean bloqueada,
         Boolean recompensaResgatada,
-        Integer xpConcedido
+        Integer tentativasRecompensa,
+        Integer xpRecompensa,
+        Boolean ativa
 ) {
 
-    public static MissaoResponse from(Missao missao) {
-        return from(missao, null);
-    }
+    public static MissaoSemanalResponse from(Missao missao, UsuarioMissaoSemanal progresso) {
+        boolean bloqueada = MissaoTipoAcao.BONUS_DIARIO.name().equals(missao.getTipoAcao());
 
-    public static MissaoResponse from(Missao missao, UsuarioMissao progresso) {
-        return new MissaoResponse(
+        return new MissaoSemanalResponse(
                 missao.getId(),
                 missao.getTitulo(),
                 missao.getDescricao(),
                 missao.getIcone(),
                 missao.getMetaProgresso(),
                 missao.getTipoAcao(),
-                missao.getCiclo().name(),
-                missao.getValorBase(),
-                missao.getPeso(),
-                missao.getXpRecompensa(),
-                missao.getTentativasRecompensa(),
-                missao.getAtiva(),
                 progresso == null ? 0 : progresso.getProgressoAtual(),
                 progresso != null && progresso.getConcluida(),
+                bloqueada,
                 progresso != null && progresso.getRecompensaResgatada(),
-                progresso == null ? 0 : progresso.getXpConcedido()
+                missao.getTentativasRecompensa(),
+                missao.getXpRecompensa(),
+                missao.getAtiva()
         );
     }
 }

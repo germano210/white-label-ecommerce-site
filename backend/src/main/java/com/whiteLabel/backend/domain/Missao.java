@@ -2,6 +2,8 @@ package com.whiteLabel.backend.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -19,6 +21,9 @@ public class Missao {
     @Column(nullable = false, length = 120)
     private String titulo;
 
+    @Column(length = 500)
+    private String descricao;
+
     @Column(nullable = false, length = 80)
     private String icone;
 
@@ -28,11 +33,18 @@ public class Missao {
     @Column(name = "tipo_acao", nullable = false, length = 80)
     private String tipoAcao;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private MissaoCiclo ciclo = MissaoCiclo.NORMAL;
+
     @Column(name = "valor_base", nullable = false)
     private Integer valorBase;
 
     @Column(nullable = false)
     private Integer peso = 1;
+
+    @Column(name = "tentativas_recompensa", nullable = false)
+    private Integer tentativasRecompensa = 0;
 
     @Column(nullable = false)
     private Boolean ativa = true;
@@ -68,6 +80,14 @@ public class Missao {
         this.titulo = titulo;
     }
 
+    public String getDescricao() {
+        return descricao;
+    }
+
+    public void setDescricao(String descricao) {
+        this.descricao = descricao;
+    }
+
     public String getIcone() {
         return icone;
     }
@@ -92,6 +112,14 @@ public class Missao {
         this.tipoAcao = tipoAcao;
     }
 
+    public MissaoCiclo getCiclo() {
+        return ciclo == null ? MissaoCiclo.NORMAL : ciclo;
+    }
+
+    public void setCiclo(MissaoCiclo ciclo) {
+        this.ciclo = ciclo == null ? MissaoCiclo.NORMAL : ciclo;
+    }
+
     public Integer getValorBase() {
         return valorBase == null ? 0 : valorBase;
     }
@@ -108,6 +136,18 @@ public class Missao {
         this.peso = peso == null ? 1 : peso;
     }
 
+    public Integer getTentativasRecompensa() {
+        return tentativasRecompensa == null ? 0 : tentativasRecompensa;
+    }
+
+    public void setTentativasRecompensa(Integer tentativasRecompensa) {
+        this.tentativasRecompensa = tentativasRecompensa == null ? 0 : tentativasRecompensa;
+    }
+
+    public Integer getXpRecompensa() {
+        return getValorBase() * getPeso();
+    }
+
     public Boolean getAtiva() {
         return ativa;
     }
@@ -120,6 +160,14 @@ public class Missao {
     void preencherDefaultsGamificacao() {
         if (peso == null) {
             peso = 1;
+        }
+
+        if (ciclo == null) {
+            ciclo = MissaoCiclo.NORMAL;
+        }
+
+        if (tentativasRecompensa == null) {
+            tentativasRecompensa = 0;
         }
     }
 }

@@ -48,6 +48,9 @@ public class Usuario {
     @Column
     private Integer nivel = 1;
 
+    @Column
+    private Integer tentativas = 0;
+
     @Column(name = "data_criacao", nullable = false, updatable = false)
     private LocalDateTime dataCriacao;
 
@@ -131,6 +134,15 @@ public class Usuario {
         this.nivel = nivel == null ? 1 : nivel;
     }
 
+    public Integer getTentativas() {
+        return tentativas == null ? 0 : tentativas;
+    }
+
+    public void adicionarTentativas(Integer quantidade) {
+        int incremento = Math.max(0, quantidade == null ? 0 : quantidade);
+        tentativas = getTentativas() + incremento;
+    }
+
     public LocalDateTime getDataCriacao() {
         return dataCriacao;
     }
@@ -147,6 +159,10 @@ public class Usuario {
 
         if (nivel == null) {
             nivel = 1;
+        }
+
+        if (tentativas == null) {
+            tentativas = 0;
         }
 
         if (dataCriacao == null) {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
+import { normalizeTipoAcaoMissao, type TipoAcaoMissao } from '../utils/missaoTypes';
 
 export type MissaoIcone = 'heart' | 'sparkles' | 'shopping-bag' | 'star';
 
@@ -13,7 +14,8 @@ export interface Missao {
     concluida: boolean;
     recompensaResgatada?: boolean;
     xpConcedido?: number;
-    tipo: string;
+    tipo: TipoAcaoMissao;
+    ativa: boolean;
     icone: MissaoIcone;
     valorBase: number;
     peso: number;
@@ -36,6 +38,7 @@ export interface MissaoApi {
     recompensa_resgatada?: boolean | string | number | null;
     xpConcedido?: number | string | null;
     xp_concedido?: number | string | null;
+    ativa?: boolean | string | number | null;
     tipo?: string;
     tipoAcao?: string;
     tipo_acao?: string;
@@ -112,7 +115,9 @@ function extractMissoes(data: MissaoApiPayload): MissaoApi[] {
 }
 
 function normalizeMissao(missao: MissaoApi, index: number): Missao {
-    const tipo = missao.tipo ?? missao.tipoAcao ?? missao.tipo_acao ?? missao.type ?? 'GERAL';
+    const tipo = normalizeTipoAcaoMissao(
+        missao.tipo ?? missao.tipoAcao ?? missao.tipo_acao ?? missao.type,
+    );
     const meta = parsePositiveInteger(
         missao.meta ?? missao.metaProgresso ?? missao.meta_progresso ?? missao.goal,
         3,
@@ -131,6 +136,9 @@ function normalizeMissao(missao: MissaoApi, index: number): Missao {
         ),
         xpConcedido: parseOptionalNumber(missao.xpConcedido ?? missao.xp_concedido),
         tipo,
+        ativa: missao.ativa === undefined || missao.ativa === null
+            ? true
+            : parseBoolean(missao.ativa),
         icone: normalizeIcon(missao.icone ?? missao.icon),
         valorBase: Math.max(Number(missao.valorBase ?? missao.valor_base ?? 10) || 10, 1),
         peso: Math.max(Number(missao.peso ?? 1) || 1, 1),

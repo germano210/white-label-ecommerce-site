@@ -1,6 +1,7 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Curtida;
+import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.dto.CurtidaResponseDTO;
@@ -69,7 +70,10 @@ public class CurtidaService {
         produtoRepository.save(produto);
 
         List<MissaoResponse> missoes =
-                missaoProgressService.registrarAcao(usuario, "CURTIR_ITEM");
+                missaoProgressService.registrarAcao(
+                        usuario,
+                        MissaoTipoAcao.CURTIR_ITEM.name()
+                );
 
         return CurtidaResponseDTO.from(curtida, missoes);
     }

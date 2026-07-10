@@ -1,8 +1,11 @@
 package com.whiteLabel.backend.controller;
 
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
+import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,8 +34,20 @@ class ApiRouteStandardizationTest {
     @Autowired
     private CurtidaRepository curtidaRepository;
 
+    @Autowired
+    private CompartilhamentoAberturaRepository compartilhamentoAberturaRepository;
+
+    @Autowired
+    private CompartilhamentoItemRepository compartilhamentoItemRepository;
+
+    @Autowired
+    private UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository;
+
     @BeforeEach
     void setUp() {
+        compartilhamentoAberturaRepository.deleteAll();
+        compartilhamentoItemRepository.deleteAll();
+        usuarioMissaoSemanalRepository.deleteAll();
         curtidaRepository.deleteAll();
         produtoRepository.deleteAll();
     }

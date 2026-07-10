@@ -8,16 +8,19 @@ import {
     useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type CSSProperties,
     type FormEvent,
     type MouseEventHandler,
+    type Ref,
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     CheckCircle2,
     Heart,
     Menu,
+    Share2,
     ShoppingBag,
     Sparkles,
     Star,
@@ -27,20 +30,30 @@ import {
 import { SwipeCard } from '../components/domain/SwipeCard';
 import { type ProdutoVitrine } from '../store/useCartStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { useDiscoveryStore } from '../store/useDiscoveryStore';
+import { type CurtidasMode, useDiscoveryStore } from '../store/useDiscoveryStore';
 import { type Missao, type MissaoApiPayload, useMissaoStore } from '../store/useMissaoStore';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 
 interface DiscoveryScreenProps {
     onLogoDoubleClick?: MouseEventHandler<HTMLButtonElement>;
+    onNavigateToCurtidas?: (mode?: CurtidasMode) => void;
 }
 
 interface CurtidaResponse {
     missoes?: MissaoApiPayload;
 }
 
-export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
+interface CompartilhamentoResponse {
+    codigo?: string;
+    code?: string;
+    shareCode?: string;
+}
+
+export function DiscoveryScreen({
+    onLogoDoubleClick,
+    onNavigateToCurtidas,
+}: DiscoveryScreenProps) {
     const products = useDiscoveryStore((state) => state.products);
     const isLoading = useDiscoveryStore((state) => state.isLoading);
     const error = useDiscoveryStore((state) => state.error);
@@ -85,6 +98,7 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
     const currentStack = useMemo(() => {
         return displayProducts.slice(0, 2);
     }, [displayProducts]);
+    const currentTopProduct = currentStack[0] ?? null;
 
     const handleSwipe = useCallback((
         product: ProdutoVitrine,
@@ -121,6 +135,35 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
 
         restoreProductToStack(restoredProduct);
     }, [restoreProductToStack, undoLastSwipe]);
+
+    const handleShareCurrentProduct = useCallback(async () => {
+        if (!currentTopProduct) return;
+
+        const { data } = await api.post<CompartilhamentoResponse>(
+            apiRoutes.compartilhamentos.create(currentTopProduct.id),
+        );
+        const codigo = data.codigo ?? data.code ?? data.shareCode;
+
+        if (!codigo) {
+            throw new Error('Resposta de compartilhamento sem código.');
+        }
+
+        const shareUrl = new URL(window.location.href);
+        shareUrl.searchParams.set('share', codigo);
+
+        const shareData = {
+            title: currentTopProduct.name,
+            text: `${currentTopProduct.name} - ${currentTopProduct.priceNew}`,
+            url: shareUrl.toString(),
+        };
+
+        if (navigator.share) {
+            await navigator.share(shareData);
+            return;
+        }
+
+        await copyShareTextToClipboard(`${shareData.text}\n${shareData.url}`);
+    }, [currentTopProduct]);
 
     const handleSaveProfileName = useCallback(async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -233,7 +276,11 @@ export function DiscoveryScreen({ onLogoDoubleClick }: DiscoveryScreenProps) {
                 })}
             </section>
 
-            <MissionsRail />
+            <MissionsRail
+                currentProduct={currentTopProduct}
+                onNavigateToCurtidas={onNavigateToCurtidas}
+                onShareCurrentProduct={handleShareCurrentProduct}
+            />
         </main>
     );
 }
@@ -265,100 +312,279 @@ function DiscoveryHeader({ onLogoDoubleClick }: DiscoveryHeaderProps) {
 }
 
 /**
- * O rail de missões usa overflow-x auto com cards flexíveis e largura fixa.
- * Assim o rodapé permanece preso à thumb zone, enquanto o usuário desliza
- * horizontalmente entre missões sem reduzir a área vertical do card principal.
+ * O rail preserva a ordem oficial do backend e posiciona o scroll na primeira
+ * missão ainda não concluída, deixando as anteriores acessíveis ao voltar.
  */
-function MissionsRail() {
+interface MissionsRailProps {
+    currentProduct: ProdutoVitrine | null;
+    onNavigateToCurtidas?: (mode?: CurtidasMode) => void;
+    onShareCurrentProduct: () => Promise<void>;
+}
+
+function MissionsRail({
+    currentProduct,
+    onNavigateToCurtidas,
+    onShareCurrentProduct,
+}: MissionsRailProps) {
     const missoes = useMissaoStore((state) => state.missoes);
     const fetchMissoes = useMissaoStore((state) => state.fetchMissoes);
+    const currentMissionCardRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         void fetchMissoes();
     }, [fetchMissoes]);
 
+    const currentMissionId = useMemo(() => {
+        return missoes.find((missao) => !missao.concluida)?.id ?? missoes[0]?.id ?? null;
+    }, [missoes]);
+
+    useEffect(() => {
+        if (!currentMissionId) return;
+
+        const animationFrame = window.requestAnimationFrame(() => {
+            currentMissionCardRef.current?.scrollIntoView({
+                block: 'nearest',
+                inline: 'start',
+            });
+        });
+
+        return () => window.cancelAnimationFrame(animationFrame);
+    }, [currentMissionId]);
+
     return (
         <footer style={missionsFooterStyle} aria-label="Minhas Missões">
             <div style={missionsTrackStyle}>
-                {missoes.map((missao, index) => (
-                    <MissionCard
-                        key={missao.id}
-                        missao={missao}
-                        index={index}
-                    />
-                ))}
+                {missoes.map((missao, index) => {
+                    const isCurrent = missao.id === currentMissionId;
+
+                    return (
+                        <MissionCard
+                            key={missao.id}
+                            cardRef={isCurrent ? currentMissionCardRef : undefined}
+                            missao={missao}
+                            displayIndex={index + 1}
+                            isCurrent={isCurrent}
+                            isCompleted={missao.concluida}
+                            hasShareProduct={Boolean(currentProduct)}
+                            onNavigateToCurtidas={onNavigateToCurtidas}
+                            onShareCurrentProduct={onShareCurrentProduct}
+                        />
+                    );
+                })}
             </div>
         </footer>
     );
 }
 
 interface MissionCardProps {
+    cardRef?: Ref<HTMLElement>;
     missao: Missao;
-    index: number;
+    displayIndex: number;
+    isCurrent: boolean;
+    isCompleted: boolean;
+    hasShareProduct: boolean;
+    onNavigateToCurtidas?: (mode?: CurtidasMode) => void;
+    onShareCurrentProduct: () => Promise<void>;
 }
 
-function MissionCard({ missao, index }: MissionCardProps) {
+function MissionCard({
+    cardRef,
+    missao,
+    displayIndex,
+    isCurrent,
+    isCompleted,
+    hasShareProduct,
+    onNavigateToCurtidas,
+    onShareCurrentProduct,
+}: MissionCardProps) {
     const Icon = missionIconMap[missao.icone] ?? Heart;
     const progress = Math.min(missao.progresso, missao.meta);
     const isCompact = missao.meta > 3;
     const filledColor = missao.icone === 'heart' ? '#ff5757' : '#687152';
+    const title = isCurrent ? 'MISSÃO ATUAL' : missao.titulo;
+    const isMuted = !isCurrent;
+    const missionAction = isCurrent ? getMissionAction({
+        missao,
+        hasShareProduct,
+        onNavigateToCurtidas,
+        onShareCurrentProduct,
+    }) : null;
 
     return (
         <article
+            ref={cardRef}
             style={{
                 ...missionCardStyle,
-                opacity: index === 0 ? 1 : 0.38,
-                border: missao.concluida ? '1px solid rgba(104, 113, 82, 0.34)' : '1px solid transparent',
+                ...(isCurrent ? missionCardCurrentStyle : missionCardMutedStyle),
             }}
         >
             <div style={missionTextStyle}>
                 <div style={missionTitleRowStyle}>
                     <span style={{
                         ...missionBadgeStyle,
-                        background: missao.concluida ? '#687152' : '#2f3328',
+                        background: isCurrent ? '#2f3328' : '#c9c9c9',
                     }}>
-                        {index + 1}
+                        {displayIndex}
                     </span>
-                    <strong style={missionTitleStyle}>{missao.titulo}</strong>
-                    {missao.concluida && (
-                        <CheckCircle2 size={12} color="#687152" fill="#687152" strokeWidth={0} />
+                    <strong
+                        style={{
+                            ...missionTitleStyle,
+                            color: isCurrent ? '#5f635a' : '#a2a2a2',
+                        }}
+                    >
+                        {title}
+                    </strong>
+                    {isCompleted && (
+                        <CheckCircle2 size={12} color="#a9a9a9" fill="#a9a9a9" strokeWidth={0} />
                     )}
                 </div>
-                <p style={missionDescriptionStyle}>{missao.descricao}</p>
+                <p
+                    style={{
+                        ...missionDescriptionStyle,
+                        color: isCurrent ? '#8b8d85' : '#b1b1b1',
+                    }}
+                >
+                    {missao.descricao}
+                </p>
             </div>
 
-            <div
-                style={{
-                    ...missionLevelsStyle,
-                    ...(isCompact ? missionLevelsCompactStyle : null),
-                }}
-                aria-label={`${progress} de ${missao.meta} níveis`}
-            >
-                {isCompact && (
-                    <span style={missionProgressCounterStyle}>
-                        {progress}/{missao.meta}
-                    </span>
-                )}
-                <div style={isCompact ? missionIconsScrollStyle : missionIconsInlineStyle}>
-                    {Array.from({ length: missao.meta }, (_, levelIndex) => {
-                        const isFilled = levelIndex < progress;
+            <div style={missionControlStyle}>
+                <div
+                    style={{
+                        ...missionLevelsStyle,
+                        ...(isCompact ? missionLevelsCompactStyle : null),
+                        opacity: isMuted ? 0.5 : 1,
+                    }}
+                    aria-label={`${progress} de ${missao.meta} níveis`}
+                >
+                    {isCompact && (
+                        <span
+                            style={{
+                                ...missionProgressCounterStyle,
+                                color: isCurrent ? '#687152' : '#a8a8a8',
+                            }}
+                        >
+                            {progress}/{missao.meta}
+                        </span>
+                    )}
+                    <div style={isCompact ? missionIconsScrollStyle : missionIconsInlineStyle}>
+                        {Array.from({ length: missao.meta }, (_, levelIndex) => {
+                            const isFilled = levelIndex < progress;
 
-                        return (
-                            <Icon
-                                key={levelIndex}
-                                size={15}
-                                strokeWidth={1.7}
-                                color={isFilled ? filledColor : '#2f3328'}
-                                fill={isFilled ? filledColor : 'none'}
-                                style={missionIconStyle}
-                                aria-hidden="true"
-                            />
-                        );
-                    })}
+                            return (
+                                <Icon
+                                    key={levelIndex}
+                                    size={15}
+                                    strokeWidth={1.7}
+                                    color={isFilled ? filledColor : '#2f3328'}
+                                    fill={isFilled ? filledColor : 'none'}
+                                    style={missionIconStyle}
+                                    aria-hidden="true"
+                                />
+                            );
+                        })}
+                    </div>
                 </div>
+                {missionAction && (
+                    <button
+                        type="button"
+                        disabled={missionAction.disabled}
+                        onClick={missionAction.onClick}
+                        style={{
+                            ...missionActionButtonStyle,
+                            opacity: missionAction.disabled ? 0.45 : 1,
+                            cursor: missionAction.disabled ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        {missionAction.icon}
+                        {missionAction.label}
+                    </button>
+                )}
             </div>
         </article>
     );
+}
+
+interface MissionActionParams {
+    missao: Missao;
+    hasShareProduct: boolean;
+    onNavigateToCurtidas?: (mode?: CurtidasMode) => void;
+    onShareCurrentProduct: () => Promise<void>;
+}
+
+interface MissionAction {
+    label: string;
+    onClick: () => void;
+    disabled: boolean;
+    icon?: React.ReactNode;
+}
+
+function getMissionAction({
+    missao,
+    hasShareProduct,
+    onNavigateToCurtidas,
+    onShareCurrentProduct,
+}: MissionActionParams): MissionAction | null {
+    if (missao.tipo === 'CURTIR_ITEM' && missao.concluida) {
+        return {
+            label: 'Acessar curtidas',
+            onClick: () => onNavigateToCurtidas?.('lista'),
+            disabled: !onNavigateToCurtidas,
+        };
+    }
+
+    if (!missao.ativa) return null;
+
+    if (missao.tipo === 'COMPARTILHAR_ITEM' && !missao.concluida) {
+        return {
+            label: 'Compartilhar',
+            icon: <Share2 size={10} />,
+            onClick: () => {
+                void onShareCurrentProduct().catch(() => undefined);
+            },
+            disabled: !hasShareProduct,
+        };
+    }
+
+    if (missao.tipo === 'COMPRAR_ITEM') {
+        return {
+            label: 'Ir para curtidas',
+            onClick: () => onNavigateToCurtidas?.('lista'),
+            disabled: !onNavigateToCurtidas,
+        };
+    }
+
+    if (missao.tipo === 'USAR_TENTATIVA') {
+        return {
+            label: 'Usar tentativa',
+            onClick: () => onNavigateToCurtidas?.('resgate'),
+            disabled: !onNavigateToCurtidas,
+        };
+    }
+
+    return null;
+}
+
+async function copyShareTextToClipboard(text: string) {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+        document.execCommand('copy');
+    } finally {
+        document.body.removeChild(textarea);
+    }
 }
 
 interface NamePromptModalProps {
@@ -583,18 +809,28 @@ const missionsTrackStyle: CSSProperties = {
 
 const missionCardStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '1fr auto',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
     alignItems: 'center',
     gap: '8px',
-    width: 'min(220px, calc(100vw - 14px))',
-    minWidth: '220px',
-    minHeight: '45px',
+    width: 'min(222px, calc(100vw - 14px))',
+    minWidth: '222px',
+    minHeight: '44px',
     flex: '0 0 auto',
     borderRadius: '10px',
-    background: '#ffffff',
-    boxShadow: '0 7px 18px rgba(25, 21, 16, 0.10)',
-    padding: '9px 12px',
+    background: '#f3f3f3',
+    border: 0,
+    boxShadow: '0 6px 16px rgba(25, 21, 16, 0.06)',
+    padding: '8px 11px',
     scrollSnapAlign: 'start',
+};
+
+const missionCardCurrentStyle: CSSProperties = {
+    opacity: 1,
+};
+
+const missionCardMutedStyle: CSSProperties = {
+    opacity: 0.42,
+    boxShadow: 'none',
 };
 
 const missionTextStyle: CSSProperties = {
@@ -609,8 +845,8 @@ const missionTitleRowStyle: CSSProperties = {
 
 const missionBadgeStyle: CSSProperties = {
     display: 'grid',
-    width: '13px',
-    height: '13px',
+    width: '14px',
+    height: '14px',
     placeItems: 'center',
     borderRadius: '999px',
     background: '#2f3328',
@@ -640,6 +876,15 @@ const missionDescriptionStyle: CSSProperties = {
     lineHeight: 1.1,
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+};
+
+const missionControlStyle: CSSProperties = {
+    display: 'flex',
+    maxWidth: '98px',
+    minWidth: 0,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '5px',
 };
 
 const missionLevelsStyle: CSSProperties = {
@@ -685,6 +930,26 @@ const missionIconsScrollStyle: CSSProperties = {
 
 const missionIconStyle: CSSProperties = {
     flex: '0 0 auto',
+};
+
+const missionActionButtonStyle: CSSProperties = {
+    display: 'inline-flex',
+    maxWidth: '96px',
+    minHeight: '20px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '3px',
+    overflow: 'hidden',
+    border: 0,
+    borderRadius: '999px',
+    background: '#687152',
+    color: '#ffffff',
+    padding: '4px 7px',
+    fontSize: '8px',
+    fontWeight: 900,
+    lineHeight: 1,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
 };
 
 const modalOverlayStyle: CSSProperties = {
