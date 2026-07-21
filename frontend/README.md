@@ -1,73 +1,58 @@
-# React + TypeScript + Vite
+# Brecho da Cami Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend Vite/React da vitrine gamificada mobile-first.
 
-Currently, two official plugins are available:
+## Rotas
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `/` redireciona para `/foryou`
+- `/foryou` abre a vitrine de swipe
+- `/explorar` abre a tela Explorar
+- `/curtidas/curtidas` abre curtidas em modo lista
+- `/curtidas/resgate` abre curtidas em modo resgate
+- `/perfil` abre o perfil do usuario
+- `/indique` abre Indique e Ganhe
+- `/rota-secreta-admin` abre o admin, ou o valor definido em `VITE_ADMIN_ROUTE`
 
-## React Compiler
+Rotas desconhecidas voltam para `/foryou` e nunca abrem o admin.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Ambiente
 
-## Expanding the ESLint configuration
+Use apenas URLs publicas em variaveis `VITE_*`, porque elas entram no bundle do navegador.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+VITE_API_BASE_URL=http://localhost:8080
+VITE_AUTH_MODE=jwt
+VITE_ADMIN_ROUTE=/rota-secreta-admin
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Em producao com API separada, use:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```env
+VITE_API_BASE_URL=https://api.brechodacami.com
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Em producao no mesmo dominio do frontend, deixe `VITE_API_BASE_URL` vazio e mantenha as chamadas em `/api/**`.
+
+## Sessao
+
+`VITE_AUTH_MODE=jwt` mantem compatibilidade temporaria com `Authorization: Bearer <token>`. Esse modo persiste o JWT via Zustand/localStorage e tem maior risco em caso de XSS.
+
+`VITE_AUTH_MODE=cookie` usa `withCredentials: true`, nao injeta JWT no header e restaura a sessao por `GET /api/auth/me`. O backend precisa emitir cookie HttpOnly, Secure e SameSite adequado ao dominio.
+
+O admin usa store/token separado do usuario comum.
+
+## Checkout
+
+O frontend nao confirma pagamento. Ele cria um checkout/pedido pendente no backend, redireciona para a URL do gateway e a tela `/checkout/sucesso` consulta o backend para obter o status real do pedido.
+
+Nao guarde dados de cartao, secrets ou dados sensiveis de pagamento em `localStorage`, `sessionStorage` ou variaveis `VITE_*`.
+
+## Deploy SPA
+
+O arquivo `public/_redirects` configura fallback para `index.html` em hosts compativeis, permitindo F5 em rotas como `/perfil`, `/foryou` e `/curtidas/resgate`. Em hosts que nao leem `_redirects`, configure regra equivalente de rewrite para `index.html`.
+
+## Validacao
+
+```bash
+npm run build
 ```

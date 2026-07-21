@@ -16,6 +16,11 @@ export const apiRoutes = {
         verifyOtp: '/api/auth/verify-otp',
         adminLogin: '/api/auth/admin/login',
         updateName: '/api/auth/atualizar-nome',
+        me: '/api/auth/me',
+    },
+    checkout: {
+        create: '/api/checkout',
+        status: (pedidoId: RouteId) => `/api/checkout/${routeId(pedidoId)}/status`,
     },
     curtidas: {
         list: '/api/curtidas',

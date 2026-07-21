@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { useDiscoveryStore } from '../../store/useDiscoveryStore';
-import { api } from '../../utils/api';
+import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
 import './LoginModal.css';
@@ -32,6 +32,11 @@ interface VerifyOtpResponse {
 interface RequestOtpResponse {
     status?: string;
     message?: string;
+}
+
+interface AuthMeResponse {
+    usuario?: VerifyOtpResponse['usuario'];
+    user?: VerifyOtpResponse['user'];
 }
 
 function onlyDigits(value: string) {
@@ -186,13 +191,18 @@ export function LoginModal() {
                 telefone: phoneDigits,
                 codigo: otp,
             });
-            const token = data.token ?? data.accessToken;
+            const token = data.token ?? data.accessToken ?? null;
 
-            if (!token) {
+            if (!token && !isCookieAuthMode) {
                 throw new Error('A resposta de autenticação não contém token.');
             }
 
-            const apiUser = data.usuario ?? data.user;
+            let apiUser = data.usuario ?? data.user;
+            if (!apiUser && isCookieAuthMode) {
+                const { data: meData } = await api.get<AuthMeResponse>(apiRoutes.auth.me);
+                apiUser = meData.usuario ?? meData.user;
+            }
+
             const userName = apiUser?.nome ?? apiUser?.name ?? '';
             const userPhone = apiUser?.telefone ?? apiUser?.phone ?? phoneDigits;
             const user: AuthUser = {

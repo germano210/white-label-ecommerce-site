@@ -1,10 +1,20 @@
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Trash2, Check, Send, User } from 'lucide-react';
 import { getImageUrl } from '../utils/imageUtils';
+import { api } from '../utils/api';
+import { apiRoutes } from '../utils/apiRoutes';
+import { appRoutes } from '../utils/appRoutes';
 
 interface CurtidasScreenProps {
     onBack?: () => void;
+}
+
+interface CreateCheckoutResponse {
+    checkoutUrl?: string;
+    gatewayUrl?: string;
+    url?: string;
+    pedidoId?: string | number;
 }
 
 export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
@@ -21,10 +31,14 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
         userName,
         setUserName,
     } = useDiscoveryStore();
+    const [checkoutError, setCheckoutError] = useState('');
+    const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
 
     useEffect(() => {
         void fetchCurtidas();
     }, [fetchCurtidas]);
+
+    const selectedItems = likedItems.filter(item => itemPrefs[item.id]?.isSelected);
 
     // Calcula o total somando apenas as peças que estão com a checkbox marcada
     const total = likedItems.reduce((acc, item) => {
@@ -36,25 +50,37 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
         return acc;
     }, 0);
 
-    const handleWhatsApp = () => {
-        const selectedItems = likedItems.filter(item => itemPrefs[item.id]?.isSelected);
+    const handleCheckout = async () => {
         if (selectedItems.length === 0 || !userName.trim()) return;
 
-        let text = `Olá Via Brás! Sou a *${userName}* e separei estas peças no site para saber a disponibilidade:\n\n`;
+        setCheckoutError('');
+        setIsCreatingCheckout(true);
 
-        selectedItems.forEach(item => {
-            const pref = itemPrefs[item.id];
-            text += `🛍️ *${item.name}*\n`;
-            text += `Tamanho: ${pref.size}\n`;
-            text += `Detalhes: ${item.sub.split('·').slice(0, 2).join('·')}\n`;
-            text += `Valor: ${item.priceNew}\n\n`;
-        });
+        try {
+            const successUrl = new URL(appRoutes.checkoutSuccess, window.location.origin);
+            const cancelUrl = new URL(window.location.href);
+            const { data } = await api.post<CreateCheckoutResponse>(apiRoutes.checkout.create, {
+                clienteNome: userName.trim(),
+                itens: selectedItems.map((item) => ({
+                    produtoId: item.id,
+                    tamanho: itemPrefs[item.id]?.size ?? item.tamanho,
+                    quantidade: 1,
+                })),
+                successUrl: successUrl.toString(),
+                cancelUrl: cancelUrl.toString(),
+            });
+            const checkoutUrl = data.checkoutUrl ?? data.gatewayUrl ?? data.url;
 
-        text += `*Total estimado: R$ ${total.toFixed(2).replace('.', ',')}*\n\nAguardo o retorno!`;
+            if (!checkoutUrl) {
+                throw new Error('Checkout sem URL de redirecionamento.');
+            }
 
-        const encoded = encodeURIComponent(text);
-        // Substitua este número pelo WhatsApp real da loja (ex: 5511999999999)
-        window.open(`https://wa.me/5551999999999?text=${encoded}`, '_blank');
+            window.location.assign(checkoutUrl);
+        } catch {
+            setCheckoutError('Não foi possível criar o checkout agora. Tente novamente.');
+        } finally {
+            setIsCreatingCheckout(false);
+        }
     };
 
     if (isCurtidasLoading) {
@@ -134,6 +160,11 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                     <span style={{ fontSize: '10px', color: 'var(--terra)', marginLeft: '12px', fontWeight: 600 }}>
                         * Precisamos do seu nome para enviar o pedido
                     </span>
+                )}
+                {checkoutError && (
+                    <div role="alert" style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '12px', color: '#A63D2F', background: '#FFF0ED', fontSize: '12px', fontWeight: 700 }}>
+                        {checkoutError}
+                    </div>
                 )}
             </div>
 
@@ -223,19 +254,19 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                 </div>
 
                 <button
-                    onClick={handleWhatsApp}
-                    disabled={total === 0 || !userName.trim()}
+                    onClick={() => void handleCheckout()}
+                    disabled={total === 0 || !userName.trim() || isCreatingCheckout}
                     style={{
-                        background: (total > 0 && userName.trim()) ? 'var(--terra)' : '#DDDDDD',
+                        background: (total > 0 && userName.trim() && !isCreatingCheckout) ? 'var(--terra)' : '#DDDDDD',
                         color: 'white', border: 'none', padding: '14px 24px',
                         borderRadius: '16px', fontSize: '14px', fontWeight: 700,
                         display: 'flex', alignItems: 'center', gap: '8px',
-                        cursor: (total > 0 && userName.trim()) ? 'pointer' : 'not-allowed',
-                        boxShadow: (total > 0 && userName.trim()) ? '0 8px 20px rgba(230, 57, 143, 0.3)' : 'none',
+                        cursor: (total > 0 && userName.trim() && !isCreatingCheckout) ? 'pointer' : 'not-allowed',
+                        boxShadow: (total > 0 && userName.trim() && !isCreatingCheckout) ? '0 8px 20px rgba(230, 57, 143, 0.3)' : 'none',
                         transition: 'all 0.3s ease'
                     }}
                 >
-                    Separar Peças <Send size={16} style={{ transform: 'rotate(-20deg) translateX(2px)' }} />
+                    {isCreatingCheckout ? 'Criando...' : 'Pagar'} <Send size={16} style={{ transform: 'rotate(-20deg) translateX(2px)' }} />
                 </button>
             </div>
         </div>

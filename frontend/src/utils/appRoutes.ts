@@ -1,4 +1,4 @@
-const defaultAdminRoute = '/cami-admin-9x7k2';
+const defaultAdminRoute = '/rota-secreta-admin';
 
 function normalizeRoute(route: string | undefined) {
     if (!route) return defaultAdminRoute;
@@ -17,6 +17,6 @@ export const appRoutes = {
     resgate: '/curtidas/resgate',
     perfil: '/perfil',
     indique: '/indique',
+    checkoutSuccess: '/checkout/sucesso',
     admin: normalizeRoute(import.meta.env.VITE_ADMIN_ROUTE),
 } as const;
-

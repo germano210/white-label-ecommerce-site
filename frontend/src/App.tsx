@@ -13,17 +13,44 @@ import { CurtidasScreen } from './pages/CurtidasScreen';
 import { ExplorarScreen } from './pages/ExplorarScreen';
 import { PerfilScreen } from './pages/PerfilScreen';
 import { IndiqueScreen } from './pages/IndiqueScreen';
+import { CheckoutSuccessScreen } from './pages/CheckoutSuccessScreen';
 import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
 import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
 import { type CurtidasMode, useDiscoveryStore } from './store/useDiscoveryStore';
 import { useMissaoStore } from './store/useMissaoStore';
 import { useAdminStore } from './store/useAdminStore';
-import { useAuthStore } from './store/useAuthStore';
-import { api } from './utils/api';
+import { type AuthUser, useAuthStore } from './store/useAuthStore';
+import { api, isCookieAuthMode } from './utils/api';
 import { apiRoutes } from './utils/apiRoutes';
 import { appRoutes } from './utils/appRoutes';
 
 const pendingShareStorageKey = 'viabras-pending-share-code';
+
+interface AuthMeResponse {
+    usuario?: Partial<AuthUser> | null;
+    user?: Partial<AuthUser> | null;
+}
+
+function normalizeAuthUser(apiUser: Partial<AuthUser>): AuthUser {
+    const name = typeof apiUser.nome === 'string'
+        ? apiUser.nome
+        : typeof apiUser.name === 'string'
+            ? apiUser.name
+            : '';
+    const phone = typeof apiUser.telefone === 'string'
+        ? apiUser.telefone
+        : typeof apiUser.phone === 'string'
+            ? apiUser.phone
+            : '';
+
+    return {
+        ...apiUser,
+        name,
+        nome: name,
+        phone,
+        telefone: phone,
+    };
+}
 
 export default function App() {
     return (
@@ -42,7 +69,11 @@ function AppRoutes() {
     const token = useAuthStore((state) => state.token);
     const user = useAuthStore((state) => state.user);
     const hasHydrated = useAuthStore((state) => state.hasHydrated);
+    const setSession = useAuthStore((state) => state.setSession);
+    const logout = useAuthStore((state) => state.logout);
     const [pendingShareCode, setPendingShareCode] = useState<string | null>(null);
+    const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
+    const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -67,7 +98,38 @@ function AppRoutes() {
     }, [fetchMissoes]);
 
     useEffect(() => {
-        if (!hasHydrated || !pendingShareCode || !token || !user) return;
+        if (!isCookieAuthMode || !hasHydrated) return;
+
+        let isActive = true;
+
+        const restoreCookieSession = async () => {
+            setIsRestoringCookieSession(true);
+
+            try {
+                const { data } = await api.get<AuthMeResponse>(apiRoutes.auth.me);
+                const apiUser = data.usuario ?? data.user;
+
+                if (apiUser && isActive) {
+                    setSession(null, normalizeAuthUser(apiUser));
+                } else if (isActive) {
+                    logout();
+                }
+            } catch {
+                if (isActive) logout();
+            } finally {
+                if (isActive) setIsRestoringCookieSession(false);
+            }
+        };
+
+        void restoreCookieSession();
+
+        return () => {
+            isActive = false;
+        };
+    }, [hasHydrated, logout, setSession]);
+
+    useEffect(() => {
+        if (!hasHydrated || !pendingShareCode || !isAuthenticated || !user) return;
 
         let isActive = true;
 
@@ -101,15 +163,15 @@ function AppRoutes() {
     }, [
         fetchMissoes,
         hasHydrated,
+        isAuthenticated,
         location.pathname,
         location.search,
         navigate,
         pendingShareCode,
-        token,
         user,
     ]);
 
-    if (!hasHydrated) {
+    if (!hasHydrated || isRestoringCookieSession) {
         return (
             <div
                 style={{ minHeight: '100dvh', background: '#FAF7F2' }}
@@ -119,7 +181,6 @@ function AppRoutes() {
     }
 
     const isAdminRoute = location.pathname === appRoutes.admin;
-    const isAuthenticated = Boolean(token && user);
 
     const navigateToCurtidas = (mode: CurtidasMode = 'lista') => {
         setCurtidasMode(mode);
@@ -157,6 +218,7 @@ function AppRoutes() {
                 />
                 <Route path={appRoutes.perfil} element={<PerfilScreen />} />
                 <Route path={appRoutes.indique} element={<IndiqueScreen />} />
+                <Route path={appRoutes.checkoutSuccess} element={<CheckoutSuccessScreen />} />
                 <Route
                     path={appRoutes.admin}
                     element={adminUser ? <AdminDashboardScreen /> : <AdminLoginScreen />}

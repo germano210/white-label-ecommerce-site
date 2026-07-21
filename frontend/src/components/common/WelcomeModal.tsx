@@ -11,7 +11,7 @@ import {
     UserRound,
 } from 'lucide-react';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
-import { api } from '../../utils/api';
+import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import './WelcomeModal.css';
 
@@ -20,12 +20,23 @@ type Step = 1 | 2 | 3 | 4;
 interface VerifyOtpResponse {
     token?: string;
     accessToken?: string;
+    usuario?: {
+        name?: string;
+        nome?: string;
+        phone?: string;
+        telefone?: string;
+    };
     user?: {
         name?: string;
         nome?: string;
         phone?: string;
         telefone?: string;
     };
+}
+
+interface AuthMeResponse {
+    usuario?: VerifyOtpResponse['usuario'];
+    user?: VerifyOtpResponse['user'];
 }
 
 const stepMotion = {
@@ -136,16 +147,24 @@ export function WelcomeModal() {
             };
 
             const { data } = await api.post<VerifyOtpResponse>(apiRoutes.auth.verifyOtp, payload);
-            const token = data.token ?? data.accessToken;
+            const token = data.token ?? data.accessToken ?? null;
 
-            if (!token) {
+            if (!token && !isCookieAuthMode) {
                 throw new Error('A resposta de autenticação não contém um token.');
             }
 
+            let apiUser = data.usuario ?? data.user;
+            if (!apiUser && isCookieAuthMode) {
+                const { data: meData } = await api.get<AuthMeResponse>(apiRoutes.auth.me);
+                apiUser = meData.usuario ?? meData.user;
+            }
+
             const user: AuthUser = {
-                ...(data.user ?? {}),
-                name: data.user?.name ?? data.user?.nome ?? name,
-                phone: data.user?.phone ?? data.user?.telefone ?? phoneDigits,
+                ...(apiUser ?? {}),
+                name: apiUser?.name ?? apiUser?.nome ?? name,
+                nome: apiUser?.nome ?? apiUser?.name ?? name,
+                phone: apiUser?.phone ?? apiUser?.telefone ?? phoneDigits,
+                telefone: apiUser?.telefone ?? apiUser?.phone ?? phoneDigits,
             };
 
             setSession(token, user);

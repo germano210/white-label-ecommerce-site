@@ -2,15 +2,33 @@ import axios from 'axios';
 import { useAdminStore } from '../store/useAdminStore';
 import { useAuthStore } from '../store/useAuthStore';
 
-const apiBaseUrl = (
-    import.meta.env.VITE_API_BASE_URL
-    ?? import.meta.env.VITE_API_URL
-    ?? 'http://192.168.1.254:8080'
-).replace(/\/$/, '');
+export const authMode = import.meta.env.VITE_AUTH_MODE === 'cookie' ? 'cookie' : 'jwt';
+export const isCookieAuthMode = authMode === 'cookie';
+
+function normalizeApiBaseUrl(url: string | undefined) {
+    const normalizedUrl = url?.trim().replace(/\/$/, '') ?? '';
+
+    if (!normalizedUrl || normalizedUrl === '/' || normalizedUrl === '/api') {
+        return '';
+    }
+
+    return normalizedUrl;
+}
+
+function resolveApiBaseUrl() {
+    const envBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+
+    if (envBaseUrl) return envBaseUrl;
+
+    return import.meta.env.DEV ? 'http://localhost:8080' : '';
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 
 export const api = axios.create({
     baseURL: apiBaseUrl,
     timeout: 15_000,
+    withCredentials: isCookieAuthMode,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -109,13 +127,18 @@ function getRequestToken(url?: string) {
 /**
  * Injeta o Bearer Token no momento exato da requisição.
  *
- * O interceptor lê os estados atuais do Zustand e, como fallback, consulta
- * localStorage/sessionStorage para cobrir recarregamentos de página ou fluxos
- * externos de autenticação. Rotas administrativas (`/api/admin/**`) priorizam
- * o token do painel admin; as demais priorizam o token do cliente. Quando um
- * token válido é encontrado, ele é anexado como `Authorization: Bearer <token>`.
+ * Modo atual `jwt`: mantém compatibilidade temporária com o token salvo pelo
+ * Zustand e anexa `Authorization: Bearer <token>`. Esse modelo funciona, mas
+ * expõe o JWT ao JavaScript e deve ser trocado por cookie HttpOnly antes de
+ * lidar com operações sensíveis em produção.
+ *
+ * Modo futuro `cookie` (`VITE_AUTH_MODE=cookie`): o Axios envia cookies com
+ * `withCredentials`, não lê tokens de localStorage/sessionStorage e não injeta
+ * Authorization. Nesse modo, a sessão deve ser restaurada por `GET /api/auth/me`.
  */
 api.interceptors.request.use((config) => {
+    if (isCookieAuthMode) return config;
+
     const token = getRequestToken(config.url);
 
     if (token) {
