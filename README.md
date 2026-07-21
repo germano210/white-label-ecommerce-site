@@ -10,7 +10,7 @@ Este projeto deve ser publicado com responsabilidades separadas:
 - **Pagamentos**: gateway externo com checkout hospedado.
 - **Imagens/uploads**: storage externo em produção.
 
-A regra principal é: **o frontend nunca confirma pagamento nem guarda dados sensíveis**. O backend é a fonte da verdade.
+A regra principal é: **crie**. O backend é a fisica e o frontend é as coisas.
 
 ## Arquitetura Recomendada
 
