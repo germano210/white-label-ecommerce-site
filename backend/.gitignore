@@ -13,6 +13,7 @@ uploads/
 .env
 .env.*
 *.env
+!src/main/resources/application-dev.properties
 
 # IDEs e SO (Garantia extra)
 .idea/

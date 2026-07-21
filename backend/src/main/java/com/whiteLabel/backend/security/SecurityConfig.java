@@ -1,6 +1,7 @@
 package com.whiteLabel.backend.security;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,11 +14,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Configura a seguranca stateless da API e separa rotas administrativas por autoridade
@@ -26,6 +30,17 @@ import java.util.List;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    private final List<String> allowedOrigins;
+    private final boolean requireHttps;
+
+    public SecurityConfig(
+            @Value("${app.cors.allowed-origins}") String allowedOrigins,
+            @Value("${app.security.require-https:false}") boolean requireHttps
+    ) {
+        this.allowedOrigins = parseAllowedOrigins(allowedOrigins);
+        this.requireHttps = requireHttps;
+    }
 
     /**
      * Protege o namespace administrativo antes das demais regras para impedir que rotas
@@ -44,6 +59,23 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .requiresChannel(channel -> {
+                    if (requireHttps) {
+                        channel.anyRequest().requiresSecure();
+                    }
+                })
+                .headers(headers -> headers
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .preload(true)
+                                .maxAgeInSeconds(31536000))
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .frameOptions(frame -> frame.deny())
+                        .referrerPolicy(referrer -> referrer.policy(
+                                ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
+                        .cacheControl(Customizer.withDefaults()))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) ->
                                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
@@ -62,10 +94,11 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/auth/request-otp",
-                                "/api/auth/verify-otp",
-                                "/api/auth/admin/login"
+                        "/api/auth/request-otp",
+                        "/api/auth/verify-otp",
+                        "/api/auth/admin/login"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/pagamentos/webhook").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers(
@@ -78,6 +111,7 @@ public class SecurityConfig {
                                 "/api/missoes/semanais",
                                 "/api/missoes/semanais/**"
                         ).authenticated()
+                        .requestMatchers("/api/pedidos/**").authenticated()
                         .requestMatchers("/api/curtidas/**").authenticated()
                         .requestMatchers("/api/passos/**").authenticated()
                         .requestMatchers("/api/compartilhamentos/**").authenticated()
@@ -95,11 +129,7 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://192.168.1.254:5173"
-        ));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         configuration.setExposedHeaders(List.of("Authorization"));
@@ -115,5 +145,24 @@ public class SecurityConfig {
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    private List<String> parseAllowedOrigins(String rawOrigins) {
+        List<String> origins = Arrays.stream(rawOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .distinct()
+                .toList();
+
+        if (origins.isEmpty()) {
+            throw new IllegalStateException("app.cors.allowed-origins deve conter ao menos uma origem");
+        }
+
+        if (origins.stream().anyMatch(origin -> "*".equals(origin)
+                || origin.toLowerCase(Locale.ROOT).contains("://*"))) {
+            throw new IllegalStateException("CORS nao permite wildcard em producao");
+        }
+
+        return origins;
     }
 }

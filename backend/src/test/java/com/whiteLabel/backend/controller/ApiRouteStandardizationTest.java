@@ -4,7 +4,10 @@ import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
 import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
+import com.whiteLabel.backend.repository.PagamentoRepository;
 import com.whiteLabel.backend.repository.PassoRepository;
+import com.whiteLabel.backend.repository.PedidoItemRepository;
+import com.whiteLabel.backend.repository.PedidoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,7 +21,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -31,6 +36,15 @@ class ApiRouteStandardizationTest {
 
     @Autowired
     private ProdutoRepository produtoRepository;
+
+    @Autowired
+    private PagamentoRepository pagamentoRepository;
+
+    @Autowired
+    private PedidoItemRepository pedidoItemRepository;
+
+    @Autowired
+    private PedidoRepository pedidoRepository;
 
     @Autowired
     private CurtidaRepository curtidaRepository;
@@ -49,6 +63,9 @@ class ApiRouteStandardizationTest {
 
     @BeforeEach
     void setUp() {
+        pagamentoRepository.deleteAll();
+        pedidoItemRepository.deleteAll();
+        pedidoRepository.deleteAll();
         compartilhamentoAberturaRepository.deleteAll();
         compartilhamentoItemRepository.deleteAll();
         usuarioMissaoSemanalRepository.deleteAll();
@@ -98,5 +115,19 @@ class ApiRouteStandardizationTest {
 
         mockMvc.perform(get("/api/admin/produtos").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldAllowConfiguredCorsOriginAndRejectUnknownOrigin() throws Exception {
+        mockMvc.perform(options("/api/produtos")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+
+        mockMvc.perform(options("/api/produtos")
+                        .header("Origin", "https://origem-invalida.example")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden());
     }
 }

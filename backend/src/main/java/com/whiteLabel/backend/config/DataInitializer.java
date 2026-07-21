@@ -7,6 +7,7 @@ import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.domain.UsuarioRole;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -18,22 +19,29 @@ import org.springframework.stereotype.Component;
 @Component
 public class DataInitializer implements CommandLineRunner {
 
-    private static final String ADMIN_EMAIL = "germano@brechocami.com";
-    private static final String ADMIN_PASSWORD = "senhasegura@123";
-    private static final String ADMIN_TELEFONE_RESERVADO = "admin";
-
     private final UsuarioRepository usuarioRepository;
     private final MissaoRepository missaoRepository;
     private final PasswordEncoder passwordEncoder;
+    private final String adminEmail;
+    private final String adminPassword;
+    private final String adminTelefone;
 
     public DataInitializer(
             UsuarioRepository usuarioRepository,
             MissaoRepository missaoRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            @Value("${app.initializer.admin-email:}") String adminEmail,
+            @Value("${app.initializer.admin-password:}") String adminPassword,
+            @Value("${app.initializer.admin-telefone:admin}") String adminTelefone
     ) {
         this.usuarioRepository = usuarioRepository;
         this.missaoRepository = missaoRepository;
         this.passwordEncoder = passwordEncoder;
+        this.adminEmail = adminEmail == null ? "" : adminEmail.trim().toLowerCase();
+        this.adminPassword = adminPassword == null ? "" : adminPassword;
+        this.adminTelefone = adminTelefone == null || adminTelefone.isBlank()
+                ? "admin"
+                : adminTelefone.trim();
     }
 
     /**
@@ -44,7 +52,12 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         garantirMissoesSemanais();
-        var usuarioExistente = usuarioRepository.findByEmail(ADMIN_EMAIL);
+
+        if (adminEmail.isBlank()) {
+            return;
+        }
+
+        var usuarioExistente = usuarioRepository.findByEmail(adminEmail);
 
         if (usuarioExistente.isPresent()) {
             Usuario admin = usuarioExistente.get();
@@ -55,8 +68,9 @@ public class DataInitializer implements CommandLineRunner {
                 atualizado = true;
             }
 
-            if (admin.getPassword() == null || admin.getPassword().isBlank()) {
-                admin.setPassword(passwordEncoder.encode(ADMIN_PASSWORD));
+            if ((admin.getPassword() == null || admin.getPassword().isBlank())
+                    && !adminPassword.isBlank()) {
+                admin.setPassword(passwordEncoder.encode(adminPassword));
                 atualizado = true;
             }
 
@@ -67,9 +81,13 @@ public class DataInitializer implements CommandLineRunner {
             return;
         }
 
-        Usuario admin = new Usuario("Germano Admin", ADMIN_TELEFONE_RESERVADO);
-        admin.setEmail(ADMIN_EMAIL);
-        admin.setPassword(passwordEncoder.encode(ADMIN_PASSWORD));
+        if (adminPassword.isBlank()) {
+            return;
+        }
+
+        Usuario admin = new Usuario("Germano Admin", adminTelefone);
+        admin.setEmail(adminEmail);
+        admin.setPassword(passwordEncoder.encode(adminPassword));
         admin.setRole(UsuarioRole.ADMIN);
 
         usuarioRepository.save(admin);
