@@ -8,6 +8,7 @@ import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
 import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
+import com.whiteLabel.backend.repository.PassoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
@@ -56,6 +57,9 @@ class AdminAuthControllerTest {
     private CurtidaRepository curtidaRepository;
 
     @Autowired
+    private PassoRepository passoRepository;
+
+    @Autowired
     private ProdutoRepository produtoRepository;
 
     @Autowired
@@ -77,6 +81,7 @@ class AdminAuthControllerTest {
         usuarioMissaoSemanalRepository.deleteAll();
         usuarioMissaoRepository.deleteAll();
         curtidaRepository.deleteAll();
+        passoRepository.deleteAll();
         produtoRepository.deleteAll();
         missaoRepository.deleteAll();
         usuarioRepository.deleteAll();

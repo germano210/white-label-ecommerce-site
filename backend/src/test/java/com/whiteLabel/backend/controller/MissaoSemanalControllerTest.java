@@ -10,6 +10,7 @@ import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
 import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
+import com.whiteLabel.backend.repository.PassoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
@@ -67,6 +68,9 @@ class MissaoSemanalControllerTest {
     private CurtidaRepository curtidaRepository;
 
     @Autowired
+    private PassoRepository passoRepository;
+
+    @Autowired
     private CompartilhamentoAberturaRepository compartilhamentoAberturaRepository;
 
     @Autowired
@@ -79,6 +83,7 @@ class MissaoSemanalControllerTest {
         usuarioMissaoSemanalRepository.deleteAll();
         usuarioMissaoRepository.deleteAll();
         curtidaRepository.deleteAll();
+        passoRepository.deleteAll();
         produtoRepository.deleteAll();
         missaoRepository.deleteAll();
         usuarioRepository.deleteAll();

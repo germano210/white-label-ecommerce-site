@@ -13,11 +13,9 @@ export interface AdminUser {
 interface AdminState {
     currentUser: AdminUser | null;
     token: string | null;
-    isAdminModeOpen: boolean;
     login: (user: AdminUser, token: string) => void;
     logout: () => void;
     setToken: (token: string | null) => void;
-    toggleAdminMode: () => void;
 }
 
 export const useAdminStore = create<AdminState>()(
@@ -25,22 +23,17 @@ export const useAdminStore = create<AdminState>()(
         (set) => ({
             currentUser: null,
             token: null,
-            isAdminModeOpen: false,
 
-            login: (user, token) => set({ currentUser: user, token, isAdminModeOpen: true }),
+            login: (user, token) => set({ currentUser: user, token }),
             logout: () => set({ currentUser: null, token: null }),
             setToken: (token) => set({ token }),
-            toggleAdminMode: () => set((state) => ({
-                isAdminModeOpen: !state.isAdminModeOpen,
-            })),
         }),
         {
             name: 'viabras-admin-storage',
             storage: createJSONStorage(() => localStorage),
-            partialize: ({ currentUser, token, isAdminModeOpen }) => ({
+            partialize: ({ currentUser, token }) => ({
                 currentUser,
                 token,
-                isAdminModeOpen,
             }),
         },
     ),

@@ -7,9 +7,10 @@ import {
     useTransform,
     type PanInfo,
 } from 'framer-motion';
-import { Heart, Send, Undo2, X } from 'lucide-react';
+import { Heart, Menu, Send, Undo2, X } from 'lucide-react';
 import { type ProdutoVitrine } from '../../store/useCartStore';
 import { getImageUrl } from '../../utils/imageUtils';
+import { appRoutes } from '../../utils/appRoutes';
 
 interface SwipeCardProps {
     product: ProdutoVitrine;
@@ -17,36 +18,39 @@ interface SwipeCardProps {
     index: number;
     onSwipe: (direction: 'like' | 'dislike') => void;
     onUndo: () => void;
+    reactionCounts?: {
+        likes?: number;
+        dislikes?: number;
+    };
+    onShare?: () => void | Promise<void>;
+    onMenuNavigate?: (path: string) => void;
+    missionOverlay?: React.ReactNode;
 }
 
-function getSocialProofText(product: ProdutoVitrine) {
+function getSocialProofBadges(product: ProdutoVitrine, likesCount: number) {
     const likedNames = (product.nomesCurtidas ?? [])
         .map((name) => name.trim())
         .filter(Boolean)
-        .slice(0, 4);
+        .slice(0, 2);
 
-    if (product.curtidasCount === 0) {
-        return 'Peça adicionada agora!';
+    if (likedNames.length > 0) {
+        return likedNames.map((name) => `${name} curtiu esse item.`);
     }
 
-    if (likedNames.length === 0) {
-        return `Curtido por ${product.curtidasCount} pessoa${product.curtidasCount === 1 ? '' : 's'}.`;
+    if (likesCount > 0) {
+        return [
+            `${likesCount} pessoa${likesCount === 1 ? '' : 's'} curtiu esse item.`,
+        ];
     }
 
-    const remainingLikes = Math.max(product.curtidasCount - likedNames.length, 0);
+    return [];
+}
 
-    if (remainingLikes > 0) {
-        return `Curtido por ${likedNames.join(', ')} e mais ${remainingLikes} pessoa${remainingLikes === 1 ? '' : 's'}.`;
-    }
+function formatProductSize(size: string) {
+    const normalizedSize = size.trim();
+    if (!normalizedSize) return 'Único';
 
-    if (likedNames.length === 1) {
-        return `Curtido por ${likedNames[0]}.`;
-    }
-
-    const lastName = likedNames.at(-1);
-    const previousNames = likedNames.slice(0, -1).join(', ');
-
-    return `Curtido por ${previousNames} e ${lastName}.`;
+    return `${normalizedSize.charAt(0).toUpperCase()}${normalizedSize.slice(1).toLowerCase()}`;
 }
 
 /**
@@ -55,9 +59,20 @@ function getSocialProofText(product: ProdutoVitrine) {
  * foi movido para uma faixa inferior, criando a ordem visual pedida: foto,
  * ações e, abaixo delas, detalhes do produto.
  */
-export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardProps) {
+export function SwipeCard({
+    product,
+    isTop,
+    index,
+    onSwipe,
+    onUndo,
+    reactionCounts,
+    onShare,
+    onMenuNavigate,
+    missionOverlay,
+}: SwipeCardProps) {
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const productImages = product.images?.length ? product.images : [getImageUrl(null)];
     const totalPhotos = productImages.length;
@@ -71,7 +86,10 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
 
     const scale = isTop ? 1 : 1 - index * 0.025;
     const yOffset = isTop ? 0 : index * 7;
-    const socialProofText = getSocialProofText(product);
+    const visibleLikesCount = Math.max(reactionCounts?.likes ?? product.curtidasCount, 0);
+    const visiblePassosCount = Math.max(reactionCounts?.dislikes ?? product.passosCount, 0);
+    const socialProofBadges = getSocialProofBadges(product, visibleLikesCount);
+    const productSize = formatProductSize(product.tamanho);
 
     const handlePhotoTap = (event: React.MouseEvent | React.TouchEvent) => {
         if (!isTop || isSwiping) return;
@@ -136,6 +154,11 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
         await triggerSwipe('like', true);
     };
 
+    const handleMenuNavigate = (path: string) => {
+        setIsMenuOpen(false);
+        onMenuNavigate?.(path);
+    };
+
     return (
         <motion.article
             className={`swipe-card ${isTop ? 'on-top' : ''}`}
@@ -148,9 +171,9 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                 position: 'absolute',
                 inset: 0,
                 overflow: 'hidden',
-                borderRadius: 'var(--radius-card)',
+                borderRadius: '9px',
                 background: '#DDD8CF',
-                boxShadow: '0 8px 24px rgba(35, 31, 24, 0.14)',
+                boxShadow: '0 10px 26px rgba(35, 31, 24, 0.16)',
                 fontFamily: "'DM Sans', sans-serif",
                 touchAction: 'none',
             }}
@@ -219,54 +242,77 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                     ))}
                 </div>
 
-                <header
-                    style={{
-                        position: 'absolute',
-                        top: '31px',
-                        left: '0',
-                        right: 'auto',
-                        zIndex: 30,
-                        width: 'fit-content',
-                        maxWidth: 'calc(100% - 10px)',
-                        padding: '8px 11px',
-                        borderRadius: '0 999px 999px 0',
-                        color: 'var(--color-action-button)',
-                        background: 'rgba(8, 9, 8, 0.72)',
-                        backdropFilter: 'blur(6px)',
-                        pointerEvents: 'none',
-                    }}
-                >
-                    {socialProofText && (
-                        <p
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                margin: 0,
-                                overflow: 'hidden',
-                                fontSize: '9px',
-                                fontWeight: 700,
-                                lineHeight: 1.25,
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
+                <header style={productHeaderStyle}>
+                    <div style={productTitleBlockStyle}>
+                        <h2 style={productTitleStyle}>{product.name}</h2>
+                        <span style={productSizeStyle}>Tam. {productSize}</span>
+                    </div>
+
+                    {isTop && (
+                        <button
+                            type="button"
+                            aria-label="Abrir menu"
+                            aria-expanded={isMenuOpen}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setIsMenuOpen((isOpen) => !isOpen);
                             }}
+                            style={menuButtonStyle}
                         >
-                            <Heart size={12} fill="currentColor" strokeWidth={0} />
-                            {socialProofText}
-                        </p>
+                            <Menu size={20} strokeWidth={2} />
+                        </button>
                     )}
                 </header>
+
+                {isTop && isMenuOpen && (
+                    <nav
+                        aria-label="Menu principal"
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        style={menuPanelStyle}
+                    >
+                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.forYou)} style={menuItemStyle}>
+                            FOR YOU
+                        </button>
+                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.explorar)} style={menuItemStyle}>
+                            EXPLORAR
+                        </button>
+                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.curtidas)} style={menuItemStyle}>
+                            CURTIDAS
+                        </button>
+                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.resgate)} style={menuItemStyle}>
+                            RESGATE
+                        </button>
+                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.perfil)} style={menuItemStyle}>
+                            PERFIL
+                        </button>
+                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.indique)} style={menuItemStyle}>
+                            INDIQUE
+                        </button>
+                    </nav>
+                )}
+
+                {socialProofBadges.length > 0 && (
+                    <div style={socialBadgesStyle}>
+                        {socialProofBadges.map((badge) => (
+                            <span key={badge} style={socialBadgeStyle}>
+                                <Heart size={8} fill="currentColor" strokeWidth={0} />
+                                {badge}
+                            </span>
+                        ))}
+                    </div>
+                )}
 
                 <div
                     aria-hidden="true"
                     style={{
                         position: 'absolute',
                         inset: 'auto 0 0',
-                        height: '178px',
+                        height: '250px',
                         zIndex: 20,
                         pointerEvents: 'none',
                         background:
-                            'linear-gradient(0deg, rgba(13, 14, 12, 0.48) 0%, rgba(13, 14, 12, 0.05) 76%, transparent 100%)',
+                            'linear-gradient(0deg, rgba(13, 14, 12, 0.64) 0%, rgba(13, 14, 12, 0.22) 58%, transparent 100%)',
                     }}
                 />
 
@@ -309,10 +355,10 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                         className="flex w-full items-center justify-between"
                         style={{
                             position: 'absolute',
-                            bottom: '72px',
+                            bottom: missionOverlay ? '62px' : '20px',
                             left: '50%',
-                            zIndex: 50,
-                            width: 'min(84%, 340px)',
+                            zIndex: 70,
+                            width: 'min(86%, 340px)',
                             transform: 'translateX(-50%)',
                         }}
                     >
@@ -335,14 +381,14 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                         >
                             <ActionButton
                                 label="Passar peça"
-                                count={product.passosCount}
+                                count={visiblePassosCount}
                                 tone="dislike"
                                 onClick={() => void triggerSwipe('nope')}
                                 icon={<X size={29} strokeWidth={1.35} />}
                             />
                             <ActionButton
                                 label="Curtir peça"
-                                count={product.curtidasCount}
+                                count={visibleLikesCount}
                                 tone="like"
                                 motionControls={heartControls}
                                 onClick={(event) => void handleHeartClick(event)}
@@ -363,62 +409,24 @@ export function SwipeCard({ product, isTop, index, onSwipe, onUndo }: SwipeCardP
                             <ActionButton
                                 label="Compartilhar peça"
                                 size="small"
-                                onClick={() => undefined}
+                                onClick={() => {
+                                    void Promise.resolve(onShare?.()).catch(() => undefined);
+                                }}
                                 icon={<Send size={18} />}
                             />
                         </div>
                     </div>
                 )}
 
-                <footer
-                    style={{
-                        position: 'absolute',
-                        right: 0,
-                        bottom: 0,
-                        left: 0,
-                        zIndex: 48,
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto',
-                        alignItems: 'end',
-                        gap: '10px',
-                        minHeight: '45px',
-                        padding: '12px 12px 10px',
-                        color: 'var(--color-action-button)',
-                        background: 'rgba(13, 14, 12, 0.66)',
-                        pointerEvents: 'none',
-                    }}
-                >
-                    <div style={{ minWidth: 0 }}>
-                        <h2
-                            style={{
-                                overflow: 'hidden',
-                                margin: 0,
-                                fontSize: 'clamp(16px, 4.8vw, 19px)',
-                                fontWeight: 800,
-                                lineHeight: 1.08,
-                                letterSpacing: '-0.03em',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {product.name}
-                        </h2>
-                    </div>
-
-                    <span
-                        style={{
-                            color: 'rgba(255, 255, 255, 0.72)',
-                            flexShrink: 0,
-                            fontSize: '9px',
-                            fontWeight: 700,
-                            lineHeight: 1,
-                            textAlign: 'right',
-                            whiteSpace: 'nowrap',
-                        }}
+                {isTop && missionOverlay && (
+                    <div
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        style={missionOverlaySlotStyle}
                     >
-                        Tam. {product.tamanho.toLowerCase()}
-                    </span>
-                </footer>
+                        {missionOverlay}
+                    </div>
+                )}
             </div>
         </motion.article>
     );
@@ -509,4 +517,135 @@ const swipeStampStyle: React.CSSProperties = {
     borderRadius: 'var(--radius-card)',
     fontSize: '31px',
     transform: 'rotate(-11deg)',
+};
+
+const productHeaderStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '30px',
+    right: '13px',
+    left: '13px',
+    zIndex: 55,
+    display: 'grid',
+    gridTemplateColumns: '32px minmax(0, 1fr) 32px',
+    alignItems: 'start',
+    color: '#ffffff',
+    pointerEvents: 'none',
+};
+
+const productTitleBlockStyle: React.CSSProperties = {
+    gridColumn: 2,
+    minWidth: 0,
+    textAlign: 'center',
+};
+
+const productTitleStyle: React.CSSProperties = {
+    overflow: 'hidden',
+    margin: 0,
+    color: '#ffffff',
+    fontSize: 'clamp(14px, 4.2vw, 17px)',
+    fontWeight: 900,
+    lineHeight: 1.08,
+    textOverflow: 'ellipsis',
+    textShadow: '0 2px 10px rgba(0, 0, 0, 0.42)',
+    whiteSpace: 'nowrap',
+};
+
+const productSizeStyle: React.CSSProperties = {
+    display: 'block',
+    marginTop: '6px',
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: '8px',
+    fontWeight: 800,
+    lineHeight: 1,
+    textShadow: '0 2px 8px rgba(0, 0, 0, 0.42)',
+    whiteSpace: 'nowrap',
+};
+
+const menuButtonStyle: React.CSSProperties = {
+    position: 'relative',
+    zIndex: 2,
+    display: 'grid',
+    gridColumn: 3,
+    width: '30px',
+    height: '30px',
+    justifySelf: 'end',
+    placeItems: 'center',
+    border: 0,
+    borderRadius: '999px',
+    color: '#ffffff',
+    background: 'transparent',
+    boxShadow: 'none',
+    cursor: 'pointer',
+    pointerEvents: 'auto',
+};
+
+const menuPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '62px',
+    right: '12px',
+    zIndex: 90,
+    display: 'flex',
+    width: '142px',
+    flexDirection: 'column',
+    gap: '2px',
+    borderRadius: '14px',
+    background: 'rgba(18, 18, 18, 0.78)',
+    padding: '7px',
+    backdropFilter: 'blur(10px)',
+};
+
+const menuItemStyle: React.CSSProperties = {
+    width: '100%',
+    minHeight: '30px',
+    border: 0,
+    borderRadius: '10px',
+    background: 'transparent',
+    color: '#ffffff',
+    fontSize: '10px',
+    fontWeight: 900,
+    letterSpacing: '0.06em',
+    textAlign: 'left',
+    cursor: 'pointer',
+    padding: '0 9px',
+};
+
+const socialBadgesStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '74px',
+    left: '15px',
+    right: '15px',
+    zIndex: 55,
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '8px',
+    overflow: 'hidden',
+    pointerEvents: 'none',
+};
+
+const socialBadgeStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    minWidth: 0,
+    maxWidth: 'calc(50% - 4px)',
+    height: '17px',
+    alignItems: 'center',
+    gap: '4px',
+    overflow: 'hidden',
+    borderRadius: '999px',
+    color: 'rgba(66, 70, 61, 0.84)',
+    background: 'rgba(255, 255, 255, 0.88)',
+    padding: '0 8px',
+    fontSize: '6.8px',
+    fontWeight: 800,
+    lineHeight: 1,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+const missionOverlaySlotStyle: React.CSSProperties = {
+    position: 'absolute',
+    right: 0,
+    bottom: '7px',
+    left: 0,
+    zIndex: 80,
+    pointerEvents: 'auto',
 };

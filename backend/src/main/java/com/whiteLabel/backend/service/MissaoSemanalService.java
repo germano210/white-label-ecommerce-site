@@ -11,6 +11,7 @@ import com.whiteLabel.backend.dto.ResgateTentativasResponse;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,6 +37,7 @@ public class MissaoSemanalService {
     private final UsuarioRepository usuarioRepository;
     private final Clock clock;
 
+    @Autowired
     public MissaoSemanalService(
             MissaoRepository missaoRepository,
             UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository,

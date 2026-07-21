@@ -79,6 +79,7 @@ public class SecurityConfig {
                                 "/api/missoes/semanais/**"
                         ).authenticated()
                         .requestMatchers("/api/curtidas/**").authenticated()
+                        .requestMatchers("/api/passos/**").authenticated()
                         .requestMatchers("/api/compartilhamentos/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(

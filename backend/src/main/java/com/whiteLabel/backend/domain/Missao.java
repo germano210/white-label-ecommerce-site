@@ -43,7 +43,7 @@ public class Missao {
     @Column(nullable = false)
     private Integer peso = 1;
 
-    @Column(name = "tentativas_recompensa", nullable = false)
+    @Column(name = "tentativas_recompensa", nullable = false, columnDefinition = "integer default 0")
     private Integer tentativasRecompensa = 0;
 
     @Column(nullable = false)

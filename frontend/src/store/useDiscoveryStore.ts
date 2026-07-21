@@ -78,6 +78,10 @@ interface DiscoveryState {
     fetchCurtidas: () => Promise<void>;
     removeProductFromStack: (id: string) => void;
     restoreProductToStack: (product: ProdutoVitrine) => void;
+    syncProductReactionCount: (
+        productId: string,
+        counts: Partial<ProductReactionCount>,
+    ) => void;
     triggerLikesPulse: () => void;
     dismissMatchAlert: () => void;
     dismissNamePrompt: () => void;
@@ -145,6 +149,20 @@ function mapProduto(produto: ProdutoApi): ProdutoVitrine {
     };
 }
 
+function shuffleProducts(products: ProdutoVitrine[]): ProdutoVitrine[] {
+    const shuffledProducts = [...products];
+
+    for (let index = shuffledProducts.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [shuffledProducts[index], shuffledProducts[swapIndex]] = [
+            shuffledProducts[swapIndex],
+            shuffledProducts[index],
+        ];
+    }
+
+    return shuffledProducts;
+}
+
 function isProdutoApi(value: CurtidaApi | ProdutoApi): value is ProdutoApi {
     return 'nome' in value && 'precoVenda' in value;
 }
@@ -153,6 +171,10 @@ function mapCurtida(item: CurtidaApi | ProdutoApi) {
     if (isProdutoApi(item)) return mapProduto(item);
     if (item.produto) return mapProduto(item.produto);
     return null;
+}
+
+function clampReactionCount(value: number | undefined) {
+    return Math.max(Math.floor(value ?? 0), 0);
 }
 
 // Envolvemos a criação da store com o persist()
@@ -205,8 +227,11 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                         apiRoutes.produtos.list,
                     );
                     const apiProducts = Array.isArray(data) ? data : data.content ?? [];
+                    const shuffledProducts = shuffleProducts(apiProducts.map(mapProduto));
+
                     set({
-                        products: apiProducts.map(mapProduto),
+                        products: shuffledProducts,
+                        productReactionCounts: {},
                         isLoading: false,
                         isProductsLoading: false,
                     });
@@ -278,6 +303,44 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                 ],
             })),
 
+            syncProductReactionCount: (productId, counts) => set((state) => {
+                const product = state.products.find((item) => item.id === productId)
+                    ?? state.likedItems.find((item) => item.id === productId)
+                    ?? state.swipedCards.find((item) => item.product.id === productId)?.product;
+                const currentCounts = state.productReactionCounts[productId] ?? {
+                    likes: product?.curtidasCount ?? 0,
+                    dislikes: product?.passosCount ?? 0,
+                };
+                const nextCounts = {
+                    likes: clampReactionCount(counts.likes ?? currentCounts.likes),
+                    dislikes: clampReactionCount(counts.dislikes ?? currentCounts.dislikes),
+                };
+                const syncProduct = (item: ProdutoVitrine): ProdutoVitrine => {
+                    if (item.id !== productId) return item;
+
+                    return {
+                        ...item,
+                        curtidasCount: nextCounts.likes,
+                        passosCount: nextCounts.dislikes,
+                        curtidas: nextCounts.likes,
+                        dislikes: nextCounts.dislikes,
+                    };
+                };
+
+                return {
+                    products: state.products.map(syncProduct),
+                    likedItems: state.likedItems.map(syncProduct),
+                    swipedCards: state.swipedCards.map((item) => ({
+                        ...item,
+                        product: syncProduct(item.product),
+                    })),
+                    productReactionCounts: {
+                        ...state.productReactionCounts,
+                        [productId]: nextCounts,
+                    },
+                };
+            }),
+
             triggerLikesPulse: () => {
                 set({ pulseLikes: true });
                 setTimeout(() => set({ pulseLikes: false }), 800);
@@ -336,19 +399,6 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                 history: [...state.history, product.id],
                 swipeDirections: [...state.swipeDirections, 'dislike'],
                 swipedCards: [...state.swipedCards, { product, direction: 'dislike' }],
-                productReactionCounts: {
-                    ...state.productReactionCounts,
-                    [product.id]: {
-                        ...(state.productReactionCounts[product.id] ?? {
-                            likes: product.curtidasCount,
-                            dislikes: product.passosCount,
-                        }),
-                        dislikes: (
-                            state.productReactionCounts[product.id]?.dislikes
-                            ?? product.passosCount
-                        ) + 1,
-                    },
-                },
             })),
 
             undoLastSwipe: () => {
@@ -378,9 +428,7 @@ export const useDiscoveryStore = create<DiscoveryState>()(
                         likes: lastDirection === 'like'
                             ? Math.max(lastProductCounts.likes - 1, 0)
                             : lastProductCounts.likes,
-                        dislikes: lastDirection === 'dislike'
-                            ? Math.max(lastProductCounts.dislikes - 1, 0)
-                            : lastProductCounts.dislikes,
+                        dislikes: lastProductCounts.dislikes,
                     };
                 }
 

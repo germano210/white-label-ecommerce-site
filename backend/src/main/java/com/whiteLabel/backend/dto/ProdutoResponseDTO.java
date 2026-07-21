@@ -29,8 +29,8 @@ public record ProdutoResponseDTO(
                 produto.getPrecoAntigo(),
                 produto.getImagemUrl(),
                 produto.getTamanho(),
-                produto.getCurtidasCount(),
-                produto.getPassosCount(),
+                produto.getCurtidasCount() == null ? 0 : produto.getCurtidasCount(),
+                produto.getPassosCount() == null ? 0 : produto.getPassosCount(),
                 nomesCurtidas
         );
     }

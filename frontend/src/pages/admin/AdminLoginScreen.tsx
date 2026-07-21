@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { Lock, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAdminStore, type AdminUser, type Role } from '../../store/useAdminStore';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
+import { appRoutes } from '../../utils/appRoutes';
 
 interface AdminLoginResponse {
     token: string;
@@ -29,7 +31,8 @@ function getAdminLoginErrorMessage(error: unknown) {
 }
 
 export function AdminLoginScreen() {
-    const { login, toggleAdminMode } = useAdminStore();
+    const navigate = useNavigate();
+    const login = useAdminStore((state) => state.login);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -67,7 +70,7 @@ export function AdminLoginScreen() {
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'var(--cream)', zIndex: 3000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <button onClick={toggleAdminMode} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '14px', color: 'var(--muted)', cursor: 'pointer' }}>
+            <button onClick={() => navigate(appRoutes.forYou)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '14px', color: 'var(--muted)', cursor: 'pointer' }}>
                 Voltar à Loja
             </button>
 

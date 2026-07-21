@@ -11,6 +11,7 @@ import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
 import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
+import com.whiteLabel.backend.repository.PassoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
@@ -66,6 +67,9 @@ class MissaoProgressServiceTest {
     @Autowired
     private CurtidaRepository curtidaRepository;
 
+    @Autowired
+    private PassoRepository passoRepository;
+
     @BeforeEach
     void setUp() {
         compartilhamentoAberturaRepository.deleteAll();
@@ -73,6 +77,7 @@ class MissaoProgressServiceTest {
         usuarioMissaoSemanalRepository.deleteAll();
         usuarioMissaoRepository.deleteAll();
         curtidaRepository.deleteAll();
+        passoRepository.deleteAll();
         produtoRepository.deleteAll();
         missaoRepository.deleteAll();
         usuarioRepository.deleteAll();

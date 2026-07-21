@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAdminStore } from '../../store/useAdminStore';
 import { type ProdutoVitrine } from '../../store/useCartStore';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
+import { appRoutes } from '../../utils/appRoutes';
 import { MissoesAdminPanel } from '../../components/admin/MissoesAdminPanel';
 import {
     LogOut, PackagePlus, ShoppingBag, Users,
@@ -76,7 +78,8 @@ function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
 }
 
 export function AdminDashboardScreen() {
-    const { currentUser, logout, toggleAdminMode } = useAdminStore();
+    const navigate = useNavigate();
+    const { currentUser, logout } = useAdminStore();
     const [activeAction, setActiveAction] = useState<AdminAction>(null);
 
     // --- ESTADOS: OPERAÇÕES DIÁRIAS ---
@@ -238,7 +241,7 @@ export function AdminDashboardScreen() {
                     <span style={{ fontSize: '10px', color: 'var(--terra)', fontWeight: 800 }}>MODO: {currentUser?.role}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={toggleAdminMode} style={{ background: '#F5F5F5', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>LOJA</button>
+                    <button onClick={() => navigate(appRoutes.forYou)} style={{ background: '#F5F5F5', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>LOJA</button>
                     <button onClick={logout} style={{ color: '#FF3B30', background: 'none', border: 'none', cursor: 'pointer' }}><LogOut size={20}/></button>
                 </div>
             </div>

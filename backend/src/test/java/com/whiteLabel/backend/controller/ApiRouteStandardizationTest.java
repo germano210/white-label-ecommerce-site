@@ -4,6 +4,7 @@ import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
 import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
+import com.whiteLabel.backend.repository.PassoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +36,9 @@ class ApiRouteStandardizationTest {
     private CurtidaRepository curtidaRepository;
 
     @Autowired
+    private PassoRepository passoRepository;
+
+    @Autowired
     private CompartilhamentoAberturaRepository compartilhamentoAberturaRepository;
 
     @Autowired
@@ -49,6 +53,7 @@ class ApiRouteStandardizationTest {
         compartilhamentoItemRepository.deleteAll();
         usuarioMissaoSemanalRepository.deleteAll();
         curtidaRepository.deleteAll();
+        passoRepository.deleteAll();
         produtoRepository.deleteAll();
     }
 
@@ -83,6 +88,9 @@ class ApiRouteStandardizationTest {
     @Test
     void shouldProtectApiUserAndAdminRoutes() throws Exception {
         mockMvc.perform(get("/api/curtidas/1").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/passos/1").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/admin/missoes").accept(MediaType.APPLICATION_JSON))

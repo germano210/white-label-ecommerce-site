@@ -21,6 +21,9 @@ export const apiRoutes = {
         list: '/api/curtidas',
         create: (produtoId: RouteId) => `/api/curtidas/${routeId(produtoId)}`,
     },
+    passos: {
+        create: (produtoId: RouteId) => `/api/passos/${routeId(produtoId)}`,
+    },
     compartilhamentos: {
         create: (produtoId: RouteId) => `/api/compartilhamentos/produtos/${routeId(produtoId)}`,
         open: (codigo: RouteId) => `/api/compartilhamentos/${routeId(codigo)}/abrir`,
