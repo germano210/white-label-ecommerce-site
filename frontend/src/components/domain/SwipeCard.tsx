@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
+    AnimatePresence,
     animate,
     motion,
     useAnimation,
@@ -7,10 +8,20 @@ import {
     useTransform,
     type PanInfo,
 } from 'framer-motion';
-import { Heart, Menu, Send, Undo2, X } from 'lucide-react';
+import {
+    AlertTriangle,
+    Heart,
+    Send,
+    Undo2,
+    X,
+} from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { AppIcon, type AppIconName } from '../icons/AppIcon';
 import { type ProdutoVitrine } from '../../store/useCartStore';
+import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { getImageUrl } from '../../utils/imageUtils';
 import { appRoutes } from '../../utils/appRoutes';
+import { appIconMap } from '../../constants/iconMap';
 
 interface SwipeCardProps {
     product: ProdutoVitrine;
@@ -53,6 +64,54 @@ function formatProductSize(size: string) {
     return `${normalizedSize.charAt(0).toUpperCase()}${normalizedSize.slice(1).toLowerCase()}`;
 }
 
+function readNumberField(record: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+        const value = record[key];
+        const numberValue = typeof value === 'number'
+            ? value
+            : typeof value === 'string'
+                ? Number(value)
+                : NaN;
+
+        if (Number.isFinite(numberValue)) return numberValue;
+    }
+
+    return null;
+}
+
+function getUserLevelProgress(user: AuthUser | null) {
+    const record = user as Record<string, unknown> | null;
+
+    if (!record) {
+        return {
+            level: 1,
+            progressRatio: 0,
+        };
+    }
+
+    const level = readNumberField(record, ['level', 'nivel', 'lvl']);
+    const xpAtual = readNumberField(record, ['xpAtual', 'xp_atual', 'xp', 'experienciaAtual']);
+    const xpParaProximoNivel = readNumberField(record, [
+        'xpParaProximoNivel',
+        'xp_para_proximo_nivel',
+        'xpProximoNivel',
+        'xp_proximo_nivel',
+    ]);
+    const progressRatio = xpAtual !== null && xpParaProximoNivel && xpParaProximoNivel > 0
+        ? Math.min(Math.max(xpAtual / xpParaProximoNivel, 0), 1)
+        : 0;
+
+    return {
+        level: level && level > 0 ? Math.floor(level) : 1,
+        progressRatio,
+    };
+}
+
+function isMenuRouteActive(pathname: string, path: string) {
+    if (path === appRoutes.curtidas) return pathname.startsWith('/curtidas');
+    return pathname === path || (path === appRoutes.forYou && pathname === appRoutes.root);
+}
+
 /**
  * O card mantém a foto como superfície principal e reposiciona os metadados.
  * Os botões de ação ficam sobre a imagem e o bloco de título/tamanho/curtidas
@@ -70,6 +129,8 @@ export function SwipeCard({
     onMenuNavigate,
     missionOverlay,
 }: SwipeCardProps) {
+    const location = useLocation();
+    const authUser = useAuthStore((state) => state.user);
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -90,6 +151,7 @@ export function SwipeCard({
     const visiblePassosCount = Math.max(reactionCounts?.dislikes ?? product.passosCount, 0);
     const socialProofBadges = getSocialProofBadges(product, visibleLikesCount);
     const productSize = formatProductSize(product.tamanho);
+    const profileProgress = useMemo(() => getUserLevelProgress(authUser), [authUser]);
 
     const handlePhotoTap = (event: React.MouseEvent | React.TouchEvent) => {
         if (!isTop || isSwiping) return;
@@ -177,7 +239,7 @@ export function SwipeCard({
                 fontFamily: "'DM Sans', sans-serif",
                 touchAction: 'none',
             }}
-            drag={isTop && !isSwiping ? 'x' : false}
+            drag={isTop && !isSwiping && !isMenuOpen ? 'x' : false}
             dragConstraints={{ left: 0, right: 0 }}
             onDragEnd={handleDragEnd}
         >
@@ -259,38 +321,103 @@ export function SwipeCard({
                             }}
                             style={menuButtonStyle}
                         >
-                            <Menu size={20} strokeWidth={2} />
+                            <AppIcon name={appIconMap.menu} size={20} />
+                            <span aria-hidden="true" style={menuButtonNotificationDotStyle} />
                         </button>
                     )}
                 </header>
 
-                {isTop && isMenuOpen && (
-                    <nav
-                        aria-label="Menu principal"
-                        onClick={(event) => event.stopPropagation()}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        style={menuPanelStyle}
-                    >
-                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.forYou)} style={menuItemStyle}>
-                            FOR YOU
-                        </button>
-                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.explorar)} style={menuItemStyle}>
-                            EXPLORAR
-                        </button>
-                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.curtidas)} style={menuItemStyle}>
-                            CURTIDAS
-                        </button>
-                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.resgate)} style={menuItemStyle}>
-                            RESGATE
-                        </button>
-                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.perfil)} style={menuItemStyle}>
-                            PERFIL
-                        </button>
-                        <button type="button" onClick={() => handleMenuNavigate(appRoutes.indique)} style={menuItemStyle}>
-                            INDIQUE
-                        </button>
-                    </nav>
-                )}
+                <AnimatePresence>
+                    {isTop && isMenuOpen && (
+                        <motion.div
+                            key="side-menu"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.18 }}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setIsMenuOpen(false);
+                            }}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            style={menuLayerStyle}
+                        >
+                            <motion.aside
+                                aria-label="Menu principal"
+                                initial={{ x: '100%' }}
+                                animate={{ x: 0 }}
+                                exit={{ x: '100%' }}
+                                transition={{ type: 'spring', stiffness: 370, damping: 34 }}
+                                onClick={(event) => event.stopPropagation()}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                style={menuPanelStyle}
+                            >
+                                <button
+                                    type="button"
+                                    aria-label="Fechar menu"
+                                    onClick={() => setIsMenuOpen(false)}
+                                    style={panelMenuButtonStyle}
+                                >
+                                    <AppIcon name={appIconMap.menu} size={18} />
+                                    <span aria-hidden="true" style={panelMenuNotificationDotStyle} />
+                                </button>
+
+                                <div style={menuContentStyle}>
+                                    <nav style={menuListStyle}>
+                                        <SideMenuItem
+                                            icon={appIconMap.foryou}
+                                            label="For You"
+                                            path={appRoutes.forYou}
+                                            isActive={isMenuRouteActive(location.pathname, appRoutes.forYou)}
+                                            onNavigate={handleMenuNavigate}
+                                        />
+                                        <SideMenuItem
+                                            icon={appIconMap.explorar}
+                                            label="Explorar"
+                                            path={appRoutes.explorar}
+                                            isActive={isMenuRouteActive(location.pathname, appRoutes.explorar)}
+                                            onNavigate={handleMenuNavigate}
+                                        />
+                                        <SideMenuItem
+                                            icon={appIconMap.curtidas}
+                                            label="Curtidas"
+                                            path={appRoutes.curtidas}
+                                            isActive={isMenuRouteActive(location.pathname, appRoutes.curtidas)}
+                                            onNavigate={handleMenuNavigate}
+                                        />
+                                        <ProfileMenuItem
+                                            level={profileProgress.level}
+                                            progressRatio={profileProgress.progressRatio}
+                                            isActive={isMenuRouteActive(location.pathname, appRoutes.perfil)}
+                                            onNavigate={() => handleMenuNavigate(appRoutes.perfil)}
+                                        />
+                                    </nav>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleMenuNavigate(appRoutes.indique)}
+                                        style={inviteButtonStyle}
+                                    >
+                                        Indique e Ganhe
+                                    </button>
+                                    <p style={inviteHintStyle}>
+                                        Resgate 3 tentativas para cada perfil criado com a sua indicação.
+                                    </p>
+
+                                    <section style={tipsBlockStyle}>
+                                        <div style={tipsHeaderStyle}>
+                                            <AlertTriangle size={13} strokeWidth={1.6} />
+                                            <strong>DICAS!</strong>
+                                        </div>
+                                        <p style={tipsTextStyle}>
+                                            Complete missões, aumente o nível da sua conta e curta itens que você ama para liberar recompensas.
+                                        </p>
+                                    </section>
+                                </div>
+                            </motion.aside>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {socialProofBadges.length > 0 && (
                     <div style={socialBadgesStyle}>
@@ -442,6 +569,80 @@ interface ActionButtonProps {
     onClick: (event: React.MouseEvent) => void;
 }
 
+interface SideMenuItemProps {
+    icon: AppIconName;
+    label: string;
+    path: string;
+    isActive: boolean;
+    onNavigate: (path: string) => void;
+}
+
+function SideMenuItem({
+    icon,
+    label,
+    path,
+    isActive,
+    onNavigate,
+}: SideMenuItemProps) {
+    const color = isActive ? '#687152' : '#000000';
+
+    return (
+        <button
+            type="button"
+            onClick={() => onNavigate(path)}
+            style={{
+                ...sideMenuItemStyle,
+                color,
+            }}
+        >
+            <AppIcon name={icon} size={15} />
+            <span style={sideMenuItemLabelStyle}>{label.toUpperCase()}</span>
+        </button>
+    );
+}
+
+interface ProfileMenuItemProps {
+    level: number;
+    progressRatio: number;
+    isActive: boolean;
+    onNavigate: () => void;
+}
+
+function ProfileMenuItem({
+    level,
+    progressRatio,
+    isActive,
+    onNavigate,
+}: ProfileMenuItemProps) {
+    const color = isActive ? '#687152' : '#000000';
+
+    return (
+        <button
+            type="button"
+            onClick={onNavigate}
+            style={{
+                ...sideMenuItemStyle,
+                alignItems: 'flex-start',
+                color,
+            }}
+        >
+            <AppIcon name={appIconMap.perfil} size={15} style={{ marginTop: '1px' }} />
+            <span style={profileMenuTextStyle}>
+                <span style={sideMenuItemLabelStyle}>PERFIL</span>
+                <span style={profileLevelStyle}>Lvl. {level}</span>
+                <span style={profileXpTrackStyle} aria-label="Progresso de nível">
+                    <span
+                        style={{
+                            ...profileXpFillStyle,
+                            width: `${Math.round(progressRatio * 100)}%`,
+                        }}
+                    />
+                </span>
+            </span>
+        </button>
+    );
+}
+
 function ActionButton({
     label,
     icon,
@@ -572,41 +773,204 @@ const menuButtonStyle: React.CSSProperties = {
     placeItems: 'center',
     border: 0,
     borderRadius: '999px',
-    color: '#ffffff',
+    color: '#000000',
     background: 'transparent',
     boxShadow: 'none',
     cursor: 'pointer',
     pointerEvents: 'auto',
 };
 
-const menuPanelStyle: React.CSSProperties = {
+const menuButtonNotificationDotStyle: React.CSSProperties = {
     position: 'absolute',
-    top: '62px',
-    right: '12px',
-    zIndex: 90,
-    display: 'flex',
-    width: '142px',
-    flexDirection: 'column',
-    gap: '2px',
-    borderRadius: '14px',
-    background: 'rgba(18, 18, 18, 0.78)',
-    padding: '7px',
-    backdropFilter: 'blur(10px)',
+    top: '6px',
+    right: '4px',
+    width: '5px',
+    height: '5px',
+    borderRadius: '999px',
+    background: '#687152',
 };
 
-const menuItemStyle: React.CSSProperties = {
-    width: '100%',
-    minHeight: '30px',
-    border: 0,
-    borderRadius: '10px',
+const menuLayerStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 95,
+    overflow: 'hidden',
     background: 'transparent',
-    color: '#ffffff',
-    fontSize: '10px',
-    fontWeight: 900,
-    letterSpacing: '0.06em',
-    textAlign: 'left',
+    cursor: 'default',
+};
+
+const menuPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: '20%',
+    height: '100%',
+    zIndex: 96,
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: '8px 8px 0 0',
+    background: '#FFFFFF',
+    color: '#000000',
+    padding: '54px 18px 26px 28px',
+    boxShadow: 'none',
+    cursor: 'default',
+};
+
+const panelMenuButtonStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '26px',
+    right: '14px',
+    display: 'grid',
+    width: '24px',
+    height: '24px',
+    placeItems: 'center',
+    border: 0,
+    borderRadius: '999px',
+    background: 'transparent',
+    color: '#000000',
     cursor: 'pointer',
-    padding: '0 9px',
+    padding: 0,
+};
+
+const panelMenuNotificationDotStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '-1px',
+    right: '-1px',
+    width: '5px',
+    height: '5px',
+    borderRadius: '999px',
+    background: '#687152',
+};
+
+const menuContentStyle: React.CSSProperties = {
+    display: 'flex',
+    width: '128px',
+    maxWidth: '128px',
+    height: '100%',
+    minHeight: 0,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+};
+
+const menuListStyle: React.CSSProperties = {
+    position: 'static',
+    display: 'flex',
+    width: '128px',
+    maxWidth: 'none',
+    height: 'auto',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '23px',
+    margin: 0,
+    padding: 0,
+    background: 'transparent',
+    backdropFilter: 'none',
+    zIndex: 'auto',
+};
+
+const sideMenuItemStyle: React.CSSProperties = {
+    display: 'grid',
+    width: '100%',
+    gridTemplateColumns: '18px minmax(0, 1fr)',
+    alignItems: 'center',
+    columnGap: '8px',
+    border: 0,
+    background: 'transparent',
+    color: '#000000',
+    cursor: 'pointer',
+    padding: 0,
+    textAlign: 'left',
+};
+
+const sideMenuItemLabelStyle: React.CSSProperties = {
+    overflow: 'hidden',
+    fontSize: '9.5px',
+    fontWeight: 500,
+    letterSpacing: '0',
+    lineHeight: 1,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+const profileMenuTextStyle: React.CSSProperties = {
+    display: 'flex',
+    width: '100%',
+    minWidth: 0,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+};
+
+const profileLevelStyle: React.CSSProperties = {
+    marginTop: '4px',
+    color: '#000000',
+    fontSize: '6.5px',
+    fontWeight: 500,
+    lineHeight: 1,
+};
+
+const profileXpTrackStyle: React.CSSProperties = {
+    width: '64px',
+    height: '2px',
+    marginTop: '4px',
+    overflow: 'hidden',
+    borderRadius: '999px',
+    background: '#cacfbe',
+};
+
+const profileXpFillStyle: React.CSSProperties = {
+    display: 'block',
+    height: '100%',
+    borderRadius: 'inherit',
+    background: '#687152',
+};
+
+const inviteButtonStyle: React.CSSProperties = {
+    width: '124px',
+    minHeight: '24px',
+    marginTop: '28px',
+    border: 0,
+    borderRadius: '8px',
+    background: '#687152',
+    color: '#FFFFFF',
+    cursor: 'pointer',
+    fontSize: '6.5px',
+    fontWeight: 800,
+    lineHeight: 1,
+};
+
+const inviteHintStyle: React.CSSProperties = {
+    width: '124px',
+    margin: '8px 0 0',
+    color: '#687152',
+    fontSize: '5.6px',
+    fontWeight: 500,
+    lineHeight: 1.16,
+    textAlign: 'center',
+};
+
+const tipsBlockStyle: React.CSSProperties = {
+    width: '128px',
+    marginTop: 'auto',
+    color: '#000000',
+};
+
+const tipsHeaderStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    color: '#000000',
+    fontSize: '9px',
+    fontWeight: 500,
+    lineHeight: 1,
+};
+
+const tipsTextStyle: React.CSSProperties = {
+    margin: '7px 0 0',
+    color: '#000000',
+    fontSize: '6.1px',
+    fontWeight: 400,
+    lineHeight: 1.2,
 };
 
 const socialBadgesStyle: React.CSSProperties = {

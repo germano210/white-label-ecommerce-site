@@ -1,12 +1,18 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.dto.UsuarioPerfilResponse;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Objects;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -24,6 +30,21 @@ public class UsuarioService {
     ) {
         this.usuarioRepository = usuarioRepository;
         this.missaoSemanalService = missaoSemanalService;
+    }
+
+    @Transactional(readOnly = true)
+    public UsuarioPerfilResponse buscarPerfilAutenticado() {
+        UUID usuarioId = obterUsuarioAutenticadoId();
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Usuario autenticado nao encontrado"
+                ));
+
+        return UsuarioPerfilResponse.from(
+                usuario,
+                calcularXpParaProximoNivel(usuario.getNivel())
+        );
     }
 
     /**
@@ -65,6 +86,10 @@ public class UsuarioService {
         return usuarioAtualizado;
     }
 
+    public Integer calcularXpParaProximoNivel(Integer nivelAtual) {
+        return (int) Math.ceil(calcularXpNecessarioParaProximoNivel(nivelAtual));
+    }
+
     private double calcularXpNecessarioParaProximoNivel(Integer nivelAtual) {
         int nivel = Math.max(1, nivelAtual == null ? 1 : nivelAtual);
 
@@ -77,5 +102,23 @@ public class UsuarioService {
         }
 
         return 100 * Math.pow(nivel, 2.5);
+    }
+
+    private UUID obterUsuarioAutenticadoId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario nao autenticado");
+        }
+
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Token de autenticacao invalido",
+                    exception
+            );
+        }
     }
 }

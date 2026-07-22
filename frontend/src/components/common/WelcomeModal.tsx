@@ -8,11 +8,12 @@ import {
     LockKeyhole,
     MessageCircle,
     Sparkles,
-    UserRound,
 } from 'lucide-react';
+import { AppIcon } from '../icons/AppIcon';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
+import { appIconMap } from '../../constants/iconMap';
 import './WelcomeModal.css';
 
 type Step = 1 | 2 | 3 | 4;
@@ -250,7 +251,7 @@ export function WelcomeModal() {
                         <motion.section key="name" {...stepMotion} className="welcome-modal__step">
                             {renderBackButton(1)}
                             <div className="welcome-modal__icon">
-                                <UserRound size={24} />
+                                <AppIcon name={appIconMap.usuario} size={24} />
                             </div>
                             <p className="welcome-modal__eyebrow">Vamos nos conhecer</p>
                             <h1 id="welcome-modal-title">Como podemos te chamar?</h1>

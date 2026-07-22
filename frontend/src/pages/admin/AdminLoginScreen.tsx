@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import axios from 'axios';
-import { Lock, User } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AppIcon } from '../../components/icons/AppIcon';
 import { useAdminStore, type AdminUser, type Role } from '../../store/useAdminStore';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { appRoutes } from '../../utils/appRoutes';
+import { appIconMap } from '../../constants/iconMap';
 
 interface AdminLoginResponse {
     token: string;
@@ -84,7 +86,7 @@ export function AdminLoginScreen() {
 
                 <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F9F9F9', padding: '14px 16px', borderRadius: '16px', border: '1px solid #EEE' }}>
-                        <User size={20} color="#999" />
+                        <AppIcon name={appIconMap.usuario} size={20} style={{ color: '#999' }} />
                         <input
                             type="email"
                             placeholder="E-mail"

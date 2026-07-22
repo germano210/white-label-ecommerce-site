@@ -1,10 +1,12 @@
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Trash2, Check, Send, User } from 'lucide-react';
+import { ArrowLeft, Trash2, Check, Send } from 'lucide-react';
+import { AppIcon } from '../components/icons/AppIcon';
 import { getImageUrl } from '../utils/imageUtils';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { appRoutes } from '../utils/appRoutes';
+import { appIconMap } from '../constants/iconMap';
 
 interface CurtidasScreenProps {
     onBack?: () => void;
@@ -147,7 +149,11 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                     border: `1.5px solid ${!userName.trim() ? 'var(--terra)' : '#EEE'}`,
                     transition: 'all 0.3s ease'
                 }}>
-                    <User size={20} color={!userName.trim() ? 'var(--terra)' : '#999'} />
+                    <AppIcon
+                        name={appIconMap.usuario}
+                        size={20}
+                        style={{ color: !userName.trim() ? 'var(--terra)' : '#999' }}
+                    />
                     <input
                         type="text"
                         placeholder="Digite seu nome para separar..."

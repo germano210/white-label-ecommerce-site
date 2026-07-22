@@ -32,14 +32,11 @@ import java.util.Locale;
 public class SecurityConfig {
 
     private final List<String> allowedOrigins;
-    private final boolean requireHttps;
 
     public SecurityConfig(
-            @Value("${app.cors.allowed-origins}") String allowedOrigins,
-            @Value("${app.security.require-https:false}") boolean requireHttps
+            @Value("${app.cors.allowed-origins}") String allowedOrigins
     ) {
         this.allowedOrigins = parseAllowedOrigins(allowedOrigins);
-        this.requireHttps = requireHttps;
     }
 
     /**
@@ -59,11 +56,6 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .requiresChannel(channel -> {
-                    if (requireHttps) {
-                        channel.anyRequest().requiresSecure();
-                    }
-                })
                 .headers(headers -> headers
                         .httpStrictTransportSecurity(hsts -> hsts
                                 .includeSubDomains(true)
@@ -94,9 +86,9 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
-                        "/api/auth/request-otp",
-                        "/api/auth/verify-otp",
-                        "/api/auth/admin/login"
+                                "/api/auth/request-otp",
+                                "/api/auth/verify-otp",
+                                "/api/auth/admin/login"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/pagamentos/webhook").permitAll()
                         .requestMatchers("/error").permitAll()
@@ -112,6 +104,7 @@ public class SecurityConfig {
                                 "/api/missoes/semanais/**"
                         ).authenticated()
                         .requestMatchers("/api/pedidos/**").authenticated()
+                        .requestMatchers("/api/usuarios/**").authenticated()
                         .requestMatchers("/api/curtidas/**").authenticated()
                         .requestMatchers("/api/passos/**").authenticated()
                         .requestMatchers("/api/compartilhamentos/**").authenticated()
@@ -155,7 +148,9 @@ public class SecurityConfig {
                 .toList();
 
         if (origins.isEmpty()) {
-            throw new IllegalStateException("app.cors.allowed-origins deve conter ao menos uma origem");
+            throw new IllegalStateException(
+                    "app.cors.allowed-origins deve conter ao menos uma origem"
+            );
         }
 
         if (origins.stream().anyMatch(origin -> "*".equals(origin)

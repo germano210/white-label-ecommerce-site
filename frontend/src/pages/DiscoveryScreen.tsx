@@ -17,21 +17,18 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     CheckCircle2,
-    Heart,
     Share2,
-    ShoppingBag,
-    Sparkles,
-    Star,
     X,
-    type LucideIcon,
 } from 'lucide-react';
 import { SwipeCard } from '../components/domain/SwipeCard';
+import { AppIcon } from '../components/icons/AppIcon';
 import { type ProdutoVitrine } from '../store/useCartStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { type CurtidasMode, useDiscoveryStore } from '../store/useDiscoveryStore';
 import { type Missao, type MissaoApiPayload, useMissaoStore } from '../store/useMissaoStore';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
+import { appIconMap } from '../constants/iconMap';
 
 interface DiscoveryScreenProps {
     onNavigateToPath?: (path: string) => void;
@@ -423,10 +420,8 @@ function MissionCard({
     onNavigateToCurtidas,
     onShareCurrentProduct,
 }: MissionCardProps) {
-    const Icon = missionIconMap[missao.icone] ?? Heart;
     const progress = Math.min(missao.progresso, missao.meta);
     const isCompact = missao.meta > 3;
-    const filledColor = missao.icone === 'heart' ? '#ff5757' : '#687152';
     const title = isCurrent ? 'MISSÃO ATUAL' : missao.titulo;
     const isMuted = !isCurrent;
     const missionAction = isCurrent ? getMissionAction({
@@ -513,14 +508,16 @@ function MissionCard({
                                 : 'rgba(255, 255, 255, 0.32)';
 
                             return (
-                                <Icon
+                                <AppIcon
                                     key={levelIndex}
+                                    name={isFilled
+                                        ? appIconMap['coracao-preenchido']
+                                        : appIconMap['coracao-vazado']}
                                     size={15}
-                                    strokeWidth={1.7}
-                                    color={isFilled ? filledColor : emptyIconColor}
-                                    fill={isFilled ? filledColor : 'none'}
-                                    style={missionIconStyle}
-                                    aria-hidden="true"
+                                    style={{
+                                        ...missionIconStyle,
+                                        color: isFilled ? '#ff4f64' : emptyIconColor,
+                                    }}
                                 />
                             );
                         })}
@@ -720,13 +717,6 @@ function DiscoveryMessage({
         </div>
     );
 }
-
-const missionIconMap: Record<string, LucideIcon> = {
-    heart: Heart,
-    sparkles: Sparkles,
-    'shopping-bag': ShoppingBag,
-    star: Star,
-};
 
 const screenStyle: CSSProperties = {
     position: 'fixed',
