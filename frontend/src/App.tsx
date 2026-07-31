@@ -8,6 +8,7 @@ import {
     useNavigate,
 } from 'react-router-dom';
 import { LoginModal } from './components/common/LoginModal';
+import { AppHamburgerMenu } from './components/layout/AppHamburgerMenu';
 import { DiscoveryScreen } from './pages/DiscoveryScreen';
 import { CurtidasScreen } from './pages/CurtidasScreen';
 import { ExplorarScreen } from './pages/ExplorarScreen';
@@ -202,7 +203,6 @@ function AppRoutes() {
                     path={appRoutes.forYou}
                     element={(
                         <DiscoveryScreen
-                            onNavigateToPath={(path) => navigate(path)}
                             onNavigateToCurtidas={navigateToCurtidas}
                         />
                     )}
@@ -226,6 +226,7 @@ function AppRoutes() {
                 <Route path="*" element={<Navigate to={appRoutes.forYou} replace />} />
             </Routes>
 
+            {!isAdminRoute && <AppHamburgerMenu />}
             {!isAdminRoute && !isAuthenticated && <LoginModal />}
         </div>
     );

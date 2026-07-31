@@ -6,6 +6,7 @@ import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.dto.CurtidaResponseDTO;
 import com.whiteLabel.backend.dto.MissaoResponse;
+import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
@@ -37,6 +38,16 @@ public class CurtidaService {
         this.usuarioRepository = usuarioRepository;
         this.produtoRepository = produtoRepository;
         this.missaoProgressService = missaoProgressService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProdutoResponseDTO> listarCurtidas() {
+        UUID usuarioId = obterUsuarioAutenticadoId();
+
+        return curtidaRepository.findByUsuarioIdOrderByDataCurtidaDesc(usuarioId)
+                .stream()
+                .map(curtida -> ProdutoResponseDTO.from(curtida.getProduto()))
+                .toList();
     }
 
     @Transactional

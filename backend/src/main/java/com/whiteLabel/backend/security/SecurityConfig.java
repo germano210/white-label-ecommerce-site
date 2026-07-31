@@ -105,7 +105,7 @@ public class SecurityConfig {
                         ).authenticated()
                         .requestMatchers("/api/pedidos/**").authenticated()
                         .requestMatchers("/api/usuarios/**").authenticated()
-                        .requestMatchers("/api/curtidas/**").authenticated()
+                        .requestMatchers("/api/curtidas", "/api/curtidas/**").authenticated()
                         .requestMatchers("/api/passos/**").authenticated()
                         .requestMatchers("/api/compartilhamentos/**").authenticated()
                         .anyRequest().authenticated())

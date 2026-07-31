@@ -31,7 +31,6 @@ import { apiRoutes } from '../utils/apiRoutes';
 import { appIconMap } from '../constants/iconMap';
 
 interface DiscoveryScreenProps {
-    onNavigateToPath?: (path: string) => void;
     onNavigateToCurtidas?: (mode?: CurtidasMode) => void;
 }
 
@@ -68,7 +67,6 @@ function isHttpStatus(error: unknown, status: number) {
 }
 
 export function DiscoveryScreen({
-    onNavigateToPath,
     onNavigateToCurtidas,
 }: DiscoveryScreenProps) {
     const products = useDiscoveryStore((state) => state.products);
@@ -317,7 +315,6 @@ export function DiscoveryScreen({
                             onSwipe={(direction) => handleSwipe(product, direction)}
                             onUndo={handleUndo}
                             onShare={handleShareCurrentProduct}
-                            onMenuNavigate={onNavigateToPath}
                             reactionCounts={productReactionCounts[product.id]}
                             missionOverlay={stackIndex === 0 ? (
                                 <MissionsRail
@@ -439,17 +436,18 @@ function MissionCard({
                 ...(isCurrent ? missionCardCurrentStyle : missionCardMutedStyle),
             }}
         >
+            <span style={{
+                ...missionBadgeStyle,
+                background: isCurrent
+                    ? 'rgba(255, 255, 255, 0.94)'
+                    : 'rgba(255, 255, 255, 0.18)',
+                color: isCurrent ? '#2f3328' : 'rgba(255, 255, 255, 0.55)',
+            }}>
+                {displayIndex}
+            </span>
+
             <div style={missionTextStyle}>
                 <div style={missionTitleRowStyle}>
-                    <span style={{
-                        ...missionBadgeStyle,
-                        background: isCurrent
-                            ? 'rgba(255, 255, 255, 0.94)'
-                            : 'rgba(255, 255, 255, 0.18)',
-                        color: isCurrent ? '#2f3328' : 'rgba(255, 255, 255, 0.55)',
-                    }}>
-                        {displayIndex}
-                    </span>
                     <strong
                         style={{
                             ...missionTitleStyle,
@@ -513,7 +511,7 @@ function MissionCard({
                                     name={isFilled
                                         ? appIconMap['coracao-preenchido']
                                         : appIconMap['coracao-vazado']}
-                                    size={15}
+                                    size={13}
                                     style={{
                                         ...missionIconStyle,
                                         color: isFilled ? '#ff4f64' : emptyIconColor,
@@ -793,11 +791,11 @@ const missionsTrackStyle: CSSProperties = {
 
 const missionCardStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gridTemplateColumns: 'auto minmax(0, auto) auto',
     alignItems: 'center',
-    gap: '8px',
-    width: 'min(164px, calc(100vw - 18px))',
-    minWidth: '164px',
+    columnGap: '6px',
+    width: 'fit-content',
+    maxWidth: 'calc(100vw - 24px)',
     minHeight: '43px',
     flex: '0 0 auto',
     borderRadius: '8px',
@@ -822,6 +820,7 @@ const missionCardMutedStyle: CSSProperties = {
 
 const missionTextStyle: CSSProperties = {
     minWidth: 0,
+    maxWidth: 'calc(100vw - 122px)',
 };
 
 const missionTitleRowStyle: CSSProperties = {
@@ -834,6 +833,8 @@ const missionBadgeStyle: CSSProperties = {
     display: 'grid',
     width: '14px',
     height: '14px',
+    aspectRatio: '1 / 1',
+    flex: '0 0 14px',
     placeItems: 'center',
     borderRadius: '999px',
     background: '#2f3328',
@@ -843,11 +844,11 @@ const missionBadgeStyle: CSSProperties = {
 };
 
 const missionTitleStyle: CSSProperties = {
+    minWidth: 0,
     overflow: 'hidden',
     color: '#5f635a',
     fontSize: '9px',
     fontWeight: 900,
-    letterSpacing: '0.04em',
     lineHeight: 1,
     textOverflow: 'ellipsis',
     textTransform: 'uppercase',
@@ -869,6 +870,7 @@ const missionControlStyle: CSSProperties = {
     display: 'flex',
     maxWidth: '72px',
     minWidth: 0,
+    flex: '0 0 auto',
     flexDirection: 'column',
     alignItems: 'flex-end',
     gap: '4px',

@@ -1,6 +1,7 @@
 package com.whiteLabel.backend.repository;
 
 import com.whiteLabel.backend.domain.Curtida;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +13,9 @@ import java.util.UUID;
 public interface CurtidaRepository extends JpaRepository<Curtida, Long> {
 
     boolean existsByUsuarioIdAndProdutoId(UUID usuarioId, Long produtoId);
+
+    @EntityGraph(attributePaths = "produto")
+    List<Curtida> findByUsuarioIdOrderByDataCurtidaDesc(UUID usuarioId);
 
     List<Curtida> findTop2ByProdutoIdOrderByDataCurtidaDesc(Long produtoId);
 

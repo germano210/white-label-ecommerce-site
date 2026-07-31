@@ -36,11 +36,21 @@ const iconSvgByName: Record<AppIconName, string> = {
     'coracao-preenchido': coracaoPreenchidoSvg,
 };
 
-function normalizeSvg(svg: string) {
-    return svg
+function normalizeSvg(svg: string, name: AppIconName) {
+    const normalizedSvg = svg
         .replace(/\sfill=(["'])#(?:ffffff|fff|000000|000)\1/gi, ' fill="currentColor"')
         .replace(/\sstroke=(["'])#(?:ffffff|fff|000000|000)\1/gi, ' stroke="currentColor"')
-        .replace(/<svg\s/i, '<svg width="100%" height="100%" aria-hidden="true" focusable="false" ');
+        .replace(/<svg\s/i, '<svg width="100%" height="100%" aria-hidden="true" focusable="false" style="overflow: visible;" ');
+
+    if (name === 'coracao-vazado') {
+        return normalizedSvg.replace('viewBox="0 0 900 900"', 'viewBox="-55 0 1010 900"');
+    }
+
+    if (name === 'coracao-preenchido') {
+        return normalizedSvg.replace('viewBox="0 0 900 900"', 'viewBox="-24 0 948 900"');
+    }
+
+    return normalizedSvg;
 }
 
 export function AppIcon({
@@ -66,7 +76,7 @@ export function AppIcon({
                 lineHeight: 0,
                 ...style,
             }}
-            dangerouslySetInnerHTML={{ __html: normalizeSvg(iconSvgByName[name]) }}
+            dangerouslySetInnerHTML={{ __html: normalizeSvg(iconSvgByName[name], name) }}
         />
     );
 }

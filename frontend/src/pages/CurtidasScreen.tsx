@@ -1,12 +1,13 @@
-import { useDiscoveryStore } from '../store/useDiscoveryStore';
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Trash2, Check, Send } from 'lucide-react';
-import { AppIcon } from '../components/icons/AppIcon';
-import { getImageUrl } from '../utils/imageUtils';
+import { useEffect, useState, type CSSProperties } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { type ProdutoVitrine } from '../store/useCartStore';
+import { useAuthStore, type AuthUser } from '../store/useAuthStore';
+import { type CurtidasMode, useDiscoveryStore } from '../store/useDiscoveryStore';
 import { api } from '../utils/api';
+import { getImageUrl } from '../utils/imageUtils';
 import { apiRoutes } from '../utils/apiRoutes';
 import { appRoutes } from '../utils/appRoutes';
-import { appIconMap } from '../constants/iconMap';
 
 interface CurtidasScreenProps {
     onBack?: () => void;
@@ -19,56 +20,108 @@ interface CreateCheckoutResponse {
     pedidoId?: string | number;
 }
 
+function getProductImages(item: ProdutoVitrine) {
+    const images = item.images?.length ? item.images : [null];
+    return images.map((image) => getImageUrl(image));
+}
+
+function getProductSize(item: ProdutoVitrine) {
+    const size = item.tamanho?.trim();
+    if (!size) return 'Tam. Único';
+
+    return `Tam. ${size.charAt(0).toUpperCase()}${size.slice(1).toLowerCase()}`;
+}
+
+function getAuthUserName(user: AuthUser | null) {
+    const nome = typeof user?.nome === 'string' ? user.nome.trim() : '';
+    const name = typeof user?.name === 'string' ? user.name.trim() : '';
+    const telefone = typeof user?.telefone === 'string' ? user.telefone.trim() : '';
+    const phone = typeof user?.phone === 'string' ? user.phone.trim() : '';
+    const fallbackPhone = telefone || phone;
+    const displayName = nome || name;
+
+    return displayName && displayName !== fallbackPhone ? displayName : '';
+}
+
+function getCheckoutErrorMessage(error: unknown) {
+    if (!axios.isAxiosError(error)) {
+        return 'Não foi possível iniciar o resgate agora. Tente novamente.';
+    }
+
+    const responseData = error.response?.data as { message?: string; error?: string } | undefined;
+    return responseData?.message
+        ?? responseData?.error
+        ?? 'Não foi possível iniciar o resgate agora. Tente novamente.';
+}
+
 export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
+    const navigate = useNavigate();
+    const authUser = useAuthStore((state) => state.user);
+    const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+    const [activeImageByItemId, setActiveImageByItemId] = useState<Record<string, number>>({});
+    const [checkoutItemId, setCheckoutItemId] = useState<string | null>(null);
+    const [checkoutErrorByItemId, setCheckoutErrorByItemId] = useState<Record<string, string>>({});
+    const [namePromptItemId, setNamePromptItemId] = useState<string | null>(null);
+    const [checkoutName, setCheckoutName] = useState('');
     const {
         likedItems,
-        itemPrefs,
         curtidasMode,
         isCurtidasLoading,
         curtidasError,
         fetchCurtidas,
-        setItemSize,
-        toggleSelection,
-        removeLikedItem,
-        userName,
-        setUserName,
+        setCurtidasMode,
     } = useDiscoveryStore();
-    const [checkoutError, setCheckoutError] = useState('');
-    const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
 
     useEffect(() => {
         void fetchCurtidas();
     }, [fetchCurtidas]);
 
-    const selectedItems = likedItems.filter(item => itemPrefs[item.id]?.isSelected);
+    const isResgateMode = curtidasMode === 'resgate';
 
-    // Calcula o total somando apenas as peças que estão com a checkbox marcada
-    const total = likedItems.reduce((acc, item) => {
-        if (itemPrefs[item.id]?.isSelected) {
-            // Converte "R$79,90" para 79.90 matemático
-            const priceNum = parseFloat(item.priceNew.replace('R$', '').replace('.', '').replace(',', '.'));
-            return acc + (isNaN(priceNum) ? 0 : priceNum);
+    const handleTabChange = (mode: CurtidasMode) => {
+        setCurtidasMode(mode);
+        navigate(mode === 'resgate' ? appRoutes.resgate : appRoutes.curtidas);
+    };
+
+    const handleGoToForYou = () => {
+        if (onBack) {
+            onBack();
+            return;
         }
-        return acc;
-    }, 0);
 
-    const handleCheckout = async () => {
-        if (selectedItems.length === 0 || !userName.trim()) return;
+        navigate(appRoutes.forYou);
+    };
 
-        setCheckoutError('');
-        setIsCreatingCheckout(true);
+    const handleCreateCheckout = async (item: ProdutoVitrine) => {
+        const storedName = getAuthUserName(authUser);
+        const typedName = checkoutName.trim();
+        const clienteNome = storedName || typedName;
+
+        if (!clienteNome) {
+            setNamePromptItemId(item.id);
+            setCheckoutErrorByItemId((currentErrors) => ({
+                ...currentErrors,
+                [item.id]: 'Informe seu nome para continuar o resgate.',
+            }));
+            return;
+        }
+
+        setCheckoutItemId(item.id);
+        setCheckoutErrorByItemId((currentErrors) => {
+            const { [item.id]: _removedError, ...nextErrors } = currentErrors;
+            return nextErrors;
+        });
 
         try {
-            const successUrl = new URL(appRoutes.checkoutSuccess, window.location.origin);
             const cancelUrl = new URL(window.location.href);
             const { data } = await api.post<CreateCheckoutResponse>(apiRoutes.checkout.create, {
-                clienteNome: userName.trim(),
-                itens: selectedItems.map((item) => ({
+                clienteNome,
+                itens: [{
                     produtoId: item.id,
-                    tamanho: itemPrefs[item.id]?.size ?? item.tamanho,
+                    tamanho: item.tamanho,
                     quantidade: 1,
-                })),
-                successUrl: successUrl.toString(),
+                }],
+                successUrl: appRoutes.checkoutSuccess,
                 cancelUrl: cancelUrl.toString(),
             });
             const checkoutUrl = data.checkoutUrl ?? data.gatewayUrl ?? data.url;
@@ -78,203 +131,538 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
             }
 
             window.location.assign(checkoutUrl);
-        } catch {
-            setCheckoutError('Não foi possível criar o checkout agora. Tente novamente.');
+        } catch (error) {
+            setCheckoutErrorByItemId((currentErrors) => ({
+                ...currentErrors,
+                [item.id]: getCheckoutErrorMessage(error),
+            }));
         } finally {
-            setIsCreatingCheckout(false);
+            setCheckoutItemId(null);
         }
     };
 
-    if (isCurtidasLoading) {
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ width: '34px', height: '34px', borderRadius: '50%', border: '3px solid #E8DED6', borderTopColor: 'var(--terra)', animation: 'spin 0.8s linear infinite' }} />
-                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)', marginTop: '20px' }}>Carregando curtidas</h2>
-                <p style={{ fontSize: '14px', color: 'var(--muted)', marginTop: '10px' }}>Estamos buscando suas peças separadas.</p>
-            </div>
-        );
-    }
-
-    if (curtidasError) {
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px 20px', textAlign: 'center' }}>
-                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)', marginTop: '20px' }}>Não conseguimos carregar</h2>
-                <p style={{ fontSize: '14px', color: 'var(--muted)', marginTop: '10px' }}>{curtidasError}</p>
-                <button type="button" onClick={() => void fetchCurtidas()} style={{ marginTop: '18px', padding: '12px 18px', border: 0, borderRadius: '14px', color: 'white', background: 'var(--terra)', fontWeight: 700, cursor: 'pointer' }}>
-                    Tentar novamente
-                </button>
-            </div>
-        );
-    }
-
-    if (likedItems.length === 0) {
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '64px', opacity: 0.8 }}>💖</div>
-                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--dark)', marginTop: '20px' }}>Lista Vazia</h2>
-                <p style={{ fontSize: '14px', color: 'var(--muted)', marginTop: '10px' }}>Você ainda não separou nenhuma peça.</p>
-            </div>
-        );
-    }
-
     return (
-        <div style={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
-
-            <div style={{ position: 'relative', padding: '20px 16px', textAlign: 'center', borderBottom: '1px solid #EEEEEE' }}>
-                {onBack && (
+        <main style={screenStyle}>
+            <header style={headerStyle}>
+                <nav style={tabsStyle} aria-label="Curtidas">
                     <button
                         type="button"
-                        onClick={onBack}
-                        aria-label="Voltar para descoberta"
-                        style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', display: 'grid', width: '34px', height: '34px', placeItems: 'center', border: 0, borderRadius: '999px', color: 'var(--dark)', background: '#F5F0EA', cursor: 'pointer' }}
+                        onClick={() => handleTabChange('lista')}
+                        style={{
+                            ...tabButtonStyle,
+                            ...(isResgateMode ? inactiveTabStyle : activeTabStyle),
+                        }}
                     >
-                        <ArrowLeft size={18} />
+                        Suas curtidas
                     </button>
-                )}
-                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', color: 'var(--dark)' }}>
-                    {curtidasMode === 'resgate' ? 'Resgatar tentativa' : 'Minhas Curtidas'}
-                </h2>
-                {curtidasMode === 'resgate' && (
-                    <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: '12px', fontWeight: 700 }}>
-                        Escolha uma peça curtida para usar sua tentativa.
-                    </p>
-                )}
-            </div>
+                    <button
+                        type="button"
+                        onClick={() => handleTabChange('resgate')}
+                        style={{
+                            ...tabButtonStyle,
+                            ...(isResgateMode ? activeTabStyle : inactiveTabStyle),
+                        }}
+                    >
+                        Resgates
+                    </button>
+                </nav>
+            </header>
 
-            {/* CAMPO DE NOME NO CARRINHO */}
-            <div style={{ padding: '16px 16px 0' }}>
-                <div style={{
-                    background: 'white', padding: '12px 16px', borderRadius: '16px',
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    border: `1.5px solid ${!userName.trim() ? 'var(--terra)' : '#EEE'}`,
-                    transition: 'all 0.3s ease'
-                }}>
-                    <AppIcon
-                        name={appIconMap.usuario}
-                        size={20}
-                        style={{ color: !userName.trim() ? 'var(--terra)' : '#999' }}
+            <section style={contentStyle} aria-label="Produtos curtidos">
+                {isCurtidasLoading && (
+                    <StateMessage
+                        title="Carregando curtidas"
+                        description="Estamos buscando suas peças salvas."
                     />
-                    <input
-                        type="text"
-                        placeholder="Digite seu nome para separar..."
-                        value={userName}
-                        onChange={(e) => setUserName(e.target.value)}
-                        style={{ flex: 1, border: 'none', outline: 'none', fontSize: '14px', background: 'transparent' }}
-                    />
-                </div>
-                {!userName.trim() && (
-                    <span style={{ fontSize: '10px', color: 'var(--terra)', marginLeft: '12px', fontWeight: 600 }}>
-                        * Precisamos do seu nome para enviar o pedido
-                    </span>
                 )}
-                {checkoutError && (
-                    <div role="alert" style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '12px', color: '#A63D2F', background: '#FFF0ED', fontSize: '12px', fontWeight: 700 }}>
-                        {checkoutError}
+
+                {!isCurtidasLoading && curtidasError && (
+                    <StateMessage
+                        title="Não conseguimos carregar"
+                        description={curtidasError}
+                        actionLabel="Tentar novamente"
+                        onAction={() => void fetchCurtidas()}
+                    />
+                )}
+
+                {!isCurtidasLoading && !curtidasError && likedItems.length === 0 && (
+                    <StateMessage
+                        title="Nenhuma curtida ainda"
+                        description="Volte para o For You e curta as peças que combinam com você."
+                        actionLabel="Ver peças"
+                        onAction={handleGoToForYou}
+                    />
+                )}
+
+                {!isCurtidasLoading && !curtidasError && likedItems.length > 0 && (
+                    <div style={gridStyle}>
+                        {likedItems.map((item) => (
+                            <LikedProductCard
+                                key={item.id}
+                                item={item}
+                                isExpanded={expandedItemId === item.id}
+                                activeImageIndex={activeImageByItemId[item.id] ?? 0}
+                                isCreatingCheckout={checkoutItemId === item.id}
+                                checkoutError={checkoutErrorByItemId[item.id]}
+                                shouldAskName={namePromptItemId === item.id && !getAuthUserName(authUser)}
+                                checkoutName={checkoutName}
+                                onCheckoutNameChange={(name) => {
+                                    setCheckoutName(name);
+                                    setCheckoutErrorByItemId((currentErrors) => {
+                                        const { [item.id]: _removedError, ...nextErrors } = currentErrors;
+                                        return nextErrors;
+                                    });
+                                }}
+                                onExpand={() => setExpandedItemId(item.id)}
+                                onRedeem={() => void handleCreateCheckout(item)}
+                                onSelectImage={(imageIndex) => {
+                                    setActiveImageByItemId((currentImages) => ({
+                                        ...currentImages,
+                                        [item.id]: imageIndex,
+                                    }));
+                                }}
+                            />
+                        ))}
                     </div>
                 )}
-            </div>
+            </section>
+        </main>
+    );
+}
 
-            {/* LISTA DE PRODUTOS */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: '120px' }}>
-                {likedItems.map(item => {
-                    const pref = itemPrefs[item.id];
-                    const isSelected = pref?.isSelected;
+interface LikedProductCardProps {
+    item: ProdutoVitrine;
+    isExpanded: boolean;
+    activeImageIndex: number;
+    isCreatingCheckout: boolean;
+    checkoutError?: string;
+    shouldAskName: boolean;
+    checkoutName: string;
+    onCheckoutNameChange: (name: string) => void;
+    onExpand: () => void;
+    onRedeem: () => void;
+    onSelectImage: (imageIndex: number) => void;
+}
 
-                    const imageUrl = getImageUrl(item.images?.[0]);
+function LikedProductCard({
+    item,
+    isExpanded,
+    activeImageIndex,
+    isCreatingCheckout,
+    checkoutError,
+    shouldAskName,
+    checkoutName,
+    onCheckoutNameChange,
+    onExpand,
+    onRedeem,
+    onSelectImage,
+}: LikedProductCardProps) {
+    const images = getProductImages(item);
+    const safeImageIndex = Math.min(Math.max(activeImageIndex, 0), images.length - 1);
+    const activeImage = images[safeImageIndex];
 
-                    return (
-                        <div key={item.id} style={{ display: 'flex', gap: '12px', background: 'white', padding: '12px', borderRadius: '20px', marginBottom: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+    return (
+        <article
+            style={{
+                ...productCardStyle,
+                ...(isExpanded ? expandedProductCardStyle : null),
+                backgroundImage: isExpanded ? `url("${activeImage}")` : undefined,
+            }}
+        >
+            {isExpanded && <div aria-hidden="true" style={expandedBackgroundOverlayStyle} />}
 
-                            {/* Checkbox */}
-                            <div onClick={() => toggleSelection(item.id)} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                <div style={{
-                                    width: '24px', height: '24px', borderRadius: '6px',
-                                    border: `2px solid ${isSelected ? 'var(--terra)' : '#DDDDDD'}`,
-                                    background: isSelected ? 'var(--terra)' : 'transparent',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    transition: 'all 0.2s ease'
-                                }}>
-                                    {isSelected && <Check size={16} strokeWidth={3} color="white" />}
-                                </div>
-                            </div>
-
-                            {/* Imagem (Thumbnail) */}
-                            <img src={imageUrl} alt={item.name} style={{ width: '80px', height: '110px', objectFit: 'cover', borderRadius: '12px' }} />
-
-                            {/* Detalhes e Controles */}
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <h4 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', margin: 0, color: 'var(--dark)', lineHeight: 1.1 }}>{item.name}</h4>
-                                        <button onClick={() => removeLikedItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#BBBBBB', padding: '0 0 4px 4px' }}>
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-                                        {item.sub.split('·').slice(0, 2).join('·')}
-                                    </div>
-                                </div>
-
-                                {/* Seletor de Tamanhos (Pill Buttons) */}
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                                    {['P', 'M', 'G'].map(sz => (
-                                        <button
-                                            key={sz}
-                                            onClick={() => setItemSize(item.id, sz)}
-                                            style={{
-                                                padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                                                border: `1px solid ${pref?.size === sz ? 'var(--terra)' : '#EEEEEE'}`,
-                                                background: pref?.size === sz ? 'var(--soft)' : 'white',
-                                                color: pref?.size === sz ? 'var(--terra)' : '#999999',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                        >
-                                            {sz}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Preço */}
-                                <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 600, color: 'var(--dark)', marginTop: '8px' }}>
-                                    {item.priceNew}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* BARRA FIXA DE CHECKOUT */}
             <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100,
-                background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)',
-                borderTop: '1px solid #EEEEEE', padding: '16px 20px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                boxShadow: '0 -4px 20px rgba(0,0,0,0.05)'
+                ...productInfoStyle,
+                ...(isExpanded ? expandedProductInfoStyle : null),
             }}>
-                <div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Selecionado</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: 600, color: 'var(--dark)', lineHeight: 1 }}>
-                        R$ {total.toFixed(2).replace('.', ',')}
-                    </div>
-                </div>
-
-                <button
-                    onClick={() => void handleCheckout()}
-                    disabled={total === 0 || !userName.trim() || isCreatingCheckout}
-                    style={{
-                        background: (total > 0 && userName.trim() && !isCreatingCheckout) ? 'var(--terra)' : '#DDDDDD',
-                        color: 'white', border: 'none', padding: '14px 24px',
-                        borderRadius: '16px', fontSize: '14px', fontWeight: 700,
-                        display: 'flex', alignItems: 'center', gap: '8px',
-                        cursor: (total > 0 && userName.trim() && !isCreatingCheckout) ? 'pointer' : 'not-allowed',
-                        boxShadow: (total > 0 && userName.trim() && !isCreatingCheckout) ? '0 8px 20px rgba(230, 57, 143, 0.3)' : 'none',
-                        transition: 'all 0.3s ease'
-                    }}
-                >
-                    {isCreatingCheckout ? 'Criando...' : 'Pagar'} <Send size={16} style={{ transform: 'rotate(-20deg) translateX(2px)' }} />
-                </button>
+                <h2 style={productNameStyle}>{item.name}</h2>
+                <span style={productSizeStyle}>{getProductSize(item)}</span>
             </div>
+
+            <div style={{
+                ...imageWrapStyle,
+                ...(isExpanded ? expandedImageWrapStyle : null),
+            }}>
+                <img
+                    src={activeImage}
+                    alt={item.name}
+                    loading="lazy"
+                    style={{
+                        ...productImageStyle,
+                        ...(isExpanded ? expandedProductImageStyle : null),
+                    }}
+                />
+            </div>
+
+            <div style={dotsStyle} aria-label={`${safeImageIndex + 1} de ${images.length} fotos`}>
+                {images.map((image, imageIndex) => (
+                    <button
+                        key={`${image}-${imageIndex}`}
+                        type="button"
+                        aria-label={`Ver foto ${imageIndex + 1}`}
+                        onClick={() => onSelectImage(imageIndex)}
+                        style={{
+                            ...dotStyle,
+                            ...(imageIndex === safeImageIndex ? activeDotStyle : inactiveDotStyle),
+                        }}
+                    />
+                ))}
+            </div>
+
+            <button
+                type="button"
+                onClick={() => {
+                    if (!isExpanded) {
+                        onExpand();
+                        return;
+                    }
+
+                    onRedeem();
+                }}
+                disabled={isCreatingCheckout}
+                style={{
+                    ...cardButtonStyle,
+                    ...(isExpanded ? cardButtonExpandedStyle : cardButtonDefaultStyle),
+                    opacity: isCreatingCheckout ? 0.72 : 1,
+                    cursor: isCreatingCheckout ? 'wait' : 'pointer',
+                }}
+            >
+                {isCreatingCheckout
+                    ? 'Criando...'
+                    : isExpanded
+                        ? 'Resgatar item'
+                        : 'Ver item'}
+            </button>
+
+            {isExpanded && shouldAskName && (
+                <label style={namePromptStyle}>
+                    <span style={namePromptLabelStyle}>Seu nome</span>
+                    <input
+                        value={checkoutName}
+                        onChange={(event) => onCheckoutNameChange(event.target.value)}
+                        placeholder="Nome para resgate"
+                        style={namePromptInputStyle}
+                    />
+                </label>
+            )}
+
+            {isExpanded && checkoutError && (
+                <p role="alert" style={cardErrorStyle}>{checkoutError}</p>
+            )}
+        </article>
+    );
+}
+
+interface StateMessageProps {
+    title: string;
+    description: string;
+    actionLabel?: string;
+    onAction?: () => void;
+}
+
+function StateMessage({
+    title,
+    description,
+    actionLabel,
+    onAction,
+}: StateMessageProps) {
+    return (
+        <div style={stateStyle}>
+            <h1 style={stateTitleStyle}>{title}</h1>
+            <p style={stateDescriptionStyle}>{description}</p>
+            {actionLabel && onAction && (
+                <button type="button" onClick={onAction} style={stateButtonStyle}>
+                    {actionLabel}
+                </button>
+            )}
         </div>
     );
 }
+
+const screenStyle: CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    display: 'flex',
+    width: '100%',
+    maxWidth: '430px',
+    height: '100dvh',
+    flexDirection: 'column',
+    margin: '0 auto',
+    overflow: 'hidden',
+    background: '#ffffff',
+    color: '#000000',
+    fontFamily: "'DM Sans', sans-serif",
+};
+
+const headerStyle: CSSProperties = {
+    position: 'relative',
+    flex: '0 0 auto',
+    minHeight: '64px',
+    padding: '30px 58px 11px',
+    background: '#ffffff',
+};
+
+const tabsStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: '22px',
+};
+
+const tabButtonStyle: CSSProperties = {
+    position: 'relative',
+    border: 0,
+    background: 'transparent',
+    cursor: 'pointer',
+    padding: '0 0 5px',
+    fontSize: '8.5px',
+    fontWeight: 700,
+    lineHeight: 1,
+};
+
+const activeTabStyle: CSSProperties = {
+    color: '#000000',
+    boxShadow: 'inset 0 -1px 0 #000000',
+};
+
+const inactiveTabStyle: CSSProperties = {
+    color: '#b8b8b8',
+    boxShadow: 'inset 0 -1px 0 transparent',
+};
+
+const contentStyle: CSSProperties = {
+    flex: 1,
+    minHeight: 0,
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    padding: '8px 8px 96px',
+    background: '#ffffff',
+    scrollbarWidth: 'none',
+};
+
+const gridStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '9px',
+    alignItems: 'start',
+};
+
+const productCardStyle: CSSProperties = {
+    position: 'relative',
+    display: 'flex',
+    minWidth: 0,
+    minHeight: '260px',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    borderRadius: '7px',
+    background: '#ffffff',
+    backgroundPosition: 'center',
+    backgroundSize: 'cover',
+    boxShadow: '0 8px 22px rgba(0, 0, 0, 0.07)',
+};
+
+const expandedProductCardStyle: CSSProperties = {
+    backgroundColor: '#ffffff',
+};
+
+const expandedBackgroundOverlayStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 0,
+    background: 'rgba(255, 255, 255, 0.86)',
+    pointerEvents: 'none',
+};
+
+const productInfoStyle: CSSProperties = {
+    position: 'relative',
+    zIndex: 1,
+    minHeight: '37px',
+    padding: '12px 8px 6px',
+    textAlign: 'center',
+};
+
+const expandedProductInfoStyle: CSSProperties = {
+    paddingTop: '11px',
+};
+
+const productNameStyle: CSSProperties = {
+    margin: 0,
+    overflow: 'hidden',
+    color: '#000000',
+    fontSize: '8.8px',
+    fontWeight: 900,
+    lineHeight: 1.08,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+const productSizeStyle: CSSProperties = {
+    display: 'block',
+    marginTop: '5px',
+    overflow: 'hidden',
+    color: '#6f6f6f',
+    fontSize: '7.2px',
+    fontWeight: 600,
+    lineHeight: 1,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+const imageWrapStyle: CSSProperties = {
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    flex: 1,
+    minHeight: '154px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    background: '#f7f6f2',
+};
+
+const expandedImageWrapStyle: CSSProperties = {
+    background: 'transparent',
+    padding: '6px 10px 0',
+};
+
+const productImageStyle: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+};
+
+const expandedProductImageStyle: CSSProperties = {
+    objectFit: 'contain',
+};
+
+const dotsStyle: CSSProperties = {
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    minHeight: '18px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '5px',
+};
+
+const dotStyle: CSSProperties = {
+    width: '3.5px',
+    height: '3.5px',
+    border: 0,
+    borderRadius: '999px',
+    cursor: 'pointer',
+    padding: 0,
+};
+
+const activeDotStyle: CSSProperties = {
+    background: '#000000',
+};
+
+const inactiveDotStyle: CSSProperties = {
+    background: '#d8d8d8',
+};
+
+const cardButtonStyle: CSSProperties = {
+    position: 'relative',
+    zIndex: 1,
+    minHeight: '42px',
+    margin: '10px 13px 13px',
+    border: 0,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '7.5px',
+    fontWeight: 900,
+    lineHeight: 1,
+};
+
+const cardButtonDefaultStyle: CSSProperties = {
+    background: '#ffffff',
+    color: '#222222',
+    boxShadow: '0 8px 22px rgba(0, 0, 0, 0.08)',
+};
+
+const cardButtonExpandedStyle: CSSProperties = {
+    background: '#687152',
+    color: '#ffffff',
+    boxShadow: 'none',
+};
+
+const namePromptStyle: CSSProperties = {
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    margin: '-4px 13px 10px',
+};
+
+const namePromptLabelStyle: CSSProperties = {
+    color: '#4d4d4d',
+    fontSize: '6.8px',
+    fontWeight: 800,
+    lineHeight: 1,
+};
+
+const namePromptInputStyle: CSSProperties = {
+    width: '100%',
+    minHeight: '30px',
+    border: '1px solid rgba(104, 113, 82, 0.28)',
+    borderRadius: '8px',
+    background: 'rgba(255, 255, 255, 0.86)',
+    color: '#000000',
+    outline: 'none',
+    padding: '0 9px',
+    fontSize: '9px',
+    fontWeight: 700,
+};
+
+const cardErrorStyle: CSSProperties = {
+    position: 'relative',
+    zIndex: 1,
+    margin: '-3px 13px 11px',
+    color: '#8a372f',
+    fontSize: '7.2px',
+    fontWeight: 800,
+    lineHeight: 1.25,
+    textAlign: 'center',
+};
+
+const stateStyle: CSSProperties = {
+    display: 'flex',
+    minHeight: 'calc(100dvh - 168px)',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '24px',
+    textAlign: 'center',
+};
+
+const stateTitleStyle: CSSProperties = {
+    margin: 0,
+    color: '#000000',
+    fontSize: '20px',
+    fontWeight: 900,
+    lineHeight: 1.1,
+};
+
+const stateDescriptionStyle: CSSProperties = {
+    maxWidth: '270px',
+    margin: '10px 0 0',
+    color: '#777777',
+    fontSize: '12px',
+    fontWeight: 600,
+    lineHeight: 1.45,
+};
+
+const stateButtonStyle: CSSProperties = {
+    minHeight: '40px',
+    marginTop: '18px',
+    border: 0,
+    borderRadius: '10px',
+    background: '#687152',
+    color: '#ffffff',
+    cursor: 'pointer',
+    padding: '0 18px',
+    fontSize: '11px',
+    fontWeight: 900,
+};
