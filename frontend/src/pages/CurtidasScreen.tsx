@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { type ProdutoVitrine } from '../store/useCartStore';
 import { useAuthStore, type AuthUser } from '../store/useAuthStore';
 import { type CurtidasMode, useDiscoveryStore } from '../store/useDiscoveryStore';
+import { AppHamburgerMenu } from '../components/layout/AppHamburgerMenu';
 import { api } from '../utils/api';
 import { getImageUrl } from '../utils/imageUtils';
 import { apiRoutes } from '../utils/apiRoutes';
@@ -76,6 +77,19 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
         void fetchCurtidas();
     }, [fetchCurtidas]);
 
+    useEffect(() => {
+        const previousBodyBackground = document.body.style.backgroundColor;
+        const previousHtmlBackground = document.documentElement.style.backgroundColor;
+
+        document.body.style.backgroundColor = '#e6e6e6';
+        document.documentElement.style.backgroundColor = '#e6e6e6';
+
+        return () => {
+            document.body.style.backgroundColor = previousBodyBackground;
+            document.documentElement.style.backgroundColor = previousHtmlBackground;
+        };
+    }, []);
+
     const isResgateMode = curtidasMode === 'resgate';
 
     const handleTabChange = (mode: CurtidasMode) => {
@@ -143,7 +157,9 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
 
     return (
         <main style={screenStyle}>
-            <header style={headerStyle}>
+            <div style={windowStyle}>
+                <AppHamburgerMenu contained />
+                <header style={headerStyle}>
                 <nav style={tabsStyle} aria-label="Curtidas">
                     <button
                         type="button"
@@ -225,7 +241,8 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                         ))}
                     </div>
                 )}
-            </section>
+                </section>
+            </div>
         </main>
     );
 }
@@ -383,15 +400,26 @@ const screenStyle: CSSProperties = {
     position: 'fixed',
     inset: 0,
     display: 'flex',
+    boxSizing: 'border-box',
+    justifyContent: 'center',
     width: '100%',
-    maxWidth: '430px',
     height: '100dvh',
-    flexDirection: 'column',
-    margin: '0 auto',
     overflow: 'hidden',
-    background: '#ffffff',
+    background: '#e6e6e6',
     color: '#000000',
     fontFamily: "'DM Sans', sans-serif",
+    padding: '10px 7px 0',
+};
+
+const windowStyle: CSSProperties = {
+    position: 'relative',
+    display: 'flex',
+    width: 'min(90%, 409px)',
+    height: '100%',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    borderRadius: '9px 9px 0 0',
+    background: '#ffffff',
 };
 
 const headerStyle: CSSProperties = {
@@ -403,10 +431,19 @@ const headerStyle: CSSProperties = {
 };
 
 const tabsStyle: CSSProperties = {
+    position: 'static',
     display: 'flex',
+    width: '100%',
+    maxWidth: 'none',
+    height: 'auto',
     alignItems: 'flex-end',
     justifyContent: 'center',
     gap: '22px',
+    margin: 0,
+    padding: 0,
+    background: 'transparent',
+    backdropFilter: 'none',
+    zIndex: 'auto',
 };
 
 const tabButtonStyle: CSSProperties = {

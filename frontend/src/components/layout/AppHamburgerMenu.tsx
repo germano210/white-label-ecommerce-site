@@ -60,7 +60,11 @@ function isMenuRouteActive(pathname: string, path: string) {
     return pathname === path || (path === appRoutes.forYou && pathname === appRoutes.root);
 }
 
-export function AppHamburgerMenu() {
+interface AppHamburgerMenuProps {
+    contained?: boolean;
+}
+
+export function AppHamburgerMenu({ contained = false }: AppHamburgerMenuProps) {
     const navigate = useNavigate();
     const location = useLocation();
     const authUser = useAuthStore((state) => state.user);
@@ -68,6 +72,9 @@ export function AppHamburgerMenu() {
     const profileProgress = useMemo(() => getUserLevelProgress(authUser), [authUser]);
     const isForYouRoute = isMenuRouteActive(location.pathname, appRoutes.forYou);
     const menuButtonColor = isMenuOpen || !isForYouRoute ? '#000000' : '#FFFFFF';
+    const shellStyle = contained ? containedMenuShellStyle : menuShellStyle;
+    const buttonStyle = contained ? containedMenuButtonStyle : menuButtonStyle;
+    const panelStyle = contained ? containedMenuPanelStyle : menuPanelStyle;
 
     useEffect(() => {
         setIsMenuOpen(false);
@@ -79,7 +86,7 @@ export function AppHamburgerMenu() {
     };
 
     return (
-        <div style={menuShellStyle}>
+        <div style={shellStyle}>
             <button
                 type="button"
                 aria-label={isMenuOpen ? 'Fechar menu' : 'Abrir menu'}
@@ -89,7 +96,7 @@ export function AppHamburgerMenu() {
                     setIsMenuOpen((isOpen) => !isOpen);
                 }}
                 style={{
-                    ...menuButtonStyle,
+                    ...buttonStyle,
                     color: menuButtonColor,
                 }}
             >
@@ -115,7 +122,7 @@ export function AppHamburgerMenu() {
                             exit={{ x: '100%' }}
                             transition={{ type: 'spring', stiffness: 370, damping: 34 }}
                             onClick={(event) => event.stopPropagation()}
-                            style={menuPanelStyle}
+                            style={panelStyle}
                         >
                             <div style={menuContentStyle}>
                                 <nav style={menuListStyle}>
@@ -263,6 +270,15 @@ const menuShellStyle: CSSProperties = {
     pointerEvents: 'none',
 };
 
+const containedMenuShellStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 45,
+    overflow: 'hidden',
+    borderRadius: 'inherit',
+    pointerEvents: 'none',
+};
+
 const menuButtonStyle: CSSProperties = {
     position: 'absolute',
     top: '37px',
@@ -279,6 +295,12 @@ const menuButtonStyle: CSSProperties = {
     cursor: 'pointer',
     padding: 0,
     pointerEvents: 'auto',
+};
+
+const containedMenuButtonStyle: CSSProperties = {
+    ...menuButtonStyle,
+    top: '27px',
+    right: '10px',
 };
 
 const menuButtonNotificationDotStyle: CSSProperties = {
@@ -316,6 +338,14 @@ const menuPanelStyle: CSSProperties = {
     padding: '54px 18px 26px 28px',
     boxShadow: 'none',
     cursor: 'default',
+};
+
+const containedMenuPanelStyle: CSSProperties = {
+    ...menuPanelStyle,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: '40%',
 };
 
 const menuContentStyle: CSSProperties = {

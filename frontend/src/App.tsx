@@ -75,6 +75,9 @@ function AppRoutes() {
     const [pendingShareCode, setPendingShareCode] = useState<string | null>(null);
     const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
+    const isAdminRoute = location.pathname === appRoutes.admin;
+    const isCurtidasRoute = location.pathname.startsWith('/curtidas');
+    const appBackground = isCurtidasRoute ? '#e6e6e6' : '#FAF7F2';
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -175,13 +178,11 @@ function AppRoutes() {
     if (!hasHydrated || isRestoringCookieSession) {
         return (
             <div
-                style={{ minHeight: '100dvh', background: '#FAF7F2' }}
+                style={{ minHeight: '100dvh', background: appBackground }}
                 aria-label="Carregando sessão"
             />
         );
     }
-
-    const isAdminRoute = location.pathname === appRoutes.admin;
 
     const navigateToCurtidas = (mode: CurtidasMode = 'lista') => {
         setCurtidasMode(mode);
@@ -194,7 +195,7 @@ function AppRoutes() {
                 position: 'fixed',
                 inset: 0,
                 overflow: 'hidden',
-                background: '#FAF7F2',
+                background: appBackground,
             }}
         >
             <Routes>
@@ -226,7 +227,7 @@ function AppRoutes() {
                 <Route path="*" element={<Navigate to={appRoutes.forYou} replace />} />
             </Routes>
 
-            {!isAdminRoute && <AppHamburgerMenu />}
+            {!isAdminRoute && !isCurtidasRoute && <AppHamburgerMenu />}
             {!isAdminRoute && !isAuthenticated && <LoginModal />}
         </div>
     );
