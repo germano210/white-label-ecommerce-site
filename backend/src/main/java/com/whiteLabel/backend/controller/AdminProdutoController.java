@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -34,14 +35,45 @@ public class AdminProdutoController {
             @RequestParam("precoVenda") BigDecimal precoVenda,
             @RequestParam(value = "precoAntigo", required = false) BigDecimal precoAntigo,
             @RequestParam(value = "tamanho", required = false) String tamanho,
-            @RequestParam("imagem") MultipartFile imagem
+            @RequestParam(value = "imagem", required = false) MultipartFile imagem,
+            @RequestParam(value = "imagens", required = false) List<MultipartFile> imagens
     ) {
         return produtoService.criar(
                 nome,
                 precoVenda,
                 precoAntigo,
                 tamanho,
-                imagem
+                imagem,
+                imagens
+        );
+    }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ProdutoResponseDTO editar(
+            @PathVariable Long id,
+            @RequestParam(value = "nome", required = false) String nome,
+            @RequestParam(value = "precoVenda", required = false) BigDecimal precoVenda,
+            @RequestParam(value = "precoAntigo", required = false) BigDecimal precoAntigo,
+            @RequestParam(value = "tamanho", required = false) String tamanho,
+            @RequestParam(value = "imagem", required = false) MultipartFile imagem,
+            @RequestParam(value = "novasImagens", required = false) List<MultipartFile> novasImagens,
+            @RequestParam(value = "imagensRemovidas", required = false) String imagensRemovidas,
+            @RequestParam(value = "ordemImagens", required = false) String ordemImagens,
+            @RequestParam(value = "imagemPrincipalId", required = false) Long imagemPrincipalId,
+            @RequestParam(value = "novaImagemPrincipalIndex", required = false) Integer novaImagemPrincipalIndex
+    ) {
+        return produtoService.editar(
+                id,
+                nome,
+                precoVenda,
+                precoAntigo,
+                tamanho,
+                imagem,
+                novasImagens,
+                imagensRemovidas,
+                ordemImagens,
+                imagemPrincipalId,
+                novaImagemPrincipalIndex
         );
     }
 

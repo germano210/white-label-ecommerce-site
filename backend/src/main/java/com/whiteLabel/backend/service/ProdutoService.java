@@ -1,8 +1,11 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.domain.ProdutoImagem;
+import com.whiteLabel.backend.dto.ProdutoImagemResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.repository.CurtidaRepository;
+import com.whiteLabel.backend.repository.ProdutoImagemRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -11,23 +14,38 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class ProdutoService {
 
+    private static final Pattern NUMERO_PATTERN = Pattern.compile("\\d+");
+    private static final Pattern OBJETO_JSON_PATTERN = Pattern.compile("\\{[^}]*}");
+    private static final Pattern ID_JSON_PATTERN = Pattern.compile("\"?id\"?\\s*:\\s*(\\d+)");
+    private static final Pattern ORDEM_JSON_PATTERN = Pattern.compile("\"?ordem\"?\\s*:\\s*(\\d+)");
+
     private final ProdutoRepository produtoRepository;
+    private final ProdutoImagemRepository produtoImagemRepository;
     private final CurtidaRepository curtidaRepository;
     private final ImagemStorageService imagemStorageService;
 
     public ProdutoService(
             ProdutoRepository produtoRepository,
+            ProdutoImagemRepository produtoImagemRepository,
             CurtidaRepository curtidaRepository,
             ImagemStorageService imagemStorageService
     ) {
         this.produtoRepository = produtoRepository;
+        this.produtoImagemRepository = produtoImagemRepository;
         this.curtidaRepository = curtidaRepository;
         this.imagemStorageService = imagemStorageService;
     }
@@ -38,28 +56,121 @@ public class ProdutoService {
             BigDecimal precoVenda,
             BigDecimal precoAntigo,
             String tamanho,
-            MultipartFile imagem
+            MultipartFile imagem,
+            List<MultipartFile> imagens
     ) {
+        List<MultipartFile> arquivos = normalizarArquivos(imagem, imagens);
+        if (arquivos.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Imagem e obrigatoria");
+        }
+        if (nome == null || nome.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Nome do produto e obrigatorio"
+            );
+        }
+
+        List<String> urls = arquivos.stream()
+                .map(imagemStorageService::guardar)
+                .toList();
+
         Produto produto = new Produto();
         produto.setNome(nome.trim());
         produto.setPrecoVenda(precoVenda);
         produto.setPrecoAntigo(precoAntigo);
         produto.setTamanho(tamanho == null ? null : tamanho.trim());
-        produto.setImagemUrl(imagemStorageService.guardar(imagem));
+        produto.setImagemUrl(urls.get(0));
 
-        return ProdutoResponseDTO.from(produtoRepository.save(produto));
+        Produto produtoSalvo = produtoRepository.save(produto);
+        List<ProdutoImagem> imagensSalvas = salvarImagens(produtoSalvo, urls, 0);
+        definirPrincipal(produtoSalvo, imagensSalvas, imagensSalvas.get(0));
+
+        return montarResponse(produtoRepository.save(produtoSalvo), imagensSalvas, List.of());
+    }
+
+    @Transactional
+    public ProdutoResponseDTO editar(
+            Long id,
+            String nome,
+            BigDecimal precoVenda,
+            BigDecimal precoAntigo,
+            String tamanho,
+            MultipartFile imagem,
+            List<MultipartFile> novasImagens,
+            String imagensRemovidas,
+            String ordemImagens,
+            Long imagemPrincipalId,
+            Integer novaImagemPrincipalIndex
+    ) {
+        Produto produto = produtoRepository.findById(id)
+                .filter(item -> Boolean.TRUE.equals(item.getAtivo()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Produto nao encontrado"
+                ));
+        atualizarCampos(produto, nome, precoVenda, precoAntigo, tamanho);
+
+        List<ProdutoImagem> imagensAtuais = buscarImagensEditaveis(produto);
+        removerImagens(imagensAtuais, parseIds(imagensRemovidas));
+
+        ProdutoImagem novaPrincipalPorArquivo = null;
+        int proximaOrdem = proximaOrdem(imagensAtuais);
+
+        if (arquivoValido(imagem)) {
+            novaPrincipalPorArquivo = salvarImagem(
+                    produto,
+                    imagemStorageService.guardar(imagem),
+                    proximaOrdem++
+            );
+            imagensAtuais.add(novaPrincipalPorArquivo);
+        }
+
+        List<ProdutoImagem> imagensAdicionadas = new ArrayList<>();
+        for (MultipartFile novaImagem : arquivosValidos(novasImagens)) {
+            ProdutoImagem produtoImagem = salvarImagem(
+                    produto,
+                    imagemStorageService.guardar(novaImagem),
+                    proximaOrdem++
+            );
+            imagensAdicionadas.add(produtoImagem);
+            imagensAtuais.add(produtoImagem);
+        }
+
+        if (imagensAtuais.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Produto deve manter ao menos uma imagem"
+            );
+        }
+
+        aplicarOrdem(imagensAtuais, parseOrdemImagens(ordemImagens));
+        ProdutoImagem principal = escolherPrincipal(
+                imagensAtuais,
+                imagensAdicionadas,
+                novaPrincipalPorArquivo,
+                imagemPrincipalId,
+                novaImagemPrincipalIndex
+        );
+        definirPrincipal(produto, imagensAtuais, principal);
+
+        Produto produtoSalvo = produtoRepository.save(produto);
+        produtoImagemRepository.saveAll(imagensAtuais);
+
+        return montarResponse(produtoSalvo, imagensAtuais, List.of());
     }
 
     @Transactional(readOnly = true)
     public List<ProdutoResponseDTO> listarAtivos() {
-        List<Produto> produtos = produtoRepository.findAllByAtivoTrue();
+        List<Produto> produtos = produtoRepository.findAllByAtivoTrueOrderByCriadoEmDescIdDesc();
         Map<Long, List<String>> nomesCurtidasPorProduto = buscarNomesCurtidas(produtos);
+        Map<Long, List<ProdutoImagemResponse>> imagensPorProduto = buscarImagens(produtos);
 
         return produtos
                 .stream()
                 .map(produto -> ProdutoResponseDTO.from(
                         produto,
-                        nomesCurtidasPorProduto.getOrDefault(produto.getId(), List.of())
+                        nomesCurtidasPorProduto.getOrDefault(produto.getId(), List.of()),
+                        imagensDoProduto(produto, imagensPorProduto)
                 ))
                 .toList();
     }
@@ -82,6 +193,317 @@ public class ProdutoService {
                                 Collectors.toList()
                         )
                 ));
+    }
+
+    private void atualizarCampos(
+            Produto produto,
+            String nome,
+            BigDecimal precoVenda,
+            BigDecimal precoAntigo,
+            String tamanho
+    ) {
+        if (nome != null) {
+            if (nome.isBlank()) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Nome do produto e obrigatorio"
+                );
+            }
+            produto.setNome(nome.trim());
+        }
+
+        if (precoVenda != null) {
+            produto.setPrecoVenda(precoVenda);
+        }
+
+        if (precoAntigo != null) {
+            produto.setPrecoAntigo(precoAntigo);
+        }
+
+        if (tamanho != null) {
+            produto.setTamanho(tamanho.isBlank() ? null : tamanho.trim());
+        }
+    }
+
+    private List<MultipartFile> normalizarArquivos(
+            MultipartFile imagem,
+            List<MultipartFile> imagens
+    ) {
+        List<MultipartFile> arquivos = new ArrayList<>();
+        if (arquivoValido(imagem)) {
+            arquivos.add(imagem);
+        }
+        arquivos.addAll(arquivosValidos(imagens));
+        return arquivos;
+    }
+
+    private boolean arquivoValido(MultipartFile arquivo) {
+        return arquivo != null && !arquivo.isEmpty();
+    }
+
+    private List<MultipartFile> arquivosValidos(List<MultipartFile> arquivos) {
+        if (arquivos == null || arquivos.isEmpty()) {
+            return List.of();
+        }
+
+        return arquivos
+                .stream()
+                .filter(this::arquivoValido)
+                .toList();
+    }
+
+    private List<ProdutoImagem> salvarImagens(
+            Produto produto,
+            List<String> urls,
+            int ordemInicial
+    ) {
+        List<ProdutoImagem> imagens = new ArrayList<>();
+        int ordem = ordemInicial;
+        for (String url : urls) {
+            imagens.add(new ProdutoImagem(produto, url, ordem++, false));
+        }
+
+        return produtoImagemRepository.saveAll(imagens);
+    }
+
+    private ProdutoImagem salvarImagem(Produto produto, String url, int ordem) {
+        return produtoImagemRepository.save(new ProdutoImagem(produto, url, ordem, false));
+    }
+
+    private List<ProdutoImagem> buscarImagensEditaveis(Produto produto) {
+        List<ProdutoImagem> imagens = new ArrayList<>(
+                produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produto.getId())
+        );
+
+        if (
+                imagens.isEmpty()
+                        && produto.getImagemUrl() != null
+                        && !produto.getImagemUrl().isBlank()
+        ) {
+            ProdutoImagem imagemLegada = produtoImagemRepository.save(
+                    new ProdutoImagem(produto, produto.getImagemUrl(), 0, true)
+            );
+            imagens.add(imagemLegada);
+        }
+
+        return imagens;
+    }
+
+    private void removerImagens(List<ProdutoImagem> imagens, Set<Long> idsRemovidos) {
+        if (idsRemovidos.isEmpty()) {
+            return;
+        }
+
+        List<ProdutoImagem> removidas = imagens
+                .stream()
+                .filter(imagem -> imagem.getId() != null && idsRemovidos.contains(imagem.getId()))
+                .toList();
+
+        if (removidas.isEmpty()) {
+            return;
+        }
+
+        produtoImagemRepository.deleteAll(removidas);
+        imagens.removeIf(imagem -> imagem.getId() != null && idsRemovidos.contains(imagem.getId()));
+    }
+
+    private Set<Long> parseIds(String valor) {
+        if (valor == null || valor.isBlank()) {
+            return Set.of();
+        }
+
+        Set<Long> ids = new HashSet<>();
+        Matcher matcher = NUMERO_PATTERN.matcher(valor);
+        while (matcher.find()) {
+            ids.add(Long.parseLong(matcher.group()));
+        }
+        return ids;
+    }
+
+    private int proximaOrdem(List<ProdutoImagem> imagens) {
+        return imagens
+                .stream()
+                .map(ProdutoImagem::getOrdem)
+                .max(Integer::compareTo)
+                .orElse(-1) + 1;
+    }
+
+    private void aplicarOrdem(
+            List<ProdutoImagem> imagens,
+            Map<Long, Integer> ordemPorImagem
+    ) {
+        if (ordemPorImagem.isEmpty()) {
+            return;
+        }
+
+        for (ProdutoImagem imagem : imagens) {
+            if (imagem.getId() != null && ordemPorImagem.containsKey(imagem.getId())) {
+                imagem.setOrdem(ordemPorImagem.get(imagem.getId()));
+            }
+        }
+    }
+
+    private Map<Long, Integer> parseOrdemImagens(String valor) {
+        if (valor == null || valor.isBlank()) {
+            return Map.of();
+        }
+
+        Map<Long, Integer> ordemPorImagem = new HashMap<>();
+        Matcher objetoMatcher = OBJETO_JSON_PATTERN.matcher(valor);
+        while (objetoMatcher.find()) {
+            String objeto = objetoMatcher.group();
+            Matcher idMatcher = ID_JSON_PATTERN.matcher(objeto);
+            Matcher ordemMatcher = ORDEM_JSON_PATTERN.matcher(objeto);
+            if (idMatcher.find() && ordemMatcher.find()) {
+                ordemPorImagem.put(
+                        Long.parseLong(idMatcher.group(1)),
+                        Integer.parseInt(ordemMatcher.group(1))
+                );
+            }
+        }
+
+        if (!ordemPorImagem.isEmpty()) {
+            return ordemPorImagem;
+        }
+
+        Matcher numeroMatcher = NUMERO_PATTERN.matcher(valor);
+        int ordem = 0;
+        while (numeroMatcher.find()) {
+            ordemPorImagem.put(Long.parseLong(numeroMatcher.group()), ordem++);
+        }
+        return ordemPorImagem;
+    }
+
+    private ProdutoImagem escolherPrincipal(
+            List<ProdutoImagem> imagens,
+            List<ProdutoImagem> imagensAdicionadas,
+            ProdutoImagem novaPrincipalPorArquivo,
+            Long imagemPrincipalId,
+            Integer novaImagemPrincipalIndex
+    ) {
+        if (imagemPrincipalId != null) {
+            return imagens
+                    .stream()
+                    .filter(imagem -> imagemPrincipalId.equals(imagem.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Imagem principal nao encontrada"
+                    ));
+        }
+
+        if (novaImagemPrincipalIndex != null) {
+            if (
+                    novaImagemPrincipalIndex < 0
+                            || novaImagemPrincipalIndex >= imagensAdicionadas.size()
+            ) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Indice da nova imagem principal e invalido"
+                );
+            }
+            return imagensAdicionadas.get(novaImagemPrincipalIndex);
+        }
+
+        if (novaPrincipalPorArquivo != null) {
+            return novaPrincipalPorArquivo;
+        }
+
+        return imagens
+                .stream()
+                .filter(imagem -> Boolean.TRUE.equals(imagem.getPrincipal()))
+                .findFirst()
+                .orElseGet(() -> imagens
+                        .stream()
+                        .min(Comparator.comparing(ProdutoImagem::getOrdem)
+                                .thenComparing(ProdutoImagem::getId))
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST,
+                                "Produto deve manter ao menos uma imagem"
+                        )));
+    }
+
+    private void definirPrincipal(
+            Produto produto,
+            List<ProdutoImagem> imagens,
+            ProdutoImagem principal
+    ) {
+        imagens.sort(Comparator.comparing(ProdutoImagem::getOrdem)
+                .thenComparing(ProdutoImagem::getId));
+        imagens.removeIf(imagem -> mesmoRegistro(imagem, principal));
+        imagens.add(0, principal);
+
+        for (int ordem = 0; ordem < imagens.size(); ordem++) {
+            ProdutoImagem imagem = imagens.get(ordem);
+            imagem.setOrdem(ordem);
+            imagem.setPrincipal(mesmoRegistro(imagem, principal));
+        }
+
+        produto.setImagemUrl(principal.getUrl());
+    }
+
+    private boolean mesmoRegistro(ProdutoImagem imagem, ProdutoImagem outraImagem) {
+        if (imagem == outraImagem) {
+            return true;
+        }
+
+        return imagem.getId() != null && imagem.getId().equals(outraImagem.getId());
+    }
+
+    private Map<Long, List<ProdutoImagemResponse>> buscarImagens(List<Produto> produtos) {
+        List<Long> produtoIds = produtos
+                .stream()
+                .map(Produto::getId)
+                .toList();
+
+        if (produtoIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return produtoImagemRepository.findByProdutoIdInOrderByProdutoIdAscOrdemAscIdAsc(produtoIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        imagem -> imagem.getProduto().getId(),
+                        Collectors.collectingAndThen(
+                                Collectors.toList(),
+                                this::toResponses
+                        )
+                ));
+    }
+
+    private List<ProdutoImagemResponse> imagensDoProduto(
+            Produto produto,
+            Map<Long, List<ProdutoImagemResponse>> imagensPorProduto
+    ) {
+        List<ProdutoImagemResponse> imagens = imagensPorProduto.get(produto.getId());
+        if (imagens != null && !imagens.isEmpty()) {
+            return imagens;
+        }
+
+        if (produto.getImagemUrl() == null || produto.getImagemUrl().isBlank()) {
+            return List.of();
+        }
+
+        return List.of(ProdutoImagemResponse.legada(produto.getImagemUrl()));
+    }
+
+    private ProdutoResponseDTO montarResponse(
+            Produto produto,
+            List<ProdutoImagem> imagens,
+            List<String> nomesCurtidas
+    ) {
+        return ProdutoResponseDTO.from(produto, nomesCurtidas, toResponses(imagens));
+    }
+
+    private List<ProdutoImagemResponse> toResponses(List<ProdutoImagem> imagens) {
+        return imagens
+                .stream()
+                .sorted(Comparator
+                        .comparing(ProdutoImagem::getPrincipal, Comparator.reverseOrder())
+                        .thenComparing(ProdutoImagem::getOrdem)
+                        .thenComparing(ProdutoImagem::getId))
+                .map(ProdutoImagemResponse::from)
+                .toList();
     }
 
     @Transactional

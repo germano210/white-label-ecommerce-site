@@ -283,22 +283,32 @@ function LikedProductCard({
             style={{
                 ...productCardStyle,
                 ...(isExpanded ? expandedProductCardStyle : null),
-                backgroundImage: isExpanded ? `url("${activeImage}")` : undefined,
+                backgroundImage: `url("${activeImage}")`,
             }}
         >
             {isExpanded && <div aria-hidden="true" style={expandedBackgroundOverlayStyle} />}
 
             <div style={{
                 ...productInfoStyle,
-                ...(isExpanded ? expandedProductInfoStyle : null),
+                ...(isExpanded ? expandedProductInfoStyle : overlayProductInfoStyle),
             }}>
-                <h2 style={productNameStyle}>{item.name}</h2>
-                <span style={productSizeStyle}>{getProductSize(item)}</span>
+                <h2 style={{
+                    ...productNameStyle,
+                    ...(isExpanded ? expandedProductNameStyle : overlayProductTextStyle),
+                }}>
+                    {item.name}
+                </h2>
+                <span style={{
+                    ...productSizeStyle,
+                    ...(isExpanded ? expandedProductSizeStyle : overlayProductTextStyle),
+                }}>
+                    {getProductSize(item)}
+                </span>
             </div>
 
             <div style={{
                 ...imageWrapStyle,
-                ...(isExpanded ? expandedImageWrapStyle : null),
+                ...(isExpanded ? expandedImageWrapStyle : fullCardImageWrapStyle),
             }}>
                 <img
                     src={activeImage}
@@ -311,7 +321,13 @@ function LikedProductCard({
                 />
             </div>
 
-            <div style={dotsStyle} aria-label={`${safeImageIndex + 1} de ${images.length} fotos`}>
+            <div
+                style={{
+                    ...dotsStyle,
+                    ...(isExpanded ? null : overlayDotsStyle),
+                }}
+                aria-label={`${safeImageIndex + 1} de ${images.length} fotos`}
+            >
                 {images.map((image, imageIndex) => (
                     <button
                         key={`${image}-${imageIndex}`}
@@ -339,6 +355,7 @@ function LikedProductCard({
                 disabled={isCreatingCheckout}
                 style={{
                     ...cardButtonStyle,
+                    ...(isExpanded ? null : overlayCardButtonStyle),
                     ...(isExpanded ? cardButtonExpandedStyle : cardButtonDefaultStyle),
                     opacity: isCreatingCheckout ? 0.72 : 1,
                     cursor: isCreatingCheckout ? 'wait' : 'pointer',
@@ -520,7 +537,22 @@ const productInfoStyle: CSSProperties = {
     textAlign: 'center',
 };
 
+const overlayProductInfoStyle: CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    left: 0,
+    minHeight: '48px',
+    padding: '13px 8px 18px',
+    background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.36) 0%, rgba(0, 0, 0, 0.12) 62%, transparent 100%)',
+};
+
 const expandedProductInfoStyle: CSSProperties = {
+    position: 'relative',
+    top: 'auto',
+    right: 'auto',
+    left: 'auto',
+    background: 'transparent',
     paddingTop: '11px',
 };
 
@@ -547,6 +579,21 @@ const productSizeStyle: CSSProperties = {
     whiteSpace: 'nowrap',
 };
 
+const overlayProductTextStyle: CSSProperties = {
+    color: '#ffffff',
+    textShadow: '0 1px 5px rgba(0, 0, 0, 0.42)',
+};
+
+const expandedProductNameStyle: CSSProperties = {
+    color: '#000000',
+    textShadow: 'none',
+};
+
+const expandedProductSizeStyle: CSSProperties = {
+    color: '#6f6f6f',
+    textShadow: 'none',
+};
+
 const imageWrapStyle: CSSProperties = {
     position: 'relative',
     zIndex: 1,
@@ -559,7 +606,19 @@ const imageWrapStyle: CSSProperties = {
     background: '#f7f6f2',
 };
 
+const fullCardImageWrapStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 0,
+    minHeight: '100%',
+    background: 'transparent',
+};
+
 const expandedImageWrapStyle: CSSProperties = {
+    position: 'relative',
+    inset: 'auto',
+    zIndex: 1,
+    minHeight: '154px',
     background: 'transparent',
     padding: '6px 10px 0',
 };
@@ -582,6 +641,14 @@ const dotsStyle: CSSProperties = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '5px',
+};
+
+const overlayDotsStyle: CSSProperties = {
+    position: 'absolute',
+    right: 0,
+    bottom: '63px',
+    left: 0,
+    minHeight: '10px',
 };
 
 const dotStyle: CSSProperties = {
@@ -612,6 +679,14 @@ const cardButtonStyle: CSSProperties = {
     fontSize: '7.5px',
     fontWeight: 900,
     lineHeight: 1,
+};
+
+const overlayCardButtonStyle: CSSProperties = {
+    position: 'absolute',
+    right: '13px',
+    bottom: '13px',
+    left: '13px',
+    margin: 0,
 };
 
 const cardButtonDefaultStyle: CSSProperties = {

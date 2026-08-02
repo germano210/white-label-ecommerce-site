@@ -8,13 +8,14 @@ import { getImageUrl } from '../../utils/imageUtils';
 import { appRoutes } from '../../utils/appRoutes';
 import { MissoesAdminPanel } from '../../components/admin/MissoesAdminPanel';
 import {
-    LogOut, PackagePlus, ShoppingBag, Users,
+    LogOut, Package, PackagePlus, ShoppingBag, Users,
     RefreshCcw, Search, CheckCircle, Clock, Plus, Trash2,
     UploadCloud, Phone, User as UserIcon, Calendar, ArrowRight,
-    BarChart3, UserPlus, AlertTriangle, Sparkles
+    BarChart3, UserPlus, AlertTriangle, Sparkles, Pencil,
+    ArrowUp, ArrowDown, Star, ImagePlus
 } from 'lucide-react';
 
-type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | 'MISSOES' | null;
+type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'PRODUTOS' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | 'MISSOES' | null;
 type FiltroTempo = 'HOJE' | 'SEMANA' | 'MES' | 'ANO' | 'PERSONALIZADO';
 
 interface ItemVenda extends ProdutoVitrine {
@@ -35,10 +36,46 @@ interface ProdutoAdmin {
     precoAntigo?: number | string | null;
     tamanho: string;
     imagemUrl?: string | null;
+    imagens?: ProdutoImagemApi[];
 }
 
 interface ProdutosPage {
     content?: ProdutoAdmin[];
+}
+
+type ProdutoImagemApi = string | {
+    id?: number | string | null;
+    url?: string | null;
+    imagemUrl?: string | null;
+    caminho?: string | null;
+    path?: string | null;
+    principal?: boolean | null;
+    ordem?: number | string | null;
+};
+
+interface ProdutoImageSource {
+    id: string;
+    rawUrl: string;
+    displayUrl: string;
+    principal: boolean;
+    ordem: number;
+}
+
+interface ProdutoEditPhoto {
+    key: string;
+    rawUrl?: string;
+    previewUrl: string;
+    file?: File;
+    isExisting: boolean;
+}
+
+interface ProdutoEditState {
+    id: ProdutoAdmin['id'];
+    nome: string;
+    precoVenda: string;
+    precoAntigo: string;
+    tamanho: string;
+    fotos: ProdutoEditPhoto[];
 }
 
 const filtrosTempo: FiltroTempo[] = ['HOJE', 'SEMANA', 'MES', 'ANO', 'PERSONALIZADO'];
@@ -57,9 +94,67 @@ function formatPrice(value: number) {
     });
 }
 
+function formatPriceInput(value: number | string | null | undefined) {
+    if (value === null || value === undefined || value === '') return '';
+    return String(value).replace(',', '.');
+}
+
+function getProdutoImageSources(produto: ProdutoAdmin): ProdutoImageSource[] {
+    const sources = (produto.imagens ?? [])
+        .map((imagem, index): ProdutoImageSource | null => {
+            if (typeof imagem === 'string') {
+                if (!imagem.trim()) return null;
+
+                return {
+                    id: `${imagem}-${index}`,
+                    rawUrl: imagem,
+                    displayUrl: getImageUrl(imagem),
+                    principal: index === 0,
+                    ordem: index,
+                };
+            }
+
+            const rawUrl = imagem.url ?? imagem.imagemUrl ?? imagem.caminho ?? imagem.path ?? '';
+            if (!rawUrl.trim()) return null;
+
+            return {
+                id: String(imagem.id ?? rawUrl),
+                rawUrl,
+                displayUrl: getImageUrl(rawUrl),
+                principal: Boolean(imagem.principal),
+                ordem: Number(imagem.ordem ?? index),
+            };
+        })
+        .filter((imagem): imagem is ProdutoImageSource => Boolean(imagem));
+
+    if (sources.length > 0) {
+        return [...sources].sort((a, b) => {
+            if (a.principal !== b.principal) return a.principal ? -1 : 1;
+            return a.ordem - b.ordem;
+        });
+    }
+
+    if (produto.imagemUrl) {
+        return [{
+            id: String(produto.imagemUrl),
+            rawUrl: produto.imagemUrl,
+            displayUrl: getImageUrl(produto.imagemUrl),
+            principal: true,
+            ordem: 0,
+        }];
+    }
+
+    return [];
+}
+
+function getProdutoMainImage(produto: ProdutoAdmin) {
+    return getProdutoImageSources(produto)[0]?.displayUrl ?? getImageUrl(null);
+}
+
 function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
     const price = parsePrice(produto.precoVenda);
     const oldPrice = parsePrice(produto.precoAntigo);
+    const images = getProdutoImageSources(produto);
 
     return {
         id: String(produto.id),
@@ -71,10 +166,31 @@ function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
         tamanho: produto.tamanho,
         curtidasCount: 0,
         passosCount: 0,
-        images: [getImageUrl(produto.imagemUrl)],
+        images: images.length > 0 ? images.map((image) => image.displayUrl) : [getImageUrl(null)],
         priceNew: formatPrice(price),
         priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
     };
+}
+
+function createProdutoEditState(produto: ProdutoAdmin): ProdutoEditState {
+    return {
+        id: produto.id,
+        nome: produto.nome,
+        precoVenda: formatPriceInput(produto.precoVenda),
+        precoAntigo: formatPriceInput(produto.precoAntigo),
+        tamanho: produto.tamanho,
+        fotos: getProdutoImageSources(produto).map((image, index) => ({
+            key: `existing-${image.id}-${index}`,
+            rawUrl: image.rawUrl,
+            previewUrl: image.displayUrl,
+            isExisting: true,
+        })),
+    };
+}
+
+function getProdutoOrderValue(produto: ProdutoAdmin) {
+    const numericId = Number(produto.id);
+    return Number.isFinite(numericId) ? numericId : 0;
 }
 
 export function AdminDashboardScreen() {
@@ -99,6 +215,9 @@ export function AdminDashboardScreen() {
     const [produtos, setProdutos] = useState<ProdutoAdmin[]>([]);
     const [isLoadingProdutos, setIsLoadingProdutos] = useState(true);
     const [isSavingProduto, setIsSavingProduto] = useState(false);
+    const [isUpdatingProduto, setIsUpdatingProduto] = useState(false);
+    const [buscaAdminProdutos, setBuscaAdminProdutos] = useState('');
+    const [editingProduto, setEditingProduto] = useState<ProdutoEditState | null>(null);
     const [produtoError, setProdutoError] = useState('');
     const [produtoSuccess, setProdutoSuccess] = useState('');
 
@@ -195,12 +314,175 @@ export function AdminDashboardScreen() {
             setProdutos((currentProducts) => (
                 currentProducts.filter((produto) => produto.id !== produtoId)
             ));
+            setProdutoSuccess('Produto removido com sucesso.');
         } catch {
             setProdutoError('Não foi possível excluir o produto.');
         }
     };
 
 
+
+    const abrirEdicaoProduto = (produto: ProdutoAdmin) => {
+        setProdutoError('');
+        setProdutoSuccess('');
+        setEditingProduto((currentEditing) => {
+            currentEditing?.fotos.forEach((foto) => {
+                if (!foto.isExisting) URL.revokeObjectURL(foto.previewUrl);
+            });
+
+            return createProdutoEditState(produto);
+        });
+    };
+
+    const fecharEdicaoProduto = () => {
+        setEditingProduto((currentEditing) => {
+            currentEditing?.fotos.forEach((foto) => {
+                if (!foto.isExisting) URL.revokeObjectURL(foto.previewUrl);
+            });
+
+            return null;
+        });
+    };
+
+    const atualizarCampoEdicaoProduto = (
+        campo: keyof Pick<ProdutoEditState, 'nome' | 'precoVenda' | 'precoAntigo' | 'tamanho'>,
+        valor: string,
+    ) => {
+        setEditingProduto((currentEditing) => (
+            currentEditing ? { ...currentEditing, [campo]: valor } : currentEditing
+        ));
+    };
+
+    const adicionarFotosEdicaoProduto = (files: FileList | null) => {
+        if (!files?.length) return;
+
+        const novasFotos = Array.from(files).map((file, index): ProdutoEditPhoto => ({
+            key: `new-${Date.now()}-${index}-${file.name}`,
+            file,
+            previewUrl: URL.createObjectURL(file),
+            isExisting: false,
+        }));
+
+        setEditingProduto((currentEditing) => (
+            currentEditing
+                ? { ...currentEditing, fotos: [...currentEditing.fotos, ...novasFotos] }
+                : currentEditing
+        ));
+    };
+
+    const removerFotoEdicaoProduto = (fotoKey: string) => {
+        setEditingProduto((currentEditing) => {
+            if (!currentEditing) return currentEditing;
+
+            const fotoRemovida = currentEditing.fotos.find((foto) => foto.key === fotoKey);
+            if (fotoRemovida && !fotoRemovida.isExisting) {
+                URL.revokeObjectURL(fotoRemovida.previewUrl);
+            }
+
+            return {
+                ...currentEditing,
+                fotos: currentEditing.fotos.filter((foto) => foto.key !== fotoKey),
+            };
+        });
+    };
+
+    const moverFotoEdicaoProduto = (fotoKey: string, direction: -1 | 1) => {
+        setEditingProduto((currentEditing) => {
+            if (!currentEditing) return currentEditing;
+
+            const currentIndex = currentEditing.fotos.findIndex((foto) => foto.key === fotoKey);
+            const nextIndex = currentIndex + direction;
+
+            if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentEditing.fotos.length) {
+                return currentEditing;
+            }
+
+            const nextFotos = [...currentEditing.fotos];
+            const currentPhoto = nextFotos[currentIndex];
+            nextFotos[currentIndex] = nextFotos[nextIndex];
+            nextFotos[nextIndex] = currentPhoto;
+
+            return { ...currentEditing, fotos: nextFotos };
+        });
+    };
+
+    const marcarFotoPrincipalEdicaoProduto = (fotoKey: string) => {
+        setEditingProduto((currentEditing) => {
+            if (!currentEditing) return currentEditing;
+
+            const currentIndex = currentEditing.fotos.findIndex((foto) => foto.key === fotoKey);
+            if (currentIndex <= 0) return currentEditing;
+
+            const nextFotos = [...currentEditing.fotos];
+            const [selectedPhoto] = nextFotos.splice(currentIndex, 1);
+            nextFotos.unshift(selectedPhoto);
+
+            return { ...currentEditing, fotos: nextFotos };
+        });
+    };
+
+    const salvarEdicaoProduto = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!editingProduto) return;
+
+        const formData = new FormData();
+        const fotosExistentes = editingProduto.fotos
+            .filter((foto) => foto.isExisting && foto.rawUrl)
+            .map((foto) => ({
+                url: foto.rawUrl,
+                principal: editingProduto.fotos.findIndex((currentPhoto) => currentPhoto.key === foto.key) === 0,
+                ordem: editingProduto.fotos.findIndex((currentPhoto) => currentPhoto.key === foto.key),
+            }));
+        const ordemFotos = editingProduto.fotos.map((foto, index) => ({
+            tipo: foto.isExisting ? 'EXISTENTE' : 'NOVA',
+            url: foto.rawUrl,
+            nomeArquivo: foto.file?.name,
+            principal: index === 0,
+            ordem: index,
+        }));
+        const novasFotos = editingProduto.fotos.filter((foto) => !foto.isExisting && foto.file);
+        const primeiraFotoNovaPrincipal = editingProduto.fotos[0]?.file;
+
+        formData.append('nome', editingProduto.nome.trim());
+        formData.append('precoVenda', editingProduto.precoVenda);
+        formData.append('precoAntigo', editingProduto.precoAntigo);
+        formData.append('tamanho', editingProduto.tamanho.trim());
+        formData.append('imagensExistentes', JSON.stringify(fotosExistentes));
+        formData.append('ordemFotos', JSON.stringify(ordemFotos));
+        formData.append('imagemPrincipal', fotosExistentes[0]?.url ?? '');
+        formData.append('novaImagemPrincipal', primeiraFotoNovaPrincipal ? 'true' : 'false');
+
+        if (primeiraFotoNovaPrincipal) {
+            formData.append('imagem', primeiraFotoNovaPrincipal);
+        }
+
+        novasFotos.forEach((foto) => {
+            if (foto.file) {
+                formData.append('novasImagens', foto.file);
+                formData.append('imagens', foto.file);
+            }
+        });
+
+        setIsUpdatingProduto(true);
+        setProdutoError('');
+        setProdutoSuccess('');
+
+        try {
+            await api.put(apiRoutes.admin.produtos.update(editingProduto.id), formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            setProdutoSuccess('Produto atualizado com sucesso.');
+            fecharEdicaoProduto();
+            await carregarProdutos();
+        } catch {
+            setProdutoError('Não foi possível atualizar o produto. Confira os dados e tente novamente.');
+        } finally {
+            setIsUpdatingProduto(false);
+        }
+    };
 
     // --- LÓGICA DA BAIXA ---
     const produtosFiltrados = useMemo(() => {
@@ -215,6 +497,22 @@ export function AdminDashboardScreen() {
             .slice(0, 5)
             .map(mapProdutoAdminToVitrine);
     }, [buscaProduto, produtos]);
+
+    const ultimosProdutosCadastrados = useMemo(() => {
+        return [...produtos]
+            .sort((a, b) => getProdutoOrderValue(b) - getProdutoOrderValue(a))
+            .slice(0, 5);
+    }, [produtos]);
+
+    const produtosAdminFiltrados = useMemo(() => {
+        const normalizedSearch = buscaAdminProdutos.trim().toLowerCase();
+        if (!normalizedSearch) return produtos;
+
+        return produtos.filter((produto) => (
+            produto.nome.toLowerCase().includes(normalizedSearch)
+            || String(produto.id).toLowerCase().includes(normalizedSearch)
+        ));
+    }, [buscaAdminProdutos, produtos]);
 
     // --- LÓGICA DA TROCA ---
     const carregarHistoricoTroca = () => {
@@ -237,7 +535,7 @@ export function AdminDashboardScreen() {
             {/* Top Bar */}
             <div style={{ background: 'white', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EEE', position: 'sticky', top: 0, zIndex: 100 }}>
                 <div>
-                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', margin: 0 }}>Painel Via Brás</h2>
+                    <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '18px', margin: 0 }}>Painel Admin</h2>
                     <span style={{ fontSize: '10px', color: 'var(--terra)', fontWeight: 800 }}>MODO: {currentUser?.role}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
@@ -279,6 +577,9 @@ export function AdminDashboardScreen() {
                     </button>
                     <button onClick={() => setActiveAction('NOVO_ITEM')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'NOVO_ITEM' ? 'var(--dark)' : 'white', color: activeAction === 'NOVO_ITEM' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                         <PackagePlus size={24} color={activeAction === 'NOVO_ITEM' ? 'white' : '#4A90E2'} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Novo Item</span>
+                    </button>
+                    <button onClick={() => setActiveAction('PRODUTOS')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'PRODUTOS' ? 'var(--dark)' : 'white', color: activeAction === 'PRODUTOS' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                        <Package size={24} color={activeAction === 'PRODUTOS' ? 'white' : '#687152'} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Produtos</span>
                     </button>
                 </div>
             </div>
@@ -663,6 +964,50 @@ export function AdminDashboardScreen() {
                 </div>
             )}
 
+            {activeAction === 'PRODUTOS' && (
+                <div style={{ margin: '0 20px', padding: '24px', background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '18px' }}>
+                        <h3 style={{ fontSize: '18px', color: 'var(--dark)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Package size={20} color="#687152" /> Produtos
+                        </h3>
+                        <span style={{ fontSize: '11px', color: '#999', fontWeight: 700 }}>{produtos.length} itens</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#F9F9F9', padding: '12px', borderRadius: '14px', border: '1px solid #EEE', marginBottom: '16px' }}>
+                        <Search size={18} color="#999" />
+                        <input
+                            type="search"
+                            placeholder="Buscar por nome ou ID"
+                            value={buscaAdminProdutos}
+                            onChange={(event) => setBuscaAdminProdutos(event.target.value)}
+                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '14px', width: '100%' }}
+                        />
+                    </div>
+
+                    {produtoError && <div role="alert" style={{ padding: '11px 12px', borderRadius: '12px', color: '#A63D2F', background: '#FFF0ED', fontSize: '12px', fontWeight: 600, marginBottom: '12px' }}>{produtoError}</div>}
+                    {produtoSuccess && <div role="status" style={{ padding: '11px 12px', borderRadius: '12px', color: '#2D6A4F', background: '#EDF7F0', fontSize: '12px', fontWeight: 600, marginBottom: '12px' }}>{produtoSuccess}</div>}
+
+                    {isLoadingProdutos ? (
+                        <div style={{ padding: '28px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Carregando produtos...</div>
+                    ) : produtosAdminFiltrados.length === 0 ? (
+                        <div style={{ padding: '24px', borderRadius: '14px', background: '#F9F9F9', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                            Nenhum produto encontrado.
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {produtosAdminFiltrados.map((produto) => (
+                                <ProdutoAdminListItem
+                                    key={produto.id}
+                                    produto={produto}
+                                    onEdit={() => abrirEdicaoProduto(produto)}
+                                    onDelete={() => void excluirProduto(produto.id)}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* ========================================== */}
             {/* SEÇÃO: NOVO ITEM (CADASTRAR PRODUTO)       */}
             {/* ========================================== */}
@@ -706,13 +1051,13 @@ export function AdminDashboardScreen() {
 
                     <div style={{ marginTop: '28px', paddingTop: '22px', borderTop: '1px solid #EEE' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                            <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--dark)' }}>Produtos cadastrados</h4>
-                            <span style={{ fontSize: '11px', color: '#999' }}>{produtos.length} itens</span>
+                            <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--dark)' }}>Últimos itens cadastrados</h4>
+                            <span style={{ fontSize: '11px', color: '#999' }}>{ultimosProdutosCadastrados.length} de {produtos.length}</span>
                         </div>
 
                         {isLoadingProdutos ? (
                             <div style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Carregando produtos...</div>
-                        ) : produtos.length === 0 ? (
+                        ) : ultimosProdutosCadastrados.length === 0 ? (
                             <div style={{ padding: '24px', borderRadius: '14px', background: '#F9F9F9', textAlign: 'center', color: '#999', fontSize: '13px' }}>Nenhum produto cadastrado.</div>
                         ) : (
                             <div style={{ overflowX: 'auto' }}>
@@ -726,8 +1071,8 @@ export function AdminDashboardScreen() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {produtos.map((produto) => {
-                                            const imageUrl = getImageUrl(produto.imagemUrl);
+                                        {ultimosProdutosCadastrados.map((produto) => {
+                                            const imageUrl = getProdutoMainImage(produto);
 
                                             return (
                                                 <tr key={produto.id} style={{ borderTop: '1px solid #F0F0F0' }}>
@@ -737,6 +1082,9 @@ export function AdminDashboardScreen() {
                                                     <td style={{ ...adminTableCellStyle, fontSize: '13px', fontWeight: 700 }}>{produto.nome}</td>
                                                     <td style={{ ...adminTableCellStyle, fontSize: '12px', color: '#666' }}>{produto.tamanho}</td>
                                                     <td style={{ ...adminTableCellStyle, textAlign: 'right' }}>
+                                                        <button type="button" aria-label={`Editar ${produto.nome}`} onClick={() => abrirEdicaoProduto(produto)} style={{ width: '36px', height: '36px', border: 0, borderRadius: '10px', color: '#4A90E2', background: '#EEF5FF', cursor: 'pointer', marginRight: '8px' }}>
+                                                            <Pencil size={17} />
+                                                        </button>
                                                         <button type="button" aria-label={`Excluir ${produto.nome}`} onClick={() => void excluirProduto(produto.id)} style={{ width: '36px', height: '36px', border: 0, borderRadius: '10px', color: '#FF3B30', background: '#FFF1F0', cursor: 'pointer' }}>
                                                             <Trash2 size={17} />
                                                         </button>
@@ -751,6 +1099,20 @@ export function AdminDashboardScreen() {
                     </div>
                 </div>
             )}
+
+            {editingProduto && (
+                <ProdutoEditModal
+                    produto={editingProduto}
+                    isSaving={isUpdatingProduto}
+                    onClose={fecharEdicaoProduto}
+                    onSubmit={salvarEdicaoProduto}
+                    onFieldChange={atualizarCampoEdicaoProduto}
+                    onAddPhotos={adicionarFotosEdicaoProduto}
+                    onRemovePhoto={removerFotoEdicaoProduto}
+                    onMovePhoto={moverFotoEdicaoProduto}
+                    onSetMainPhoto={marcarFotoPrincipalEdicaoProduto}
+                />
+            )}
         </div>
     );
 }
@@ -759,6 +1121,159 @@ interface UnsupportedModulePanelProps {
     title: string;
     description: string;
     icon: React.ReactNode;
+}
+
+interface ProdutoAdminListItemProps {
+    produto: ProdutoAdmin;
+    onEdit: () => void;
+    onDelete: () => void;
+}
+
+function ProdutoAdminListItem({
+    produto,
+    onEdit,
+    onDelete,
+}: ProdutoAdminListItemProps) {
+    const price = parsePrice(produto.precoVenda);
+    const oldPrice = parsePrice(produto.precoAntigo);
+
+    return (
+        <article style={{ display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr)', gap: '12px', padding: '12px', borderRadius: '16px', border: '1px solid #EEE', background: '#FDFDFD' }}>
+            <img
+                src={getProdutoMainImage(produto)}
+                alt={produto.nome}
+                style={{ width: '76px', height: '92px', borderRadius: '12px', objectFit: 'cover', background: '#EEE' }}
+            />
+            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div>
+                    <div style={{ fontSize: '10px', color: '#999', fontWeight: 800 }}>#{produto.id}</div>
+                    <h4 style={{ margin: '2px 0 0', overflow: 'hidden', color: 'var(--dark)', fontSize: '14px', fontWeight: 800, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{produto.nome}</h4>
+                    <div style={{ marginTop: '3px', color: '#666', fontSize: '11px', fontWeight: 700 }}>Tam. {produto.tamanho || 'Único'}</div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <strong style={{ color: '#687152', fontSize: '14px' }}>{formatPrice(price)}</strong>
+                    {oldPrice > 0 && (
+                        <span style={{ color: '#999', fontSize: '11px', textDecoration: 'line-through' }}>{formatPrice(oldPrice)}</span>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                    <button type="button" onClick={onEdit} style={{ flex: 1, minHeight: '36px', border: 0, borderRadius: '10px', background: '#EEF5FF', color: '#4A90E2', fontSize: '11px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                        <Pencil size={14} /> Editar
+                    </button>
+                    <button type="button" onClick={onDelete} style={{ width: '42px', minHeight: '36px', border: 0, borderRadius: '10px', background: '#FFF1F0', color: '#FF3B30', cursor: 'pointer' }} aria-label={`Excluir ${produto.nome}`}>
+                        <Trash2 size={16} />
+                    </button>
+                </div>
+            </div>
+        </article>
+    );
+}
+
+interface ProdutoEditModalProps {
+    produto: ProdutoEditState;
+    isSaving: boolean;
+    onClose: () => void;
+    onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+    onFieldChange: (
+        campo: keyof Pick<ProdutoEditState, 'nome' | 'precoVenda' | 'precoAntigo' | 'tamanho'>,
+        valor: string,
+    ) => void;
+    onAddPhotos: (files: FileList | null) => void;
+    onRemovePhoto: (fotoKey: string) => void;
+    onMovePhoto: (fotoKey: string, direction: -1 | 1) => void;
+    onSetMainPhoto: (fotoKey: string) => void;
+}
+
+function ProdutoEditModal({
+    produto,
+    isSaving,
+    onClose,
+    onSubmit,
+    onFieldChange,
+    onAddPhotos,
+    onRemovePhoto,
+    onMovePhoto,
+    onSetMainPhoto,
+}: ProdutoEditModalProps) {
+    return (
+        <div role="dialog" aria-modal="true" aria-label="Editar produto" style={modalOverlayStyle}>
+            <form onSubmit={onSubmit} style={productEditModalStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
+                    <div>
+                        <h3 style={{ margin: 0, color: 'var(--dark)', fontSize: '18px' }}>Editar produto</h3>
+                        <span style={{ color: '#999', fontSize: '11px', fontWeight: 800 }}>#{produto.id}</span>
+                    </div>
+                    <button type="button" onClick={onClose} style={{ width: '38px', height: '38px', border: 0, borderRadius: '12px', background: '#F4F4F4', color: '#333', cursor: 'pointer', fontWeight: 900 }}>
+                        ×
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input value={produto.nome} onChange={(event) => onFieldChange('nome', event.target.value)} placeholder="Nome da peça" style={adminInputStyle} required />
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <input type="number" min="0" step="0.01" value={produto.precoVenda} onChange={(event) => onFieldChange('precoVenda', event.target.value)} placeholder="Preço venda" style={adminInputStyle} required />
+                        <input type="number" min="0" step="0.01" value={produto.precoAntigo} onChange={(event) => onFieldChange('precoAntigo', event.target.value)} placeholder="Preço antigo" style={adminInputStyle} />
+                    </div>
+
+                    <input value={produto.tamanho} onChange={(event) => onFieldChange('tamanho', event.target.value)} placeholder="Tamanho" style={adminInputStyle} required />
+
+                    <section style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                            <strong style={{ color: 'var(--dark)', fontSize: '13px' }}>Fotos</strong>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '34px', padding: '0 12px', borderRadius: '10px', background: '#EDF7F0', color: '#687152', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}>
+                                <ImagePlus size={15} />
+                                Adicionar
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(event) => {
+                                        onAddPhotos(event.target.files);
+                                        event.target.value = '';
+                                    }}
+                                    style={{ display: 'none' }}
+                                />
+                            </label>
+                        </div>
+
+                        {produto.fotos.length === 0 ? (
+                            <div style={{ padding: '16px', borderRadius: '14px', background: '#F9F9F9', color: '#999', fontSize: '12px', textAlign: 'center' }}>
+                                Nenhuma foto vinculada. Adicione ao menos uma foto antes de salvar.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {produto.fotos.map((foto, index) => (
+                                    <div key={foto.key} style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: '10px', alignItems: 'center', padding: '10px', borderRadius: '14px', background: index === 0 ? '#F4F7EF' : '#F9F9F9', border: `1px solid ${index === 0 ? '#CAD5BA' : '#EEE'}` }}>
+                                        <img src={foto.previewUrl} alt={`Foto ${index + 1}`} style={{ width: '64px', height: '74px', objectFit: 'cover', borderRadius: '10px', background: '#EEE' }} />
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: index === 0 ? '#687152' : '#777', fontSize: '11px', fontWeight: 800 }}>
+                                                {index === 0 && <Star size={13} fill="currentColor" />}
+                                                {index === 0 ? 'Foto principal' : `Foto ${index + 1}`}
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                <button type="button" disabled={index === 0} onClick={() => onSetMainPhoto(foto.key)} style={photoActionButtonStyle}>Principal</button>
+                                                <button type="button" disabled={index === 0} onClick={() => onMovePhoto(foto.key, -1)} style={photoIconButtonStyle} aria-label="Subir foto"><ArrowUp size={13} /></button>
+                                                <button type="button" disabled={index === produto.fotos.length - 1} onClick={() => onMovePhoto(foto.key, 1)} style={photoIconButtonStyle} aria-label="Descer foto"><ArrowDown size={13} /></button>
+                                                <button type="button" onClick={() => onRemovePhoto(foto.key)} style={{ ...photoIconButtonStyle, color: '#FF3B30', background: '#FFF1F0' }} aria-label="Remover foto"><Trash2 size={13} /></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                </div>
+
+                <button type="submit" disabled={isSaving} style={{ width: '100%', minHeight: '48px', marginTop: '18px', border: 0, borderRadius: '16px', background: '#687152', color: 'white', fontSize: '13px', fontWeight: 800, cursor: isSaving ? 'wait' : 'pointer', opacity: isSaving ? 0.66 : 1 }}>
+                    {isSaving ? 'Salvando alterações...' : 'Salvar alterações'}
+                </button>
+            </form>
+        </div>
+    );
 }
 
 function UnsupportedModulePanel({
@@ -797,4 +1312,47 @@ const adminTableHeaderStyle: React.CSSProperties = {
 const adminTableCellStyle: React.CSSProperties = {
     padding: '10px',
     verticalAlign: 'middle',
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 5000,
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    background: 'rgba(0, 0, 0, 0.36)',
+    padding: '18px',
+};
+
+const productEditModalStyle: React.CSSProperties = {
+    width: 'min(100%, 520px)',
+    maxHeight: '92dvh',
+    overflowY: 'auto',
+    borderRadius: '24px 24px 18px 18px',
+    background: 'white',
+    padding: '22px',
+    boxShadow: '0 24px 70px rgba(0, 0, 0, 0.24)',
+};
+
+const photoActionButtonStyle: React.CSSProperties = {
+    minHeight: '28px',
+    border: 0,
+    borderRadius: '8px',
+    background: '#FFFFFF',
+    color: '#687152',
+    cursor: 'pointer',
+    padding: '0 9px',
+    fontSize: '10px',
+    fontWeight: 800,
+};
+
+const photoIconButtonStyle: React.CSSProperties = {
+    width: '28px',
+    height: '28px',
+    border: 0,
+    borderRadius: '8px',
+    background: '#FFFFFF',
+    color: '#333',
+    cursor: 'pointer',
 };

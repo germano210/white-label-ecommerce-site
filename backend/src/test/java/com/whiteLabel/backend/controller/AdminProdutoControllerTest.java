@@ -1,0 +1,347 @@
+package com.whiteLabel.backend.controller;
+
+import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.domain.ProdutoImagem;
+import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.domain.UsuarioRole;
+import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
+import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
+import com.whiteLabel.backend.repository.CurtidaRepository;
+import com.whiteLabel.backend.repository.MissaoRepository;
+import com.whiteLabel.backend.repository.PagamentoRepository;
+import com.whiteLabel.backend.repository.PassoRepository;
+import com.whiteLabel.backend.repository.PedidoItemRepository;
+import com.whiteLabel.backend.repository.PedidoRepository;
+import com.whiteLabel.backend.repository.ProdutoImagemRepository;
+import com.whiteLabel.backend.repository.ProdutoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
+import com.whiteLabel.backend.repository.UsuarioRepository;
+import com.whiteLabel.backend.service.JwtService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class AdminProdutoControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private PagamentoRepository pagamentoRepository;
+
+    @Autowired
+    private PedidoItemRepository pedidoItemRepository;
+
+    @Autowired
+    private PedidoRepository pedidoRepository;
+
+    @Autowired
+    private CompartilhamentoAberturaRepository compartilhamentoAberturaRepository;
+
+    @Autowired
+    private CompartilhamentoItemRepository compartilhamentoItemRepository;
+
+    @Autowired
+    private UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository;
+
+    @Autowired
+    private UsuarioMissaoRepository usuarioMissaoRepository;
+
+    @Autowired
+    private CurtidaRepository curtidaRepository;
+
+    @Autowired
+    private PassoRepository passoRepository;
+
+    @Autowired
+    private ProdutoImagemRepository produtoImagemRepository;
+
+    @Autowired
+    private ProdutoRepository produtoRepository;
+
+    @Autowired
+    private MissaoRepository missaoRepository;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @BeforeEach
+    void setUp() {
+        limparDados();
+    }
+
+    @AfterEach
+    void tearDown() {
+        limparDados();
+    }
+
+    @Test
+    void shouldRequireAdminToListAdminProducts() throws Exception {
+        mockMvc.perform(get("/api/admin/produtos").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldCreateProductWithSingleImage() throws Exception {
+        Usuario admin = criarAdmin("551199991001");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagem", "principal"))
+                        .param("nome", "Vestido Floral")
+                        .param("precoVenda", "129.90")
+                        .param("precoAntigo", "189.90")
+                        .param("tamanho", "M")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.nome").value("Vestido Floral"))
+                .andExpect(jsonPath("$.imagemUrl").isNotEmpty())
+                .andExpect(jsonPath("$.imagens.length()").value(1))
+                .andExpect(jsonPath("$.imagens[0].principal").value(true));
+
+        assertEquals(1, produtoRepository.count());
+        assertEquals(1, produtoImagemRepository.count());
+    }
+
+    @Test
+    void shouldCreateProductWithMultipleImagesAndExposePrincipalFirst() throws Exception {
+        Usuario admin = criarAdmin("551199991002");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagens", "foto-1"))
+                        .file(imagem("imagens", "foto-2"))
+                        .param("nome", "Camisa Linho")
+                        .param("precoVenda", "89.90")
+                        .param("tamanho", "P")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagens.length()").value(2))
+                .andExpect(jsonPath("$.imagens[0].ordem").value(0))
+                .andExpect(jsonPath("$.imagens[0].principal").value(true))
+                .andExpect(jsonPath("$.imagens[1].ordem").value(1))
+                .andExpect(jsonPath("$.imagens[1].principal").value(false));
+
+        Produto produto = produtoRepository.findAll().get(0);
+        List<ProdutoImagem> imagens =
+                produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produto.getId());
+        assertEquals(produto.getImagemUrl(), imagens.get(0).getUrl());
+    }
+
+    @Test
+    void shouldUpdateBasicProductFields() throws Exception {
+        Usuario admin = criarAdmin("551199991003");
+        Produto produto = criarProdutoComImagens("Saia Midi", "/uploads/saia-1.webp").produto();
+
+        mockMvc.perform(multipart("/api/admin/produtos/{id}", produto.getId())
+                        .param("nome", "Saia Midi Editada")
+                        .param("precoVenda", "119.90")
+                        .param("precoAntigo", "159.90")
+                        .param("tamanho", "G")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nome").value("Saia Midi Editada"))
+                .andExpect(jsonPath("$.precoVenda").value(119.90))
+                .andExpect(jsonPath("$.precoAntigo").value(159.90))
+                .andExpect(jsonPath("$.tamanho").value("G"));
+    }
+
+    @Test
+    void shouldAddNewPhotoToProduct() throws Exception {
+        Usuario admin = criarAdmin("551199991004");
+        Produto produto = criarProdutoComImagens("Blazer", "/uploads/blazer-1.webp").produto();
+
+        mockMvc.perform(multipart("/api/admin/produtos/{id}", produto.getId())
+                        .file(imagem("novasImagens", "foto-nova"))
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagens.length()").value(2))
+                .andExpect(jsonPath("$.imagens[0].principal").value(true));
+
+        assertEquals(2, produtoImagemRepository.count());
+    }
+
+    @Test
+    void shouldRemoveExistingPhoto() throws Exception {
+        Usuario admin = criarAdmin("551199991005");
+        ProdutoCriado produtoCriado = criarProdutoComImagens(
+                "Calca Jeans",
+                "/uploads/calca-1.webp",
+                "/uploads/calca-2.webp"
+        );
+        Long imagemRemovidaId = produtoCriado.imagens().get(1).getId();
+
+        mockMvc.perform(multipart("/api/admin/produtos/{id}", produtoCriado.produto().getId())
+                        .param("imagensRemovidas", imagemRemovidaId.toString())
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagens.length()").value(1));
+
+        assertEquals(1, produtoImagemRepository.count());
+    }
+
+    @Test
+    void shouldReorderPhotosAndChangePrincipalImage() throws Exception {
+        Usuario admin = criarAdmin("551199991006");
+        ProdutoCriado produtoCriado = criarProdutoComImagens(
+                "Conjunto",
+                "/uploads/conjunto-1.webp",
+                "/uploads/conjunto-2.webp",
+                "/uploads/conjunto-3.webp"
+        );
+        Long primeiraId = produtoCriado.imagens().get(0).getId();
+        Long segundaId = produtoCriado.imagens().get(1).getId();
+        Long terceiraId = produtoCriado.imagens().get(2).getId();
+
+        mockMvc.perform(multipart("/api/admin/produtos/{id}", produtoCriado.produto().getId())
+                        .param("imagemPrincipalId", segundaId.toString())
+                        .param(
+                                "ordemImagens",
+                                "[{\"id\":%d,\"ordem\":0},{\"id\":%d,\"ordem\":1},{\"id\":%d,\"ordem\":2}]"
+                                        .formatted(segundaId, primeiraId, terceiraId)
+                        )
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagemUrl").value("/uploads/conjunto-2.webp"))
+                .andExpect(jsonPath("$.imagens[0].id").value(segundaId))
+                .andExpect(jsonPath("$.imagens[0].ordem").value(0))
+                .andExpect(jsonPath("$.imagens[0].principal").value(true))
+                .andExpect(jsonPath("$.imagens[1].id").value(primeiraId))
+                .andExpect(jsonPath("$.imagens[1].ordem").value(1));
+
+        Produto atualizado = produtoRepository.findById(produtoCriado.produto().getId())
+                .orElseThrow();
+        assertEquals("/uploads/conjunto-2.webp", atualizado.getImagemUrl());
+    }
+
+    @Test
+    void shouldListAdminProductsFromNewestFirst() throws Exception {
+        Usuario admin = criarAdmin("551199991007");
+        Produto antigo = criarProdutoComImagens("Produto Antigo", "/uploads/antigo.webp")
+                .produto();
+        Produto novo = criarProdutoComImagens("Produto Novo", "/uploads/novo.webp")
+                .produto();
+
+        mockMvc.perform(get("/api/admin/produtos")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(novo.getId()))
+                .andExpect(jsonPath("$[1].id").value(antigo.getId()));
+    }
+
+    @Test
+    void shouldKeepPublicProductListWorkingWithImages() throws Exception {
+        ProdutoCriado produtoCriado = criarProdutoComImagens(
+                "Macacao",
+                "/uploads/macacao-1.webp",
+                "/uploads/macacao-2.webp"
+        );
+
+        mockMvc.perform(get("/api/produtos").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(produtoCriado.produto().getId()))
+                .andExpect(jsonPath("$[0].imagemUrl").value("/uploads/macacao-1.webp"))
+                .andExpect(jsonPath("$[0].imagens.length()").value(2))
+                .andExpect(jsonPath("$[0].imagens[0].principal").value(true));
+    }
+
+    private void limparDados() {
+        pagamentoRepository.deleteAll();
+        pedidoItemRepository.deleteAll();
+        pedidoRepository.deleteAll();
+        compartilhamentoAberturaRepository.deleteAll();
+        compartilhamentoItemRepository.deleteAll();
+        usuarioMissaoSemanalRepository.deleteAll();
+        usuarioMissaoRepository.deleteAll();
+        curtidaRepository.deleteAll();
+        passoRepository.deleteAll();
+        produtoImagemRepository.deleteAll();
+        produtoRepository.deleteAll();
+        missaoRepository.deleteAll();
+        usuarioRepository.deleteAll();
+    }
+
+    private Usuario criarAdmin(String telefone) {
+        Usuario admin = new Usuario("Admin Produtos", telefone);
+        admin.setEmail(telefone + "@admin.test");
+        admin.setPassword("senha-ja-codificada");
+        admin.setRole(UsuarioRole.ADMIN);
+        return usuarioRepository.save(admin);
+    }
+
+    private ProdutoCriado criarProdutoComImagens(String nome, String... urls) {
+        Produto produto = new Produto();
+        produto.setNome(nome);
+        produto.setPrecoVenda(BigDecimal.valueOf(99.90));
+        produto.setImagemUrl(urls[0]);
+        produto = produtoRepository.save(produto);
+
+        List<ProdutoImagem> imagens = new ArrayList<>();
+        for (int ordem = 0; ordem < urls.length; ordem++) {
+            imagens.add(new ProdutoImagem(produto, urls[ordem], ordem, ordem == 0));
+        }
+        imagens = produtoImagemRepository.saveAll(imagens);
+
+        return new ProdutoCriado(produto, imagens);
+    }
+
+    private MockMultipartFile imagem(String campo, String conteudo) {
+        return new MockMultipartFile(
+                campo,
+                campo + ".webp",
+                "image/webp",
+                conteudo.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private String bearer(Usuario usuario) {
+        return "Bearer " + jwtService.generateToken(usuario);
+    }
+
+    private record ProdutoCriado(Produto produto, List<ProdutoImagem> imagens) {
+    }
+}

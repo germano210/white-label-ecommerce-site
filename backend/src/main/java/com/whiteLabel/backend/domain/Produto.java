@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "produtos")
@@ -44,4 +45,19 @@ public class Produto {
     // Para nunca apagarmos um produto e quebrarmos o histórico de vendas
     @Column(nullable = false)
     private Boolean ativo = true;
+
+    @Column(
+            name = "criado_em",
+            nullable = false,
+            updatable = false,
+            columnDefinition = "timestamp default current_timestamp"
+    )
+    private LocalDateTime criadoEm;
+
+    @PrePersist
+    void preencherCriadoEm() {
+        if (criadoEm == null) {
+            criadoEm = LocalDateTime.now();
+        }
+    }
 }

@@ -16,6 +16,8 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     // Magia do Spring: Só de escrever o nome do método, ele cria o SQL de "SELECT * WHERE ativo = true"
     List<Produto> findAllByAtivoTrue();
 
+    List<Produto> findAllByAtivoTrueOrderByCriadoEmDescIdDesc();
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Produto p where p.id = :id")
     Optional<Produto> findByIdForUpdate(@Param("id") Long id);

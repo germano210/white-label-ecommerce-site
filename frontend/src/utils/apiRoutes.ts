@@ -37,6 +37,7 @@ export const apiRoutes = {
         produtos: {
             list: '/api/admin/produtos',
             create: '/api/admin/produtos',
+            update: (id: RouteId) => `/api/admin/produtos/${routeId(id)}`,
             delete: (id: RouteId) => `/api/admin/produtos/${routeId(id)}`,
         },
         missoes: {
