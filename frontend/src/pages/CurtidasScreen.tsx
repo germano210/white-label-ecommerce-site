@@ -403,18 +403,20 @@ const screenStyle: CSSProperties = {
     boxSizing: 'border-box',
     justifyContent: 'center',
     width: '100%',
+    maxWidth: '430px',
     height: '100dvh',
+    margin: '0 auto',
     overflow: 'hidden',
     background: '#e6e6e6',
     color: '#000000',
     fontFamily: "'DM Sans', sans-serif",
-    padding: '10px 7px 0',
+    padding: '7px 4px 7px',
 };
 
 const windowStyle: CSSProperties = {
     position: 'relative',
     display: 'flex',
-    width: 'min(90%, 409px)',
+    width: '100%',
     height: '100%',
     flexDirection: 'column',
     overflow: 'hidden',
