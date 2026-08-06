@@ -354,9 +354,16 @@ function MissionsRail({
         void fetchMissoes();
     }, [fetchMissoes]);
 
-    const currentMissionId = useMemo(() => {
-        return missoes.find((missao) => !missao.concluida)?.id ?? null;
+    const orderedMissoes = useMemo(() => {
+        return [
+            ...missoes.filter((missao) => !missao.concluida),
+            ...missoes.filter((missao) => missao.concluida),
+        ];
     }, [missoes]);
+
+    const currentMissionId = useMemo(() => {
+        return orderedMissoes.find((missao) => !missao.concluida)?.id ?? null;
+    }, [orderedMissoes]);
 
     useEffect(() => {
         if (!currentMissionId) return;
@@ -374,7 +381,7 @@ function MissionsRail({
     return (
         <footer style={missionsFooterStyle} aria-label="Minhas Missões">
             <div style={missionsTrackStyle}>
-                {missoes.map((missao, index) => {
+                {orderedMissoes.map((missao, index) => {
                     const isCurrent = missao.id === currentMissionId;
 
                     return (

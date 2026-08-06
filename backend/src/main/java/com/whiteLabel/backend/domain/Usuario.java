@@ -6,6 +6,9 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
@@ -50,6 +53,13 @@ public class Usuario {
 
     @Column
     private Integer tentativas = 0;
+
+    @Column(name = "codigo_indicacao", unique = true, length = 40)
+    private String codigoIndicacao;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "indicado_por_id")
+    private Usuario indicadoPor;
 
     @Column(name = "data_criacao", nullable = false, updatable = false)
     private LocalDateTime dataCriacao;
@@ -141,6 +151,22 @@ public class Usuario {
     public void adicionarTentativas(Integer quantidade) {
         int incremento = Math.max(0, quantidade == null ? 0 : quantidade);
         tentativas = getTentativas() + incremento;
+    }
+
+    public String getCodigoIndicacao() {
+        return codigoIndicacao;
+    }
+
+    public void setCodigoIndicacao(String codigoIndicacao) {
+        this.codigoIndicacao = codigoIndicacao;
+    }
+
+    public Usuario getIndicadoPor() {
+        return indicadoPor;
+    }
+
+    public void setIndicadoPor(Usuario indicadoPor) {
+        this.indicadoPor = indicadoPor;
     }
 
     public LocalDateTime getDataCriacao() {

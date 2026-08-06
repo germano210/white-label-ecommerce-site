@@ -37,19 +37,22 @@ public class AuthService {
     private final SecureRandom secureRandom;
     private final Clock clock;
     private final PasswordEncoder passwordEncoder;
+    private final IndicacaoService indicacaoService;
 
     @Autowired
     public AuthService(
             UsuarioRepository usuarioRepository,
             JwtService jwtService,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            IndicacaoService indicacaoService
     ) {
         this(
                 usuarioRepository,
                 jwtService,
                 new SecureRandom(),
                 Clock.systemDefaultZone(),
-                passwordEncoder
+                passwordEncoder,
+                indicacaoService
         );
     }
 
@@ -59,7 +62,7 @@ public class AuthService {
             SecureRandom secureRandom,
             Clock clock
     ) {
-        this(usuarioRepository, jwtService, secureRandom, clock, null);
+        this(usuarioRepository, jwtService, secureRandom, clock, null, null);
     }
 
     AuthService(
@@ -67,13 +70,15 @@ public class AuthService {
             JwtService jwtService,
             SecureRandom secureRandom,
             Clock clock,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            IndicacaoService indicacaoService
     ) {
         this.usuarioRepository = usuarioRepository;
         this.jwtService = jwtService;
         this.secureRandom = secureRandom;
         this.clock = clock;
         this.passwordEncoder = passwordEncoder;
+        this.indicacaoService = indicacaoService;
     }
 
     @Transactional
@@ -92,7 +97,10 @@ public class AuthService {
                 .substring(1);
         usuario.setOtp(otp);
         usuario.setOtpExpiracao(LocalDateTime.now(clock).plusMinutes(OTP_VALIDITY_MINUTES));
-        usuarioRepository.save(usuario);
+        usuario = usuarioRepository.save(usuario);
+        if (!existingUser && indicacaoService != null) {
+            indicacaoService.registrarConversao(usuario, request.codigoIndicacao());
+        }
 
         System.out.println("OTP do WhatsApp para " + telefone + ": " + otp);
 

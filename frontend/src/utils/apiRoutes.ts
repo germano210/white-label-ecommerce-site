@@ -18,6 +18,9 @@ export const apiRoutes = {
         updateName: '/api/auth/atualizar-nome',
         me: '/api/auth/me',
     },
+    usuarios: {
+        me: '/api/usuarios/me',
+    },
     checkout: {
         create: '/api/checkout',
         status: (pedidoId: RouteId) => `/api/checkout/${routeId(pedidoId)}/status`,

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { type ProdutoVitrine } from '../store/useCartStore';
@@ -24,6 +24,14 @@ interface CreateCheckoutResponse {
 function getProductImages(item: ProdutoVitrine) {
     const images = item.images?.length ? item.images : [null];
     return images.map((image) => getImageUrl(image));
+}
+
+function getProductSecondaryImages(item: ProdutoVitrine) {
+    const secondaryImages = item.secondaryImages?.length
+        ? item.secondaryImages
+        : item.images?.slice(1) ?? [];
+
+    return secondaryImages.map((image) => getImageUrl(image));
 }
 
 function getProductSize(item: ProdutoVitrine) {
@@ -55,20 +63,57 @@ function getCheckoutErrorMessage(error: unknown) {
         ?? 'Não foi possível iniciar o resgate agora. Tente novamente.';
 }
 
+function isPurchasedLikedItem(item: ProdutoVitrine) {
+    if (item.comprado || item.resgatado) return true;
+
+    const normalizedStatus = item.statusCompra
+        ?.normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+
+    return Boolean(normalizedStatus && [
+        'PAGO',
+        'PAGA',
+        'APROVADO',
+        'APROVADA',
+        'CONFIRMADO',
+        'CONFIRMADA',
+        'CONCLUIDO',
+        'CONCLUIDA',
+        'COMPRADO',
+        'COMPRADA',
+        'RESGATADO',
+        'RESGATADA',
+        'PAGAMENTO_APROVADO',
+        'PAGAMENTO_CONFIRMADO',
+        'FINALIZADO',
+        'FINALIZADA',
+        'ENTREGUE',
+        'ENVIADO',
+        'PAID',
+        'APPROVED',
+        'CONFIRMED',
+        'COMPLETED',
+        'REDEEMED',
+    ].includes(normalizedStatus));
+}
+
 export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
     const navigate = useNavigate();
     const authUser = useAuthStore((state) => state.user);
     const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-    const [activeImageByItemId, setActiveImageByItemId] = useState<Record<string, number>>({});
     const [checkoutItemId, setCheckoutItemId] = useState<string | null>(null);
     const [checkoutErrorByItemId, setCheckoutErrorByItemId] = useState<Record<string, string>>({});
     const [namePromptItemId, setNamePromptItemId] = useState<string | null>(null);
     const [checkoutName, setCheckoutName] = useState('');
     const {
+        products,
         likedItems,
         curtidasMode,
         isCurtidasLoading,
         curtidasError,
+        fetchProdutos,
         fetchCurtidas,
         setCurtidasMode,
     } = useDiscoveryStore();
@@ -76,6 +121,11 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
     useEffect(() => {
         void fetchCurtidas();
     }, [fetchCurtidas]);
+
+    useEffect(() => {
+        if (products.length > 0) return;
+        void fetchProdutos();
+    }, [fetchProdutos, products.length]);
 
     useEffect(() => {
         const previousBodyBackground = document.body.style.backgroundColor;
@@ -91,6 +141,28 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
     }, []);
 
     const isResgateMode = curtidasMode === 'resgate';
+    const likedItemsWithGallery = useMemo(() => {
+        return likedItems.map((item) => {
+            const productWithGallery = products.find((product) => product.id === item.id);
+            const hasRicherGallery = (
+                (productWithGallery?.secondaryImages?.length ?? 0) > (item.secondaryImages?.length ?? 0)
+                || (productWithGallery?.images?.length ?? 0) > (item.images?.length ?? 0)
+            );
+
+            if (!productWithGallery || !hasRicherGallery) return item;
+
+            return {
+                ...item,
+                images: productWithGallery.images ?? item.images,
+                secondaryImages: productWithGallery.secondaryImages ?? item.secondaryImages,
+            };
+        });
+    }, [likedItems, products]);
+    const visibleItems = useMemo(() => {
+        return isResgateMode
+            ? likedItemsWithGallery.filter(isPurchasedLikedItem)
+            : likedItemsWithGallery;
+    }, [isResgateMode, likedItemsWithGallery]);
 
     const handleTabChange = (mode: CurtidasMode) => {
         setCurtidasMode(mode);
@@ -201,23 +273,25 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                     />
                 )}
 
-                {!isCurtidasLoading && !curtidasError && likedItems.length === 0 && (
+                {!isCurtidasLoading && !curtidasError && visibleItems.length === 0 && (
                     <StateMessage
-                        title="Nenhuma curtida ainda"
-                        description="Volte para o For You e curta as peças que combinam com você."
-                        actionLabel="Ver peças"
-                        onAction={handleGoToForYou}
+                        title={isResgateMode ? 'X' : 'Nenhuma curtida ainda'}
+                        description={isResgateMode
+                            ? 'Você ainda não resgatou nenhum item.'
+                            : 'Volte para o For You e curta as peças que combinam com você.'}
+                        actionLabel={isResgateMode ? undefined : 'Ver peças'}
+                        onAction={isResgateMode ? undefined : handleGoToForYou}
                     />
                 )}
 
-                {!isCurtidasLoading && !curtidasError && likedItems.length > 0 && (
+                {!isCurtidasLoading && !curtidasError && visibleItems.length > 0 && (
                     <div style={gridStyle}>
-                        {likedItems.map((item) => (
+                        {visibleItems.map((item) => (
                             <LikedProductCard
                                 key={item.id}
                                 item={item}
+                                isResgateMode={isResgateMode}
                                 isExpanded={expandedItemId === item.id}
-                                activeImageIndex={activeImageByItemId[item.id] ?? 0}
                                 isCreatingCheckout={checkoutItemId === item.id}
                                 checkoutError={checkoutErrorByItemId[item.id]}
                                 shouldAskName={namePromptItemId === item.id && !getAuthUserName(authUser)}
@@ -231,12 +305,6 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                                 }}
                                 onExpand={() => setExpandedItemId(item.id)}
                                 onRedeem={() => void handleCreateCheckout(item)}
-                                onSelectImage={(imageIndex) => {
-                                    setActiveImageByItemId((currentImages) => ({
-                                        ...currentImages,
-                                        [item.id]: imageIndex,
-                                    }));
-                                }}
                             />
                         ))}
                     </div>
@@ -249,8 +317,8 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
 
 interface LikedProductCardProps {
     item: ProdutoVitrine;
+    isResgateMode: boolean;
     isExpanded: boolean;
-    activeImageIndex: number;
     isCreatingCheckout: boolean;
     checkoutError?: string;
     shouldAskName: boolean;
@@ -258,13 +326,12 @@ interface LikedProductCardProps {
     onCheckoutNameChange: (name: string) => void;
     onExpand: () => void;
     onRedeem: () => void;
-    onSelectImage: (imageIndex: number) => void;
 }
 
 function LikedProductCard({
     item,
+    isResgateMode,
     isExpanded,
-    activeImageIndex,
     isCreatingCheckout,
     checkoutError,
     shouldAskName,
@@ -272,18 +339,17 @@ function LikedProductCard({
     onCheckoutNameChange,
     onExpand,
     onRedeem,
-    onSelectImage,
 }: LikedProductCardProps) {
     const images = getProductImages(item);
-    const safeImageIndex = Math.min(Math.max(activeImageIndex, 0), images.length - 1);
-    const activeImage = images[safeImageIndex];
+    const mainImage = images[0] ?? getImageUrl(null);
+    const secondaryImages = getProductSecondaryImages(item);
 
     return (
         <article
             style={{
                 ...productCardStyle,
                 ...(isExpanded ? expandedProductCardStyle : null),
-                backgroundImage: `url("${activeImage}")`,
+                backgroundImage: `url("${mainImage}")`,
             }}
         >
             {isExpanded && <div aria-hidden="true" style={expandedBackgroundOverlayStyle} />}
@@ -310,36 +376,32 @@ function LikedProductCard({
                 ...imageWrapStyle,
                 ...(isExpanded ? expandedImageWrapStyle : fullCardImageWrapStyle),
             }}>
-                <img
-                    src={activeImage}
-                    alt={item.name}
-                    loading="lazy"
-                    style={{
-                        ...productImageStyle,
-                        ...(isExpanded ? expandedProductImageStyle : null),
-                    }}
-                />
-            </div>
-
-            <div
-                style={{
-                    ...dotsStyle,
-                    ...(isExpanded ? null : overlayDotsStyle),
-                }}
-                aria-label={`${safeImageIndex + 1} de ${images.length} fotos`}
-            >
-                {images.map((image, imageIndex) => (
-                    <button
-                        key={`${image}-${imageIndex}`}
-                        type="button"
-                        aria-label={`Ver foto ${imageIndex + 1}`}
-                        onClick={() => onSelectImage(imageIndex)}
-                        style={{
-                            ...dotStyle,
-                            ...(imageIndex === safeImageIndex ? activeDotStyle : inactiveDotStyle),
-                        }}
+                {isExpanded ? (
+                    secondaryImages.length > 0 ? (
+                        <div style={marketplaceGalleryStyle} aria-label="Fotos adicionais do produto">
+                            {secondaryImages.map((image, imageIndex) => (
+                                <img
+                                    key={`${image}-${imageIndex}`}
+                                    src={image}
+                                    alt={`${item.name} - foto ${imageIndex + 2}`}
+                                    loading="lazy"
+                                    style={marketplaceGalleryImageStyle}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div style={emptyGalleryStyle}>
+                            Sem fotos adicionais.
+                        </div>
+                    )
+                ) : (
+                    <img
+                        src={mainImage}
+                        alt={item.name}
+                        loading="lazy"
+                        style={productImageStyle}
                     />
-                ))}
+                )}
             </div>
 
             <button
@@ -350,21 +412,27 @@ function LikedProductCard({
                         return;
                     }
 
-                    onRedeem();
+                    if (!isResgateMode) onRedeem();
                 }}
-                disabled={isCreatingCheckout}
+                disabled={isCreatingCheckout || (isResgateMode && isExpanded)}
                 style={{
                     ...cardButtonStyle,
                     ...(isExpanded ? null : overlayCardButtonStyle),
                     ...(isExpanded ? cardButtonExpandedStyle : cardButtonDefaultStyle),
                     opacity: isCreatingCheckout ? 0.72 : 1,
-                    cursor: isCreatingCheckout ? 'wait' : 'pointer',
+                    cursor: isCreatingCheckout
+                        ? 'wait'
+                        : isResgateMode && isExpanded
+                            ? 'default'
+                            : 'pointer',
                 }}
             >
                 {isCreatingCheckout
                     ? 'Criando...'
                     : isExpanded
-                        ? 'Resgatar item'
+                        ? isResgateMode
+                            ? 'Item resgatado'
+                            : 'Resgatar item'
                         : 'Ver item'}
             </button>
 
@@ -572,6 +640,7 @@ const productSizeStyle: CSSProperties = {
     marginTop: '5px',
     overflow: 'hidden',
     color: '#6f6f6f',
+    opacity: 0.7,
     fontSize: '7.2px',
     fontWeight: 600,
     lineHeight: 1,
@@ -618,9 +687,9 @@ const expandedImageWrapStyle: CSSProperties = {
     position: 'relative',
     inset: 'auto',
     zIndex: 1,
-    minHeight: '154px',
+    minHeight: '170px',
     background: 'transparent',
-    padding: '6px 10px 0',
+    padding: '8px 0 0',
 };
 
 const productImageStyle: CSSProperties = {
@@ -629,43 +698,40 @@ const productImageStyle: CSSProperties = {
     objectFit: 'cover',
 };
 
-const expandedProductImageStyle: CSSProperties = {
-    objectFit: 'contain',
-};
-
-const dotsStyle: CSSProperties = {
-    position: 'relative',
-    zIndex: 1,
+const marketplaceGalleryStyle: CSSProperties = {
     display: 'flex',
-    minHeight: '18px',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
+    width: '100%',
+    height: '100%',
+    gap: '8px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    scrollSnapType: 'x mandatory',
+    padding: '0 10px 4px',
 };
 
-const overlayDotsStyle: CSSProperties = {
-    position: 'absolute',
-    right: 0,
-    bottom: '63px',
-    left: 0,
-    minHeight: '10px',
+const marketplaceGalleryImageStyle: CSSProperties = {
+    flex: '0 0 86%',
+    width: '86%',
+    height: '100%',
+    minHeight: '162px',
+    borderRadius: '10px',
+    objectFit: 'cover',
+    scrollSnapAlign: 'center',
+    background: 'transparent',
+    boxShadow: 'none',
 };
 
-const dotStyle: CSSProperties = {
-    width: '3.5px',
-    height: '3.5px',
-    border: 0,
-    borderRadius: '999px',
-    cursor: 'pointer',
-    padding: 0,
-};
-
-const activeDotStyle: CSSProperties = {
-    background: '#000000',
-};
-
-const inactiveDotStyle: CSSProperties = {
-    background: '#d8d8d8',
+const emptyGalleryStyle: CSSProperties = {
+    display: 'grid',
+    width: 'calc(100% - 20px)',
+    minHeight: '150px',
+    margin: '0 10px',
+    placeItems: 'center',
+    borderRadius: '10px',
+    background: 'rgba(255, 255, 255, 0.66)',
+    color: '#777',
+    fontSize: '9px',
+    fontWeight: 800,
 };
 
 const cardButtonStyle: CSSProperties = {

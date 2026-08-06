@@ -167,6 +167,7 @@ function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
         curtidasCount: 0,
         passosCount: 0,
         images: images.length > 0 ? images.map((image) => image.displayUrl) : [getImageUrl(null)],
+        secondaryImages: images.slice(1).map((image) => image.displayUrl),
         priceNew: formatPrice(price),
         priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
     };

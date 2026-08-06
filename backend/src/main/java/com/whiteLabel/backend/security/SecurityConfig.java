@@ -90,6 +90,7 @@ public class SecurityConfig {
                                 "/api/auth/verify-otp",
                                 "/api/auth/admin/login"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/indicacoes/*/abrir").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/pagamentos/webhook").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
@@ -99,6 +100,7 @@ public class SecurityConfig {
                                 "/swagger-ui.html"
                         ).permitAll()
                         .requestMatchers("/api/auth/atualizar-nome").authenticated()
+                        .requestMatchers("/api/indicacoes/meu-link").authenticated()
                         .requestMatchers(
                                 "/api/missoes/semanais",
                                 "/api/missoes/semanais/**"

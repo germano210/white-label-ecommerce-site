@@ -31,11 +31,29 @@ interface ProdutoApi {
     precoAntigo?: number | string | null;
     tamanho: string;
     imagemUrl?: string | null;
+    imagens?: ProdutoImagemApi[] | null;
     curtidasCount: number;
     passosCount: number;
     nomesCurtidas?: string[] | null;
     categoria?: string | null;
+    comprado?: boolean | number | string | null;
+    resgatado?: boolean | number | string | null;
+    compraConcluida?: boolean | number | string | null;
+    pagamentoConfirmado?: boolean | number | string | null;
+    status?: string | null;
+    statusCompra?: string | null;
+    pedidoStatus?: string | null;
 }
+
+type ProdutoImagemApi = string | {
+    id?: number | string | null;
+    url?: string | null;
+    imagemUrl?: string | null;
+    caminho?: string | null;
+    path?: string | null;
+    principal?: boolean | null;
+    ordem?: number | string | null;
+};
 
 interface ProdutosPage {
     content?: ProdutoApi[];
@@ -44,6 +62,15 @@ interface ProdutosPage {
 interface CurtidaApi {
     produto?: ProdutoApi | null;
     produtoId?: number | string;
+    imagemUrl?: string | null;
+    imagens?: ProdutoImagemApi[] | null;
+    comprado?: boolean | number | string | null;
+    resgatado?: boolean | number | string | null;
+    compraConcluida?: boolean | number | string | null;
+    pagamentoConfirmado?: boolean | number | string | null;
+    status?: string | null;
+    statusCompra?: string | null;
+    pedidoStatus?: string | null;
 }
 
 interface CurtidasPage {
@@ -114,6 +141,64 @@ function formatPrice(value: number) {
     });
 }
 
+function getProdutoImagePath(image: ProdutoImagemApi) {
+    if (typeof image === 'string') return image;
+    return image.url ?? image.imagemUrl ?? image.caminho ?? image.path ?? '';
+}
+
+function isPrincipalImage(value: unknown) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    if (typeof value === 'string') return value.trim().toLowerCase() === 'true';
+    return false;
+}
+
+function getProdutoImageCollections(produto: ProdutoApi) {
+    const imageEntries = (produto.imagens ?? [])
+        .map((image, index) => ({
+            path: getProdutoImagePath(image),
+            principal: typeof image === 'object' && image !== null
+                ? isPrincipalImage(image.principal)
+                : false,
+            ordem: typeof image === 'object' && image !== null ? Number(image.ordem ?? index) : index,
+        }))
+        .filter((image) => image.path.trim().length > 0)
+        .sort((a, b) => {
+            if (a.principal !== b.principal) return a.principal ? -1 : 1;
+            return a.ordem - b.ordem;
+        });
+
+    const hasExplicitPrincipal = imageEntries.some((image) => image.principal);
+    const orderedPaths = imageEntries.map((image) => image.path);
+    const fallbackPath = produto.imagemUrl?.trim();
+    const paths = (() => {
+        if (!fallbackPath) return orderedPaths;
+        if (orderedPaths.length === 0) return [fallbackPath];
+        if (!hasExplicitPrincipal) {
+            return [fallbackPath, ...orderedPaths.filter((path) => path !== fallbackPath)];
+        }
+        if (orderedPaths.includes(fallbackPath)) return orderedPaths;
+
+        return [...orderedPaths, fallbackPath];
+    })();
+    const secondaryPaths = (() => {
+        if (imageEntries.length === 0) return [];
+        if (hasExplicitPrincipal) {
+            return imageEntries
+                .filter((image) => !image.principal)
+                .map((image) => image.path);
+        }
+        if (!fallbackPath) return orderedPaths.slice(1);
+
+        return orderedPaths.filter((path) => path !== fallbackPath);
+    })();
+
+    return {
+        allImages: Array.from(new Set(paths)).map((path) => getImageUrl(path)),
+        secondaryImages: Array.from(new Set(secondaryPaths)).map((path) => getImageUrl(path)),
+    };
+}
+
 function hasValidUserName(user: AuthUser | null) {
     const nome = typeof user?.nome === 'string' ? user.nome.trim() : '';
     const name = typeof user?.name === 'string' ? user.name.trim() : '';
@@ -125,10 +210,68 @@ function hasValidUserName(user: AuthUser | null) {
     return Boolean(savedName && savedName !== savedPhone);
 }
 
+function readApiBoolean(value: boolean | number | string | null | undefined) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    if (typeof value === 'string') {
+        const normalizedValue = value.trim().toLowerCase();
+        return ['true', '1', 'sim', 'yes'].includes(normalizedValue);
+    }
+
+    return false;
+}
+
+function readPurchaseStatus(produto: ProdutoApi) {
+    return produto.statusCompra ?? produto.pedidoStatus ?? produto.status ?? '';
+}
+
+function isPurchasedProduto(produto: ProdutoApi) {
+    if (
+        readApiBoolean(produto.comprado)
+        || readApiBoolean(produto.resgatado)
+        || readApiBoolean(produto.compraConcluida)
+        || readApiBoolean(produto.pagamentoConfirmado)
+    ) {
+        return true;
+    }
+
+    const normalizedStatus = readPurchaseStatus(produto)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+
+    return [
+        'PAGO',
+        'PAGA',
+        'APROVADO',
+        'APROVADA',
+        'CONFIRMADO',
+        'CONFIRMADA',
+        'CONCLUIDO',
+        'CONCLUIDA',
+        'COMPRADO',
+        'COMPRADA',
+        'RESGATADO',
+        'RESGATADA',
+        'PAGAMENTO_APROVADO',
+        'PAGAMENTO_CONFIRMADO',
+        'FINALIZADO',
+        'FINALIZADA',
+        'ENTREGUE',
+        'ENVIADO',
+        'PAID',
+        'APPROVED',
+        'CONFIRMED',
+        'COMPLETED',
+        'REDEEMED',
+    ].includes(normalizedStatus);
+}
+
 function mapProduto(produto: ProdutoApi): ProdutoVitrine {
     const price = parsePrice(produto.precoVenda);
     const oldPrice = parsePrice(produto.precoAntigo);
-    const imageUrl = getImageUrl(produto.imagemUrl);
+    const { allImages, secondaryImages } = getProdutoImageCollections(produto);
 
     return {
         id: String(produto.id),
@@ -143,9 +286,13 @@ function mapProduto(produto: ProdutoApi): ProdutoVitrine {
         nomesCurtidas: produto.nomesCurtidas ?? [],
         curtidas: produto.curtidasCount,
         dislikes: produto.passosCount,
-        images: imageUrl ? [imageUrl] : [],
+        images: allImages,
+        secondaryImages,
         priceNew: formatPrice(price),
         priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
+        comprado: isPurchasedProduto(produto),
+        resgatado: readApiBoolean(produto.resgatado),
+        statusCompra: readPurchaseStatus(produto),
     };
 }
 
@@ -169,7 +316,20 @@ function isProdutoApi(value: CurtidaApi | ProdutoApi): value is ProdutoApi {
 
 function mapCurtida(item: CurtidaApi | ProdutoApi) {
     if (isProdutoApi(item)) return mapProduto(item);
-    if (item.produto) return mapProduto(item.produto);
+    if (item.produto) {
+        return mapProduto({
+            ...item.produto,
+            imagemUrl: item.produto.imagemUrl ?? item.imagemUrl,
+            imagens: item.produto.imagens ?? item.imagens,
+            comprado: item.produto.comprado ?? item.comprado,
+            resgatado: item.produto.resgatado ?? item.resgatado,
+            compraConcluida: item.produto.compraConcluida ?? item.compraConcluida,
+            pagamentoConfirmado: item.produto.pagamentoConfirmado ?? item.pagamentoConfirmado,
+            status: item.produto.status ?? item.status,
+            statusCompra: item.produto.statusCompra ?? item.statusCompra,
+            pedidoStatus: item.produto.pedidoStatus ?? item.pedidoStatus,
+        });
+    }
     return null;
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import {
     BrowserRouter,
     Navigate,
@@ -8,6 +8,7 @@ import {
     useNavigate,
 } from 'react-router-dom';
 import { LoginModal } from './components/common/LoginModal';
+import { MissionsRail } from './components/domain/MissionsRail';
 import { AppHamburgerMenu } from './components/layout/AppHamburgerMenu';
 import { DiscoveryScreen } from './pages/DiscoveryScreen';
 import { CurtidasScreen } from './pages/CurtidasScreen';
@@ -77,7 +78,9 @@ function AppRoutes() {
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const isAdminRoute = location.pathname === appRoutes.admin;
     const isCurtidasRoute = location.pathname.startsWith('/curtidas');
-    const appBackground = isCurtidasRoute ? '#e6e6e6' : '#FAF7F2';
+    const shouldShowGlobalMissions = !isAdminRoute && location.pathname !== appRoutes.forYou;
+    const hasFloatingWindowBackground = isCurtidasRoute || location.pathname === appRoutes.perfil;
+    const appBackground = hasFloatingWindowBackground ? '#e6e6e6' : '#FAF7F2';
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -217,6 +220,10 @@ function AppRoutes() {
                     path={appRoutes.resgate}
                     element={<CurtidasRoute mode="resgate" onBack={() => navigate(appRoutes.forYou)} />}
                 />
+                <Route
+                    path={appRoutes.resgates}
+                    element={<CurtidasRoute mode="resgate" onBack={() => navigate(appRoutes.forYou)} />}
+                />
                 <Route path={appRoutes.perfil} element={<PerfilScreen />} />
                 <Route path={appRoutes.indique} element={<IndiqueScreen />} />
                 <Route path={appRoutes.checkoutSuccess} element={<CheckoutSuccessScreen />} />
@@ -228,10 +235,29 @@ function AppRoutes() {
             </Routes>
 
             {!isAdminRoute && !isCurtidasRoute && <AppHamburgerMenu />}
+            {shouldShowGlobalMissions && (
+                <div style={globalMissionsRailShellStyle}>
+                    <MissionsRail
+                        currentProduct={null}
+                        onNavigateToCurtidas={navigateToCurtidas}
+                        onShareCurrentProduct={async () => undefined}
+                    />
+                </div>
+            )}
             {!isAdminRoute && !isAuthenticated && <LoginModal />}
         </div>
     );
 }
+
+const globalMissionsRailShellStyle: CSSProperties = {
+    position: 'fixed',
+    left: '50%',
+    bottom: '14px',
+    zIndex: 42,
+    width: 'min(100%, 430px)',
+    transform: 'translateX(-50%)',
+    pointerEvents: 'auto',
+};
 
 interface CurtidasRouteProps {
     mode: CurtidasMode;

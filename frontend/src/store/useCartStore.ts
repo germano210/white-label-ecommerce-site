@@ -16,11 +16,15 @@ export interface ProdutoVitrine {
     curtidas?: number;
     dislikes?: number;
     images?: string[];
+    secondaryImages?: string[];
     priceNew: string;
     priceOld?: string;
     priceSave?: string;
     badge?: string;
     badgeText?: string;
+    comprado?: boolean;
+    resgatado?: boolean;
+    statusCompra?: string;
 }
 
 export interface CartItem extends ProdutoVitrine {

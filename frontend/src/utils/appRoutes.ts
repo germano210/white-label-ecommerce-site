@@ -15,6 +15,7 @@ export const appRoutes = {
     explorar: '/explorar',
     curtidas: '/curtidas/curtidas',
     resgate: '/curtidas/resgate',
+    resgates: '/curtidas/resgates',
     perfil: '/perfil',
     indique: '/indique',
     checkoutSuccess: '/checkout/sucesso',
