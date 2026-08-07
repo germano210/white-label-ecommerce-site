@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BrechoDaCamiLogo } from '../../components/common/BrechoDaCamiLogo';
 import { AppIcon } from '../../components/icons/AppIcon';
 import { useAdminStore, type AdminUser, type Role } from '../../store/useAdminStore';
 import { api } from '../../utils/api';
@@ -77,9 +78,7 @@ export function AdminLoginScreen() {
             </button>
 
             <div style={{ background: 'white', padding: '40px 24px', borderRadius: '24px', width: '100%', maxWidth: '360px', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', textAlign: 'center' }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 600, color: 'var(--dark)', marginBottom: '8px' }}>
-                    Brechó <span style={{ color: 'var(--terra)' }}>da Cami</span>
-                </div>
+                <BrechoDaCamiLogo style={{ display: 'block', width: '132px', height: 'auto', margin: '0 auto 8px' }} />
                 <div style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '30px' }}>
                     Painel do Lojista
                 </div>

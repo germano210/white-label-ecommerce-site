@@ -17,12 +17,14 @@
 
 .roleta-vip-title {
     margin: 0 0 16px;
-    color: #26311f;
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1;
-    text-align: center;
+    display: flex;
+    justify-content: center;
+}
+
+.roleta-vip-logo {
+    display: block;
+    width: 118px;
+    height: auto;
 }
 
 .roleta-vip-goal-card {

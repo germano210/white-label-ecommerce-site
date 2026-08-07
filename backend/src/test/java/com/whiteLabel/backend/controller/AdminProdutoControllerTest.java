@@ -33,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.hamcrest.Matchers.endsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -340,6 +341,108 @@ class AdminProdutoControllerTest {
     }
 
     @Test
+    void shouldCreateProductWithSingleSafeSvgImage() throws Exception {
+        Usuario admin = criarAdmin("551199991033");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(svg("imagem", svgSeguro()))
+                        .param("nome", "Camisa SVG")
+                        .param("precoVenda", "89.90")
+                        .param("condicao", "8.50")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagemUrl").value(endsWith(".svg")))
+                .andExpect(jsonPath("$.imagens.length()").value(1))
+                .andExpect(jsonPath("$.imagens[0].url").value(endsWith(".svg")))
+                .andExpect(jsonPath("$.imagens[0].principal").value(true));
+    }
+
+    @Test
+    void shouldCreateProductWithMultipleImagesIncludingSvg() throws Exception {
+        Usuario admin = criarAdmin("551199991034");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagens", "foto-webp"))
+                        .file(svg("imagens", svgSeguro()))
+                        .param("nome", "Mix SVG")
+                        .param("precoVenda", "99.90")
+                        .param("condicao", "8.50")
+                        .param("imagemPrincipalIndex", "1")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagemUrl").value(endsWith(".svg")))
+                .andExpect(jsonPath("$.imagens.length()").value(2))
+                .andExpect(jsonPath("$.imagens[0].url").value(endsWith(".webp")))
+                .andExpect(jsonPath("$.imagens[0].principal").value(false))
+                .andExpect(jsonPath("$.imagens[1].url").value(endsWith(".svg")))
+                .andExpect(jsonPath("$.imagens[1].principal").value(true));
+    }
+
+    @Test
+    void shouldRejectSvgWithScriptOnCreate() throws Exception {
+        Usuario admin = criarAdmin("551199991035");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(svg("imagem", "<svg><script>alert(1)</script></svg>"))
+                        .param("nome", "SVG Script")
+                        .param("precoVenda", "79.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("SVG inválido ou inseguro."));
+    }
+
+    @Test
+    void shouldRejectSvgWithJavascriptUrlOnCreate() throws Exception {
+        Usuario admin = criarAdmin("551199991036");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(svg("imagem", "<svg><a href=\"javascript:alert(1)\" /></svg>"))
+                        .param("nome", "SVG Javascript")
+                        .param("precoVenda", "79.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("SVG inválido ou inseguro."));
+    }
+
+    @Test
+    void shouldRejectSvgWithEventHandlerAttributeOnCreate() throws Exception {
+        Usuario admin = criarAdmin("551199991037");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(svg("imagem", "<svg><image onfocus=\"alert(1)\" /></svg>"))
+                        .param("nome", "SVG Evento")
+                        .param("precoVenda", "79.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("SVG inválido ou inseguro."));
+    }
+
+    @Test
+    void shouldKeepAcceptingJpgPngAndWebpImages() throws Exception {
+        Usuario admin = criarAdmin("551199991038");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagens", "foto.jpg", "image/jpeg", "jpg"))
+                        .file(imagem("imagens", "foto.png", "image/png", "png"))
+                        .file(imagem("imagens", "foto.webp", "image/webp", "webp"))
+                        .param("nome", "Raster OK")
+                        .param("precoVenda", "119.90")
+                        .param("condicao", "9.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagens.length()").value(3));
+    }
+
+    @Test
     void shouldUpdateBasicProductFields() throws Exception {
         Usuario admin = criarAdmin("551199991003");
         Produto produto = criarProdutoComImagens("Saia Midi", "/uploads/saia-1.webp").produto();
@@ -384,6 +487,25 @@ class AdminProdutoControllerTest {
                 .andExpect(jsonPath("$.imagens[0].principal").value(true));
 
         assertEquals(2, produtoImagemRepository.count());
+    }
+
+    @Test
+    void shouldAddSafeSvgImageOnEdit() throws Exception {
+        Usuario admin = criarAdmin("551199991039");
+        Produto produto = criarProdutoComImagens("Blazer SVG", "/uploads/blazer-1.webp")
+                .produto();
+
+        mockMvc.perform(multipart("/api/admin/produtos/{id}", produto.getId())
+                        .file(svg("novasImagens", svgSeguro()))
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagens.length()").value(2))
+                .andExpect(jsonPath("$.imagens[1].url").value(endsWith(".svg")));
     }
 
     @Test
@@ -552,12 +674,33 @@ class AdminProdutoControllerTest {
     }
 
     private MockMultipartFile imagem(String campo, String conteudo) {
+        return imagem(campo, campo + ".webp", "image/webp", conteudo);
+    }
+
+    private MockMultipartFile imagem(
+            String campo,
+            String nomeArquivo,
+            String contentType,
+            String conteudo
+    ) {
         return new MockMultipartFile(
                 campo,
-                campo + ".webp",
-                "image/webp",
+                nomeArquivo,
+                contentType,
                 conteudo.getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private MockMultipartFile svg(String campo, String conteudo) {
+        return imagem(campo, campo + ".svg", "image/svg+xml", conteudo);
+    }
+
+    private String svgSeguro() {
+        return """
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+                    <path d="M1 1h8v8H1z" fill="#687152"/>
+                </svg>
+                """;
     }
 
     private MockMultipartFile imagemComTamanho(String campo, int tamanhoBytes) {

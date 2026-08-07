@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Copy, Gift, Lock, RefreshCcw } from 'lucide-react';
+import { BrechoDaCamiLogo } from '../components/common/BrechoDaCamiLogo';
 import { type AuthUser, useAuthStore } from '../store/useAuthStore';
 import { useConfiguracoesStore } from '../store/useConfiguracoesStore';
 import { api, isCookieAuthMode } from '../utils/api';
@@ -280,7 +281,9 @@ export function RoletaVipScreen() {
     return (
         <div className="roleta-vip-page">
             <main className="roleta-vip-shell" aria-busy={isLoadingStatus}>
-                <h1 className="roleta-vip-title">Brecho da Cami</h1>
+                <h1 className="roleta-vip-title">
+                    <BrechoDaCamiLogo className="roleta-vip-logo" />
+                </h1>
 
                 <section className="roleta-vip-goal-card">
                     <div className="roleta-vip-goal-row">

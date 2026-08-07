@@ -5,6 +5,7 @@ import { useDiscoveryStore } from '../../store/useDiscoveryStore';
 import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
+import { BrechoDaCamiLogo } from './BrechoDaCamiLogo';
 import './LoginModal.css';
 
 type LoginStep = 'choice' | 'details' | 'otp';
@@ -239,7 +240,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                 {step === 'choice' && (
                     <>
                         <h1 id="login-modal-title" className="login-modal__brand">
-                            Brechó da Cami
+                            <BrechoDaCamiLogo className="login-modal__brand-logo" />
                         </h1>
 
                         <div className="login-modal__gallery grid grid-cols-3 gap-2">
@@ -276,7 +277,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                 {step === 'details' && (
                     <form className="login-modal__form" onSubmit={requestOtp} noValidate>
                         <h1 id="login-modal-title" className="login-modal__brand">
-                            Brechó da Cami
+                            <BrechoDaCamiLogo className="login-modal__brand-logo" />
                         </h1>
                         <label className="login-modal__label" htmlFor="login-phone">
                             WhatsApp
@@ -308,7 +309,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                 {step === 'otp' && (
                     <form className="login-modal__form" onSubmit={verifyOtp} noValidate>
                         <h1 id="login-modal-title" className="login-modal__brand">
-                            Brechó da Cami
+                            <BrechoDaCamiLogo className="login-modal__brand-logo" />
                         </h1>
                         {notice && <p className="login-modal__notice" role="status">{notice}</p>}
                         <label className="login-modal__label" htmlFor="login-otp">
