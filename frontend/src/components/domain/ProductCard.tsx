@@ -1,4 +1,6 @@
 import  {type ProdutoVitrine} from '../../store/useCartStore';
+import { useConfiguracoesStore } from '../../store/useConfiguracoesStore';
+import { formatCondicao } from '../../utils/condicao';
 import { getImageUrl } from '../../utils/imageUtils';
 
 interface ProductCardProps {
@@ -14,7 +16,9 @@ interface ProductCardProps {
  * O clique em qualquer lugar do card deve abrir o modal de detalhes (redução de atrito).
  */
 export function ProductCard({ product, onViewDetails }: ProductCardProps) {
+    const condicaoCasasDecimais = useConfiguracoesStore((state) => state.condicaoCasasDecimais);
     const imageUrl = getImageUrl(product.images?.[0]);
+    const productCondition = formatCondicao(product.condicao, condicaoCasasDecimais);
 
     return (
         <div
@@ -50,6 +54,11 @@ export function ProductCard({ product, onViewDetails }: ProductCardProps) {
                     {/* Formatador de Moeda Nativo do JS (Intl) - Mais leve que instalar libs extras */}
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}
                 </p>
+                {productCondition && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        Cond. {productCondition}
+                    </p>
+                )}
             </div>
         </div>
     );

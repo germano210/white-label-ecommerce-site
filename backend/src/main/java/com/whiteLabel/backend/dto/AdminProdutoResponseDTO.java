@@ -6,11 +6,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record ProdutoResponseDTO(
+public record AdminProdutoResponseDTO(
         Long id,
         String nome,
         BigDecimal precoVenda,
         BigDecimal precoAntigo,
+        BigDecimal precoCusto,
         String imagemUrl,
         String tamanho,
         BigDecimal condicao,
@@ -21,24 +22,17 @@ public record ProdutoResponseDTO(
         List<ProdutoImagemResponse> imagens
 ) {
 
-    public static ProdutoResponseDTO from(Produto produto) {
-        return from(produto, List.of());
-    }
-
-    public static ProdutoResponseDTO from(Produto produto, List<String> nomesCurtidas) {
-        return from(produto, nomesCurtidas, imagensLegadas(produto));
-    }
-
-    public static ProdutoResponseDTO from(
+    public static AdminProdutoResponseDTO from(
             Produto produto,
             List<String> nomesCurtidas,
             List<ProdutoImagemResponse> imagens
     ) {
-        return new ProdutoResponseDTO(
+        return new AdminProdutoResponseDTO(
                 produto.getId(),
                 produto.getNome(),
                 produto.getPrecoVenda(),
                 produto.getPrecoAntigo(),
+                produto.getPrecoCusto(),
                 produto.getImagemUrl(),
                 produto.getTamanho(),
                 produto.getCondicao() == null ? BigDecimal.ZERO : produto.getCondicao(),
@@ -48,13 +42,5 @@ public record ProdutoResponseDTO(
                 nomesCurtidas == null ? List.of() : nomesCurtidas,
                 imagens == null ? List.of() : imagens
         );
-    }
-
-    private static List<ProdutoImagemResponse> imagensLegadas(Produto produto) {
-        if (produto.getImagemUrl() == null || produto.getImagemUrl().isBlank()) {
-            return List.of();
-        }
-
-        return List.of(ProdutoImagemResponse.legada(produto.getImagemUrl()));
     }
 }

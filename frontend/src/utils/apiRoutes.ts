@@ -11,6 +11,9 @@ export const apiRoutes = {
     missoes: {
         list: '/api/missoes',
     },
+    configuracoes: {
+        publicas: '/api/configuracoes/publicas',
+    },
     auth: {
         requestOtp: '/api/auth/request-otp',
         verifyOtp: '/api/auth/verify-otp',
@@ -36,7 +39,15 @@ export const apiRoutes = {
         create: (produtoId: RouteId) => `/api/compartilhamentos/produtos/${routeId(produtoId)}`,
         open: (codigo: RouteId) => `/api/compartilhamentos/${routeId(codigo)}/abrir`,
     },
+    roleta: {
+        status: '/api/roleta',
+        girar: '/api/roleta/girar',
+        produtos: '/api/roleta/produtos',
+        convites: '/api/roleta/convites',
+    },
     admin: {
+        configuracoes: '/api/admin/configuracoes',
+        roleta: '/api/admin/roleta',
         produtos: {
             list: '/api/admin/produtos',
             create: '/api/admin/produtos',

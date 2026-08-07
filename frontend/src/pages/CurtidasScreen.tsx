@@ -3,10 +3,12 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { type ProdutoVitrine } from '../store/useCartStore';
 import { useAuthStore, type AuthUser } from '../store/useAuthStore';
+import { useConfiguracoesStore } from '../store/useConfiguracoesStore';
 import { type CurtidasMode, useDiscoveryStore } from '../store/useDiscoveryStore';
 import { AppHamburgerMenu } from '../components/layout/AppHamburgerMenu';
 import { api } from '../utils/api';
 import { getImageUrl } from '../utils/imageUtils';
+import { formatCondicao } from '../utils/condicao';
 import { apiRoutes } from '../utils/apiRoutes';
 import { appRoutes } from '../utils/appRoutes';
 
@@ -340,9 +342,11 @@ function LikedProductCard({
     onExpand,
     onRedeem,
 }: LikedProductCardProps) {
+    const condicaoCasasDecimais = useConfiguracoesStore((state) => state.condicaoCasasDecimais);
     const images = getProductImages(item);
     const mainImage = images[0] ?? getImageUrl(null);
     const secondaryImages = getProductSecondaryImages(item);
+    const productCondition = formatCondicao(item.condicao, condicaoCasasDecimais);
 
     return (
         <article
@@ -370,6 +374,14 @@ function LikedProductCard({
                 }}>
                     {getProductSize(item)}
                 </span>
+                {productCondition && (
+                    <span style={{
+                        ...productConditionStyle,
+                        ...(isExpanded ? expandedProductSizeStyle : overlayProductTextStyle),
+                    }}>
+                        Cond. {productCondition}
+                    </span>
+                )}
             </div>
 
             <div style={{
@@ -642,6 +654,19 @@ const productSizeStyle: CSSProperties = {
     color: '#6f6f6f',
     opacity: 0.7,
     fontSize: '7.2px',
+    fontWeight: 600,
+    lineHeight: 1,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+const productConditionStyle: CSSProperties = {
+    display: 'block',
+    marginTop: '4px',
+    overflow: 'hidden',
+    color: '#6f6f6f',
+    opacity: 0.64,
+    fontSize: '6.8px',
     fontWeight: 600,
     lineHeight: 1,
     textOverflow: 'ellipsis',

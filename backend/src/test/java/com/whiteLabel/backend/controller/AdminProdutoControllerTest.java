@@ -113,11 +113,15 @@ class AdminProdutoControllerTest {
                         .param("nome", "Vestido Floral")
                         .param("precoVenda", "129.90")
                         .param("precoAntigo", "189.90")
+                        .param("precoCusto", "45.50")
+                        .param("condicao", "8.50")
                         .param("tamanho", "M")
                         .header("Authorization", bearer(admin))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.nome").value("Vestido Floral"))
+                .andExpect(jsonPath("$.condicao").value(8.50))
+                .andExpect(jsonPath("$.precoCusto").value(45.50))
                 .andExpect(jsonPath("$.imagemUrl").isNotEmpty())
                 .andExpect(jsonPath("$.imagens.length()").value(1))
                 .andExpect(jsonPath("$.imagens[0].principal").value(true));
@@ -131,14 +135,17 @@ class AdminProdutoControllerTest {
         Usuario admin = criarAdmin("551199991002");
 
         mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagem", "foto-legada"))
                         .file(imagem("imagens", "foto-1"))
                         .file(imagem("imagens", "foto-2"))
                         .param("nome", "Camisa Linho")
                         .param("precoVenda", "89.90")
+                        .param("condicao", "8.75")
                         .param("tamanho", "P")
                         .header("Authorization", bearer(admin))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.condicao").value(8.75))
                 .andExpect(jsonPath("$.imagens.length()").value(2))
                 .andExpect(jsonPath("$.imagens[0].ordem").value(0))
                 .andExpect(jsonPath("$.imagens[0].principal").value(true))
@@ -148,7 +155,188 @@ class AdminProdutoControllerTest {
         Produto produto = produtoRepository.findAll().get(0);
         List<ProdutoImagem> imagens =
                 produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produto.getId());
+        assertEquals(2, imagens.size());
         assertEquals(produto.getImagemUrl(), imagens.get(0).getUrl());
+    }
+
+    @Test
+    void shouldCreateProductWithSelectedPrincipalImageIndex() throws Exception {
+        Usuario admin = criarAdmin("551199991020");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagens", "foto-1"))
+                        .file(imagem("imagens", "foto-2"))
+                        .file(imagem("imagens", "foto-3"))
+                        .param("nome", "Casaco Principal")
+                        .param("precoVenda", "149.90")
+                        .param("condicao", "9.00")
+                        .param("tamanho", "G")
+                        .param("imagemPrincipalIndex", "1")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagens.length()").value(3))
+                .andExpect(jsonPath("$.imagens[0].ordem").value(0))
+                .andExpect(jsonPath("$.imagens[0].principal").value(false))
+                .andExpect(jsonPath("$.imagens[1].ordem").value(1))
+                .andExpect(jsonPath("$.imagens[1].principal").value(true))
+                .andExpect(jsonPath("$.imagens[2].ordem").value(2))
+                .andExpect(jsonPath("$.imagens[2].principal").value(false));
+
+        Produto produto = produtoRepository.findAll().get(0);
+        List<ProdutoImagem> imagens =
+                produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produto.getId());
+
+        assertEquals(3, imagens.size());
+        assertEquals(1, imagens.stream().filter(ProdutoImagem::getPrincipal).count());
+        assertEquals(0, imagens.get(0).getOrdem());
+        assertEquals(1, imagens.get(1).getOrdem());
+        assertEquals(2, imagens.get(2).getOrdem());
+        assertEquals(produto.getImagemUrl(), imagens.get(1).getUrl());
+    }
+
+    @Test
+    void shouldRejectInvalidPrincipalImageIndexOnCreate() throws Exception {
+        Usuario admin = criarAdmin("551199991021");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagens", "foto-1"))
+                        .file(imagem("imagens", "foto-2"))
+                        .param("nome", "Indice Invalido")
+                        .param("precoVenda", "79.90")
+                        .param("condicao", "8.00")
+                        .param("imagemPrincipalIndex", "2")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectCommonUserProductCreation() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Comum", "551199991022");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagem", "foto"))
+                        .param("nome", "Produto Bloqueado")
+                        .param("precoVenda", "59.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldAcceptFiveMegabyteImageOnCreate() throws Exception {
+        Usuario admin = criarAdmin("551199991023");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagemComTamanho("imagens", 5 * 1024 * 1024))
+                        .param("nome", "Foto Cinco Mega")
+                        .param("precoVenda", "99.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagens.length()").value(1))
+                .andExpect(jsonPath("$.imagens[0].principal").value(true));
+    }
+
+    @Test
+    void shouldRejectImageAboveFifteenMegabytesWithFriendlyMessage() throws Exception {
+        Usuario admin = criarAdmin("551199991024");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagemComTamanho("imagens", (15 * 1024 * 1024) + 1))
+                        .param("nome", "Foto Grande")
+                        .param("precoVenda", "99.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Imagem muito grande. Envie fotos de até 15 MB cada."
+                ));
+    }
+
+    @Test
+    void shouldAcceptMultipleImagesInsideRequestLimit() throws Exception {
+        Usuario admin = criarAdmin("551199991025");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagemComTamanho("imagens", 5 * 1024 * 1024))
+                        .file(imagemComTamanho("imagens", 5 * 1024 * 1024))
+                        .param("nome", "Fotos Dentro Do Limite")
+                        .param("precoVenda", "119.90")
+                        .param("condicao", "8.00")
+                        .param("imagemPrincipalIndex", "1")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imagens.length()").value(2))
+                .andExpect(jsonPath("$.imagens[0].principal").value(false))
+                .andExpect(jsonPath("$.imagens[1].principal").value(true));
+    }
+
+    @Test
+    void shouldRejectEmptyImageOnCreate() throws Exception {
+        Usuario admin = criarAdmin("551199991026");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(new MockMultipartFile(
+                                "imagens",
+                                "vazia.webp",
+                                "image/webp",
+                                new byte[0]
+                        ))
+                        .param("nome", "Foto Vazia")
+                        .param("precoVenda", "49.90")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectConditionWithMoreThanTwoDecimals() throws Exception {
+        Usuario admin = criarAdmin("551199991030");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagem", "principal"))
+                        .param("nome", "Condicao Invalida")
+                        .param("precoVenda", "79.90")
+                        .param("condicao", "8.755")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectConditionOutsideRange() throws Exception {
+        Usuario admin = criarAdmin("551199991031");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagem", "principal"))
+                        .param("nome", "Condicao Fora Do Range")
+                        .param("precoVenda", "79.90")
+                        .param("condicao", "10.01")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectNegativeCostPrice() throws Exception {
+        Usuario admin = criarAdmin("551199991032");
+
+        mockMvc.perform(multipart("/api/admin/produtos")
+                        .file(imagem("imagem", "principal"))
+                        .param("nome", "Custo Negativo")
+                        .param("precoVenda", "79.90")
+                        .param("precoCusto", "-1.00")
+                        .param("condicao", "8.00")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -160,6 +348,8 @@ class AdminProdutoControllerTest {
                         .param("nome", "Saia Midi Editada")
                         .param("precoVenda", "119.90")
                         .param("precoAntigo", "159.90")
+                        .param("precoCusto", "55.50")
+                        .param("condicao", "7.25")
                         .param("tamanho", "G")
                         .header("Authorization", bearer(admin))
                         .accept(MediaType.APPLICATION_JSON)
@@ -171,6 +361,8 @@ class AdminProdutoControllerTest {
                 .andExpect(jsonPath("$.nome").value("Saia Midi Editada"))
                 .andExpect(jsonPath("$.precoVenda").value(119.90))
                 .andExpect(jsonPath("$.precoAntigo").value(159.90))
+                .andExpect(jsonPath("$.precoCusto").value(55.50))
+                .andExpect(jsonPath("$.condicao").value(7.25))
                 .andExpect(jsonPath("$.tamanho").value("G"));
     }
 
@@ -192,6 +384,26 @@ class AdminProdutoControllerTest {
                 .andExpect(jsonPath("$.imagens[0].principal").value(true));
 
         assertEquals(2, produtoImagemRepository.count());
+    }
+
+    @Test
+    void shouldRejectOversizedNewImageOnEdit() throws Exception {
+        Usuario admin = criarAdmin("551199991027");
+        Produto produto = criarProdutoComImagens("Blazer Grande", "/uploads/blazer-grande.webp")
+                .produto();
+
+        mockMvc.perform(multipart("/api/admin/produtos/{id}", produto.getId())
+                        .file(imagemComTamanho("novasImagens", (15 * 1024 * 1024) + 1))
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Imagem muito grande. Envie fotos de até 15 MB cada."
+                ));
     }
 
     @Test
@@ -264,12 +476,15 @@ class AdminProdutoControllerTest {
                 .produto();
         Produto novo = criarProdutoComImagens("Produto Novo", "/uploads/novo.webp")
                 .produto();
+        novo.setPrecoCusto(BigDecimal.valueOf(39.90));
+        produtoRepository.save(novo);
 
         mockMvc.perform(get("/api/admin/produtos")
                         .header("Authorization", bearer(admin))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(novo.getId()))
+                .andExpect(jsonPath("$[0].precoCusto").value(39.90))
                 .andExpect(jsonPath("$[1].id").value(antigo.getId()));
     }
 
@@ -285,6 +500,8 @@ class AdminProdutoControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(produtoCriado.produto().getId()))
                 .andExpect(jsonPath("$[0].imagemUrl").value("/uploads/macacao-1.webp"))
+                .andExpect(jsonPath("$[0].condicao").value(8.50))
+                .andExpect(jsonPath("$[0].precoCusto").doesNotExist())
                 .andExpect(jsonPath("$[0].imagens.length()").value(2))
                 .andExpect(jsonPath("$[0].imagens[0].principal").value(true));
     }
@@ -313,10 +530,15 @@ class AdminProdutoControllerTest {
         return usuarioRepository.save(admin);
     }
 
+    private Usuario criarUsuario(String nome, String telefone) {
+        return usuarioRepository.save(new Usuario(nome, telefone));
+    }
+
     private ProdutoCriado criarProdutoComImagens(String nome, String... urls) {
         Produto produto = new Produto();
         produto.setNome(nome);
         produto.setPrecoVenda(BigDecimal.valueOf(99.90));
+        produto.setCondicao(new BigDecimal("8.50"));
         produto.setImagemUrl(urls[0]);
         produto = produtoRepository.save(produto);
 
@@ -335,6 +557,15 @@ class AdminProdutoControllerTest {
                 campo + ".webp",
                 "image/webp",
                 conteudo.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private MockMultipartFile imagemComTamanho(String campo, int tamanhoBytes) {
+        return new MockMultipartFile(
+                campo,
+                campo + ".webp",
+                "image/webp",
+                new byte[tamanhoBytes]
         );
     }
 

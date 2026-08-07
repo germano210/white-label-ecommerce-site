@@ -1,0 +1,445 @@
+.roleta-vip-page {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.42), transparent 280px),
+        #fff7e6;
+    color: #26311f;
+}
+
+.roleta-vip-shell {
+    width: min(100%, 430px);
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: 19px 31px 28px;
+}
+
+.roleta-vip-title {
+    margin: 0 0 16px;
+    color: #26311f;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+}
+
+.roleta-vip-goal-card {
+    border-radius: 13px;
+    background: #273820;
+    color: #fff7e6;
+    padding: 16px 14px 14px;
+    box-shadow: 0 16px 26px rgba(39, 56, 32, 0.2);
+}
+
+.roleta-vip-goal-row,
+.roleta-vip-goal-subtitle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.roleta-vip-goal-row span {
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.roleta-vip-goal-row strong {
+    color: #d1b45b;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.roleta-vip-progress {
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 247, 230, 0.3);
+    margin-top: 10px;
+}
+
+.roleta-vip-progress span {
+    display: block;
+    height: 100%;
+    min-width: 4px;
+    border-radius: inherit;
+    background: #d1b45b;
+}
+
+.roleta-vip-goal-subtitle {
+    border-bottom: 1px solid rgba(255, 247, 230, 0.13);
+    color: rgba(255, 247, 230, 0.92);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 8px;
+    padding-bottom: 10px;
+}
+
+.roleta-vip-goal-subtitle span {
+    color: rgba(255, 247, 230, 0.76);
+    white-space: nowrap;
+}
+
+.roleta-vip-event {
+    color: rgba(255, 247, 230, 0.86);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    margin-top: 10px;
+}
+
+.roleta-vip-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.76);
+    box-shadow: 0 8px 18px rgba(35, 32, 22, 0.09);
+    margin-top: 18px;
+    padding: 4px;
+}
+
+.roleta-vip-tabs button {
+    min-height: 39px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #4f4a3e;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.roleta-vip-tabs button.is-active {
+    background: #435d38;
+    color: #fff7e6;
+}
+
+.roleta-vip-alert {
+    border-radius: 12px;
+    background: #fff0ed;
+    color: #a63d2f;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 12px;
+    padding: 11px 12px;
+}
+
+.roleta-vip-spin-panel {
+    position: relative;
+    padding-top: 17px;
+}
+
+.roleta-vip-pointer {
+    width: 0;
+    height: 0;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-top: 27px solid #a95434;
+    margin: 0 auto -3px;
+    position: relative;
+    z-index: 2;
+}
+
+.roleta-vip-wheel {
+    display: grid;
+    width: min(72vw, 280px);
+    aspect-ratio: 1;
+    place-items: center;
+    border: 9px solid rgba(255, 255, 255, 0.92);
+    border-radius: 50%;
+    background: conic-gradient(
+        from -12deg,
+        #435d38 0deg 32deg,
+        #fbf4e3 32deg 64deg,
+        #435d38 64deg 96deg,
+        #fbf4e3 96deg 128deg,
+        #435d38 128deg 160deg,
+        #fbf4e3 160deg 192deg,
+        #435d38 192deg 224deg,
+        #fbf4e3 224deg 256deg,
+        #435d38 256deg 288deg,
+        #fbf4e3 288deg 320deg,
+        #435d38 320deg 360deg
+    );
+    box-shadow:
+        inset 0 0 0 2px rgba(67, 93, 56, 0.12),
+        0 20px 42px rgba(42, 50, 32, 0.18);
+    margin: 0 auto;
+}
+
+.roleta-vip-wheel-button {
+    width: 76px;
+    aspect-ratio: 1;
+    border: 5px solid #fff7e6;
+    border-radius: 50%;
+    background: #a95434;
+    color: #fff7e6;
+    cursor: pointer;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 17px;
+    font-weight: 900;
+}
+
+.roleta-vip-wheel-button:disabled,
+.roleta-vip-primary:disabled {
+    cursor: wait;
+    opacity: 0.68;
+}
+
+.roleta-vip-spins {
+    color: #3c3a34;
+    font-size: 16px;
+    margin: 22px 0 14px;
+    text-align: center;
+}
+
+.roleta-vip-spins strong {
+    color: #26311f;
+    font-size: 19px;
+}
+
+.roleta-vip-primary {
+    width: 100%;
+    min-height: 52px;
+    border: 0;
+    border-radius: 12px;
+    background: #a95434;
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+    color: #fff7e6;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.roleta-vip-soft-card,
+.roleta-vip-prize-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 76px;
+    border: 1px solid rgba(67, 93, 56, 0.08);
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.76);
+    box-shadow: 0 8px 20px rgba(35, 32, 22, 0.06);
+    margin-top: 17px;
+    padding: 14px;
+    text-align: center;
+}
+
+.roleta-vip-soft-card strong {
+    color: #6a6559;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+}
+
+.roleta-vip-soft-card span,
+.roleta-vip-prize-card span {
+    color: #4f4a3e;
+    font-size: 15px;
+}
+
+.roleta-vip-prize-card strong {
+    color: #26311f;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 26px;
+    font-weight: 900;
+}
+
+.roleta-vip-prizes {
+    margin-top: 24px;
+}
+
+.roleta-vip-prizes h2 {
+    color: #5a564c;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    margin: 0 0 11px;
+}
+
+.roleta-vip-prize-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+}
+
+.roleta-vip-prize-list span {
+    border: 1px dashed rgba(67, 93, 56, 0.16);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.62);
+    color: #26311f;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 7px 8px;
+}
+
+.roleta-vip-invite-card {
+    border-radius: 13px;
+    background: #435d38;
+    color: #fff7e6;
+    margin-top: 22px;
+    padding: 18px 17px;
+}
+
+.roleta-vip-invite-card h2 {
+    margin: 0 0 10px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.roleta-vip-invite-card ol {
+    margin: 0 0 15px 18px;
+    padding: 0;
+}
+
+.roleta-vip-invite-card li {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 4px;
+}
+
+.roleta-vip-invite-count,
+.roleta-vip-copy-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.roleta-vip-invite-count {
+    align-items: center;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 247, 230, 0.9);
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+}
+
+.roleta-vip-invite-count strong {
+    color: #d1b45b;
+    font-size: 19px;
+}
+
+.roleta-vip-copy-row input {
+    min-width: 0;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.18);
+    color: #fff7e6;
+    font-size: 12px;
+    outline: none;
+    padding: 11px 12px;
+}
+
+.roleta-vip-copy-row button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    border-radius: 8px;
+    background: #d1b45b;
+    color: #273820;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 900;
+    padding: 0 13px;
+}
+
+.roleta-vip-products-panel {
+    padding-top: 16px;
+}
+
+.roleta-vip-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 110px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #6a6559;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+}
+
+.roleta-vip-product-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.roleta-vip-product-card {
+    overflow: hidden;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 8px 20px rgba(35, 32, 22, 0.07);
+}
+
+.roleta-vip-product-card img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 0.82;
+    object-fit: cover;
+    background: #efe8d6;
+}
+
+.roleta-vip-product-card div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+}
+
+.roleta-vip-product-card strong {
+    overflow: hidden;
+    color: #26311f;
+    font-size: 12px;
+    font-weight: 900;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roleta-vip-product-card span {
+    color: #6a6559;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.roleta-vip-product-card b {
+    color: #435d38;
+    font-size: 13px;
+}
+
+.roleta-vip-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: #4f4a3e;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 20px;
+    text-align: center;
+}
+
+@media (max-width: 360px) {
+    .roleta-vip-shell {
+        padding-inline: 18px;
+    }
+
+    .roleta-vip-prize-list {
+        grid-template-columns: 1fr;
+    }
+}

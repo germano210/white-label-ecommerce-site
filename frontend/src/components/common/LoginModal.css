@@ -10,6 +10,11 @@
     backdrop-filter: blur(8px);
 }
 
+.login-modal__overlay--roleta {
+    background: rgba(255, 247, 230, 0.18);
+    backdrop-filter: blur(2px);
+}
+
 .login-modal__card {
     width: min(calc(100vw - 26px), 351px);
     max-height: calc(100dvh - 32px);

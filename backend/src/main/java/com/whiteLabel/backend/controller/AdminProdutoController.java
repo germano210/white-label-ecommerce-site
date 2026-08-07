@@ -1,6 +1,6 @@
 package com.whiteLabel.backend.controller;
 
-import com.whiteLabel.backend.dto.ProdutoResponseDTO;
+import com.whiteLabel.backend.dto.AdminProdutoResponseDTO;
 import com.whiteLabel.backend.service.ProdutoService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -30,31 +30,40 @@ public class AdminProdutoController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public ProdutoResponseDTO criar(
+    public AdminProdutoResponseDTO criar(
             @RequestParam("nome") String nome,
             @RequestParam("precoVenda") BigDecimal precoVenda,
             @RequestParam(value = "precoAntigo", required = false) BigDecimal precoAntigo,
+            @RequestParam(value = "precoCusto", required = false) BigDecimal precoCusto,
             @RequestParam(value = "tamanho", required = false) String tamanho,
+            @RequestParam("condicao") BigDecimal condicao,
             @RequestParam(value = "imagem", required = false) MultipartFile imagem,
-            @RequestParam(value = "imagens", required = false) List<MultipartFile> imagens
+            @RequestParam(value = "imagens", required = false) List<MultipartFile> imagens,
+            @RequestParam(value = "imagemPrincipalIndex", required = false)
+            Integer imagemPrincipalIndex
     ) {
         return produtoService.criar(
                 nome,
                 precoVenda,
                 precoAntigo,
+                precoCusto,
                 tamanho,
+                condicao,
                 imagem,
-                imagens
+                imagens,
+                imagemPrincipalIndex
         );
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ProdutoResponseDTO editar(
+    public AdminProdutoResponseDTO editar(
             @PathVariable Long id,
             @RequestParam(value = "nome", required = false) String nome,
             @RequestParam(value = "precoVenda", required = false) BigDecimal precoVenda,
             @RequestParam(value = "precoAntigo", required = false) BigDecimal precoAntigo,
+            @RequestParam(value = "precoCusto", required = false) BigDecimal precoCusto,
             @RequestParam(value = "tamanho", required = false) String tamanho,
+            @RequestParam(value = "condicao", required = false) BigDecimal condicao,
             @RequestParam(value = "imagem", required = false) MultipartFile imagem,
             @RequestParam(value = "novasImagens", required = false) List<MultipartFile> novasImagens,
             @RequestParam(value = "imagensRemovidas", required = false) String imagensRemovidas,
@@ -67,7 +76,9 @@ public class AdminProdutoController {
                 nome,
                 precoVenda,
                 precoAntigo,
+                precoCusto,
                 tamanho,
+                condicao,
                 imagem,
                 novasImagens,
                 imagensRemovidas,
@@ -78,8 +89,8 @@ public class AdminProdutoController {
     }
 
     @GetMapping
-    public List<ProdutoResponseDTO> listar() {
-        return produtoService.listarAtivos();
+    public List<AdminProdutoResponseDTO> listar() {
+        return produtoService.listarAtivosAdmin();
     }
 
     @DeleteMapping("/{id}")

@@ -35,6 +35,17 @@ public class Produto {
     @Column(name = "preco_antigo")
     private BigDecimal precoAntigo;
 
+    @Column(
+            nullable = false,
+            precision = 4,
+            scale = 2,
+            columnDefinition = "numeric(4,2) default 0"
+    )
+    private BigDecimal condicao = BigDecimal.ZERO;
+
+    @Column(name = "preco_custo", precision = 12, scale = 2)
+    private BigDecimal precoCusto;
+
     // Métricas do "Tinder" de roupas
     @Column(name = "curtidas_count")
     private Integer curtidasCount = 0;
@@ -58,6 +69,10 @@ public class Produto {
     void preencherCriadoEm() {
         if (criadoEm == null) {
             criadoEm = LocalDateTime.now();
+        }
+
+        if (condicao == null) {
+            condicao = BigDecimal.ZERO;
         }
     }
 }

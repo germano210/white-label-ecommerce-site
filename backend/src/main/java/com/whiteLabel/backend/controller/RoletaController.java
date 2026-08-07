@@ -1,0 +1,54 @@
+package com.whiteLabel.backend.controller;
+
+import com.whiteLabel.backend.dto.ProdutoResponseDTO;
+import com.whiteLabel.backend.dto.RoletaConvitesRequest;
+import com.whiteLabel.backend.dto.RoletaConvitesResponse;
+import com.whiteLabel.backend.dto.RoletaGiroResponse;
+import com.whiteLabel.backend.dto.RoletaStatusResponse;
+import com.whiteLabel.backend.service.RoletaService;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/roleta")
+public class RoletaController {
+
+    private final RoletaService roletaService;
+
+    public RoletaController(RoletaService roletaService) {
+        this.roletaService = roletaService;
+    }
+
+    @GetMapping({"", "/"})
+    public RoletaStatusResponse status() {
+        return roletaService.obterStatus();
+    }
+
+    @PostMapping("/girar")
+    public RoletaGiroResponse girar() {
+        return roletaService.girar();
+    }
+
+    @GetMapping("/produtos")
+    public List<ProdutoResponseDTO> produtos() {
+        return roletaService.listarProdutosRoleta();
+    }
+
+    @GetMapping("/convites")
+    public RoletaConvitesResponse convites() {
+        return roletaService.obterConvites();
+    }
+
+    @PostMapping("/convites")
+    public RoletaConvitesResponse registrarConvite(
+            @Valid @RequestBody RoletaConvitesRequest request
+    ) {
+        return roletaService.registrarConvite(request);
+    }
+}

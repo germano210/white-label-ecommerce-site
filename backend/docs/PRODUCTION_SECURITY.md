@@ -35,3 +35,5 @@ Pagamentos nunca devem ser confirmados pelo retorno do frontend. O fluxo correto
 6. Webhook repetido e tratado como idempotente por `eventId` e `paymentId`.
 
 O backend nao serve o frontend React neste modo. Rotas como `/foryou`, `/explorar`, `/curtidas/curtidas`, `/curtidas/resgate`, `/perfil`, `/indique` e `/rota-secreta-admin` pertencem ao hosting do React.
+
+Uploads de produtos aceitam imagens de ate 15 MB cada e requisicoes multipart de ate 80 MB. O proxy de producao tambem precisa permitir esse tamanho antes da API receber a chamada; em Nginx, configurar `client_max_body_size 80M;`.

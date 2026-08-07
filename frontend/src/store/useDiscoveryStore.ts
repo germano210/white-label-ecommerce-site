@@ -5,6 +5,7 @@ import { useAuthStore, type AuthUser } from './useAuthStore';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
+import { parseCondicao } from '../utils/condicao';
 
 interface ItemPreference {
     size: string;
@@ -36,6 +37,9 @@ interface ProdutoApi {
     passosCount: number;
     nomesCurtidas?: string[] | null;
     categoria?: string | null;
+    condicao?: number | string | null;
+    condicaoRoupa?: number | string | null;
+    condicao_roupa?: number | string | null;
     comprado?: boolean | number | string | null;
     resgatado?: boolean | number | string | null;
     compraConcluida?: boolean | number | string | null;
@@ -288,6 +292,7 @@ function mapProduto(produto: ProdutoApi): ProdutoVitrine {
         dislikes: produto.passosCount,
         images: allImages,
         secondaryImages,
+        condicao: parseCondicao(produto.condicao ?? produto.condicaoRoupa ?? produto.condicao_roupa),
         priceNew: formatPrice(price),
         priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
         comprado: isPurchasedProduto(produto),

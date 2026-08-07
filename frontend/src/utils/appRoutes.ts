@@ -18,6 +18,7 @@ export const appRoutes = {
     resgates: '/curtidas/resgates',
     perfil: '/perfil',
     indique: '/indique',
+    roletaVip: '/vip/roleta',
     checkoutSuccess: '/checkout/sucesso',
     admin: normalizeRoute(import.meta.env.VITE_ADMIN_ROUTE),
 } as const;

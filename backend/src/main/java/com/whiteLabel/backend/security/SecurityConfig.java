@@ -84,6 +84,14 @@ public class SecurityConfig {
                                 "/api/produtos",
                                 "/api/produtos/"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/roleta", "/api/roleta/")
+                        .permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/configuracoes/publicas",
+                                "/api/configuracoes/publicas/"
+                        )
+                        .permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/request-otp",
@@ -105,6 +113,7 @@ public class SecurityConfig {
                                 "/api/missoes/semanais",
                                 "/api/missoes/semanais/**"
                         ).authenticated()
+                        .requestMatchers("/api/roleta/**").authenticated()
                         .requestMatchers("/api/pedidos/**").authenticated()
                         .requestMatchers("/api/usuarios/**").authenticated()
                         .requestMatchers("/api/curtidas", "/api/curtidas/**").authenticated()

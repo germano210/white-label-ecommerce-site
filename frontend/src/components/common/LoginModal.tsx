@@ -10,6 +10,10 @@ import './LoginModal.css';
 type LoginStep = 'choice' | 'details' | 'otp';
 type AccessMode = 'first' | 'login';
 
+interface LoginModalProps {
+    roletaBackdrop?: boolean;
+}
+
 interface VerifyOtpResponse {
     token?: string;
     accessToken?: string;
@@ -99,7 +103,7 @@ function isDuplicatePhoneResponse(response?: RequestOtpResponse) {
         || normalizedStatus.includes('cadastr');
 }
 
-export function LoginModal() {
+export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
     const setSession = useAuthStore((state) => state.setSession);
     const products = useDiscoveryStore((state) => state.products);
     const [step, setStep] = useState<LoginStep>('choice');
@@ -226,7 +230,7 @@ export function LoginModal() {
 
     return (
         <div
-            className="login-modal__overlay fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            className={`login-modal__overlay${roletaBackdrop ? ' login-modal__overlay--roleta' : ''} fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="login-modal-title"

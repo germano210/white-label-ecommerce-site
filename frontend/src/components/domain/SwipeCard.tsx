@@ -14,6 +14,8 @@ import {
     X,
 } from 'lucide-react';
 import { type ProdutoVitrine } from '../../store/useCartStore';
+import { useConfiguracoesStore } from '../../store/useConfiguracoesStore';
+import { formatCondicao } from '../../utils/condicao';
 import { getImageUrl } from '../../utils/imageUtils';
 
 interface SwipeCardProps {
@@ -74,6 +76,7 @@ export function SwipeCard({
 }: SwipeCardProps) {
     const [currentPhoto, setCurrentPhoto] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
+    const condicaoCasasDecimais = useConfiguracoesStore((state) => state.condicaoCasasDecimais);
 
     const productImages = product.images?.length ? product.images : [getImageUrl(null)];
     const totalPhotos = productImages.length;
@@ -91,6 +94,7 @@ export function SwipeCard({
     const visiblePassosCount = Math.max(reactionCounts?.dislikes ?? product.passosCount, 0);
     const socialProofBadges = getSocialProofBadges(product, visibleLikesCount);
     const productSize = formatProductSize(product.tamanho);
+    const productCondition = formatCondicao(product.condicao, condicaoCasasDecimais);
 
     const handlePhotoTap = (event: React.MouseEvent | React.TouchEvent) => {
         if (!isTop || isSwiping) return;
@@ -242,6 +246,9 @@ export function SwipeCard({
                     <div style={productTitleBlockStyle}>
                         <h2 style={productTitleStyle}>{product.name}</h2>
                         <span style={productSizeStyle}>Tam. {productSize}</span>
+                        {productCondition && (
+                            <span style={productConditionStyle}>Cond. {productCondition}</span>
+                        )}
                     </div>
                 </header>
 
@@ -510,6 +517,17 @@ const productSizeStyle: React.CSSProperties = {
     color: 'rgba(255, 255, 255, 0.78)',
     fontSize: '8px',
     fontWeight: 800,
+    lineHeight: 1,
+    textShadow: '0 2px 8px rgba(0, 0, 0, 0.42)',
+    whiteSpace: 'nowrap',
+};
+
+const productConditionStyle: React.CSSProperties = {
+    display: 'block',
+    marginTop: '4px',
+    color: 'rgba(255, 255, 255, 0.68)',
+    fontSize: '7.2px',
+    fontWeight: 700,
     lineHeight: 1,
     textShadow: '0 2px 8px rgba(0, 0, 0, 0.42)',
     whiteSpace: 'nowrap',

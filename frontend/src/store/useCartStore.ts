@@ -17,6 +17,7 @@ export interface ProdutoVitrine {
     dislikes?: number;
     images?: string[];
     secondaryImages?: string[];
+    condicao?: number | null;
     priceNew: string;
     priceOld?: string;
     priceSave?: string;

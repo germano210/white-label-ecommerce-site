@@ -2,6 +2,7 @@ package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.ProdutoImagem;
+import com.whiteLabel.backend.dto.AdminProdutoResponseDTO;
 import com.whiteLabel.backend.dto.ProdutoImagemResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.repository.CurtidaRepository;
@@ -28,6 +29,8 @@ import java.util.regex.Pattern;
 @Service
 public class ProdutoService {
 
+    private static final BigDecimal CONDICAO_MINIMA = new BigDecimal("0.00");
+    private static final BigDecimal CONDICAO_MAXIMA = new BigDecimal("10.00");
     private static final Pattern NUMERO_PATTERN = Pattern.compile("\\d+");
     private static final Pattern OBJETO_JSON_PATTERN = Pattern.compile("\\{[^}]*}");
     private static final Pattern ID_JSON_PATTERN = Pattern.compile("\"?id\"?\\s*:\\s*(\\d+)");
@@ -51,13 +54,16 @@ public class ProdutoService {
     }
 
     @Transactional
-    public ProdutoResponseDTO criar(
+    public AdminProdutoResponseDTO criar(
             String nome,
             BigDecimal precoVenda,
             BigDecimal precoAntigo,
+            BigDecimal precoCusto,
             String tamanho,
+            BigDecimal condicao,
             MultipartFile imagem,
-            List<MultipartFile> imagens
+            List<MultipartFile> imagens,
+            Integer imagemPrincipalIndex
     ) {
         List<MultipartFile> arquivos = normalizarArquivos(imagem, imagens);
         if (arquivos.isEmpty()) {
@@ -69,6 +75,9 @@ public class ProdutoService {
                     "Nome do produto e obrigatorio"
             );
         }
+        validarCondicaoObrigatoria(condicao);
+        validarPrecoCusto(precoCusto);
+        int indicePrincipal = validarIndicePrincipal(imagemPrincipalIndex, arquivos.size());
 
         List<String> urls = arquivos.stream()
                 .map(imagemStorageService::guardar)
@@ -78,23 +87,26 @@ public class ProdutoService {
         produto.setNome(nome.trim());
         produto.setPrecoVenda(precoVenda);
         produto.setPrecoAntigo(precoAntigo);
+        produto.setPrecoCusto(precoCusto);
         produto.setTamanho(tamanho == null ? null : tamanho.trim());
-        produto.setImagemUrl(urls.get(0));
+        produto.setCondicao(condicao);
+        produto.setImagemUrl(urls.get(indicePrincipal));
 
         Produto produtoSalvo = produtoRepository.save(produto);
-        List<ProdutoImagem> imagensSalvas = salvarImagens(produtoSalvo, urls, 0);
-        definirPrincipal(produtoSalvo, imagensSalvas, imagensSalvas.get(0));
+        List<ProdutoImagem> imagensSalvas = salvarImagens(produtoSalvo, urls, indicePrincipal);
 
-        return montarResponse(produtoRepository.save(produtoSalvo), imagensSalvas, List.of());
+        return montarAdminResponse(produtoSalvo, imagensSalvas, List.of());
     }
 
     @Transactional
-    public ProdutoResponseDTO editar(
+    public AdminProdutoResponseDTO editar(
             Long id,
             String nome,
             BigDecimal precoVenda,
             BigDecimal precoAntigo,
+            BigDecimal precoCusto,
             String tamanho,
+            BigDecimal condicao,
             MultipartFile imagem,
             List<MultipartFile> novasImagens,
             String imagensRemovidas,
@@ -108,7 +120,7 @@ public class ProdutoService {
                         HttpStatus.NOT_FOUND,
                         "Produto nao encontrado"
                 ));
-        atualizarCampos(produto, nome, precoVenda, precoAntigo, tamanho);
+        atualizarCampos(produto, nome, precoVenda, precoAntigo, precoCusto, tamanho, condicao);
 
         List<ProdutoImagem> imagensAtuais = buscarImagensEditaveis(produto);
         removerImagens(imagensAtuais, parseIds(imagensRemovidas));
@@ -116,6 +128,7 @@ public class ProdutoService {
         ProdutoImagem novaPrincipalPorArquivo = null;
         int proximaOrdem = proximaOrdem(imagensAtuais);
 
+        validarArquivoOpcional(imagem);
         if (arquivoValido(imagem)) {
             novaPrincipalPorArquivo = salvarImagem(
                     produto,
@@ -156,7 +169,7 @@ public class ProdutoService {
         Produto produtoSalvo = produtoRepository.save(produto);
         produtoImagemRepository.saveAll(imagensAtuais);
 
-        return montarResponse(produtoSalvo, imagensAtuais, List.of());
+        return montarAdminResponse(produtoSalvo, imagensAtuais, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -168,6 +181,22 @@ public class ProdutoService {
         return produtos
                 .stream()
                 .map(produto -> ProdutoResponseDTO.from(
+                        produto,
+                        nomesCurtidasPorProduto.getOrDefault(produto.getId(), List.of()),
+                        imagensDoProduto(produto, imagensPorProduto)
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminProdutoResponseDTO> listarAtivosAdmin() {
+        List<Produto> produtos = produtoRepository.findAllByAtivoTrueOrderByCriadoEmDescIdDesc();
+        Map<Long, List<String>> nomesCurtidasPorProduto = buscarNomesCurtidas(produtos);
+        Map<Long, List<ProdutoImagemResponse>> imagensPorProduto = buscarImagens(produtos);
+
+        return produtos
+                .stream()
+                .map(produto -> AdminProdutoResponseDTO.from(
                         produto,
                         nomesCurtidasPorProduto.getOrDefault(produto.getId(), List.of()),
                         imagensDoProduto(produto, imagensPorProduto)
@@ -200,7 +229,9 @@ public class ProdutoService {
             String nome,
             BigDecimal precoVenda,
             BigDecimal precoAntigo,
-            String tamanho
+            BigDecimal precoCusto,
+            String tamanho,
+            BigDecimal condicao
     ) {
         if (nome != null) {
             if (nome.isBlank()) {
@@ -220,8 +251,18 @@ public class ProdutoService {
             produto.setPrecoAntigo(precoAntigo);
         }
 
+        if (precoCusto != null) {
+            validarPrecoCusto(precoCusto);
+            produto.setPrecoCusto(precoCusto);
+        }
+
         if (tamanho != null) {
             produto.setTamanho(tamanho.isBlank() ? null : tamanho.trim());
+        }
+
+        if (condicao != null) {
+            validarCondicaoObrigatoria(condicao);
+            produto.setCondicao(condicao);
         }
     }
 
@@ -229,12 +270,69 @@ public class ProdutoService {
             MultipartFile imagem,
             List<MultipartFile> imagens
     ) {
-        List<MultipartFile> arquivos = new ArrayList<>();
+        List<MultipartFile> arquivos = new ArrayList<>(arquivosValidos(imagens));
+        if (!arquivos.isEmpty()) {
+            return arquivos;
+        }
+
+        validarArquivoOpcional(imagem);
         if (arquivoValido(imagem)) {
             arquivos.add(imagem);
         }
-        arquivos.addAll(arquivosValidos(imagens));
+
         return arquivos;
+    }
+
+    private int validarIndicePrincipal(Integer imagemPrincipalIndex, int quantidadeImagens) {
+        int indicePrincipal = imagemPrincipalIndex == null ? 0 : imagemPrincipalIndex;
+        if (indicePrincipal < 0 || indicePrincipal >= quantidadeImagens) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Indice da imagem principal e invalido"
+            );
+        }
+
+        return indicePrincipal;
+    }
+
+    private void validarArquivoOpcional(MultipartFile arquivo) {
+        if (arquivo != null && arquivo.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Imagem e obrigatoria");
+        }
+    }
+
+    private void validarCondicaoObrigatoria(BigDecimal condicao) {
+        if (condicao == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Condicao e obrigatoria");
+        }
+
+        validarEscalaDecimal(condicao, "Condicao deve ter no maximo 2 casas decimais");
+        if (condicao.compareTo(CONDICAO_MINIMA) < 0 || condicao.compareTo(CONDICAO_MAXIMA) > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Condicao deve estar entre 0.00 e 10.00"
+            );
+        }
+    }
+
+    private void validarPrecoCusto(BigDecimal precoCusto) {
+        if (precoCusto == null) {
+            return;
+        }
+
+        validarEscalaDecimal(precoCusto, "Preco de custo deve ter no maximo 2 casas decimais");
+        if (precoCusto.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Preco de custo nao pode ser negativo"
+            );
+        }
+    }
+
+    private void validarEscalaDecimal(BigDecimal valor, String mensagem) {
+        if (valor.scale() > 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, mensagem);
+        }
     }
 
     private boolean arquivoValido(MultipartFile arquivo) {
@@ -246,21 +344,30 @@ public class ProdutoService {
             return List.of();
         }
 
-        return arquivos
-                .stream()
-                .filter(this::arquivoValido)
-                .toList();
+        List<MultipartFile> arquivosValidos = new ArrayList<>();
+        for (MultipartFile arquivo : arquivos) {
+            validarArquivoOpcional(arquivo);
+            if (arquivoValido(arquivo)) {
+                arquivosValidos.add(arquivo);
+            }
+        }
+
+        return arquivosValidos;
     }
 
     private List<ProdutoImagem> salvarImagens(
             Produto produto,
             List<String> urls,
-            int ordemInicial
+            int indicePrincipal
     ) {
         List<ProdutoImagem> imagens = new ArrayList<>();
-        int ordem = ordemInicial;
-        for (String url : urls) {
-            imagens.add(new ProdutoImagem(produto, url, ordem++, false));
+        for (int ordem = 0; ordem < urls.size(); ordem++) {
+            imagens.add(new ProdutoImagem(
+                    produto,
+                    urls.get(ordem),
+                    ordem,
+                    ordem == indicePrincipal
+            ));
         }
 
         return produtoImagemRepository.saveAll(imagens);
@@ -495,12 +602,19 @@ public class ProdutoService {
         return ProdutoResponseDTO.from(produto, nomesCurtidas, toResponses(imagens));
     }
 
+    private AdminProdutoResponseDTO montarAdminResponse(
+            Produto produto,
+            List<ProdutoImagem> imagens,
+            List<String> nomesCurtidas
+    ) {
+        return AdminProdutoResponseDTO.from(produto, nomesCurtidas, toResponses(imagens));
+    }
+
     private List<ProdutoImagemResponse> toResponses(List<ProdutoImagem> imagens) {
         return imagens
                 .stream()
                 .sorted(Comparator
-                        .comparing(ProdutoImagem::getPrincipal, Comparator.reverseOrder())
-                        .thenComparing(ProdutoImagem::getOrdem)
+                        .comparing(ProdutoImagem::getOrdem)
                         .thenComparing(ProdutoImagem::getId))
                 .map(ProdutoImagemResponse::from)
                 .toList();

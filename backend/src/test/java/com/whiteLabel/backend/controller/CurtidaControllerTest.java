@@ -109,6 +109,8 @@ class CurtidaControllerTest {
         Usuario usuario = criarUsuario("Cliente Curtidas", "5511999997002");
         Produto primeira = criarProduto("Camisa");
         Produto segunda = criarProduto("Saia");
+        segunda.setPrecoCusto(BigDecimal.valueOf(29.90));
+        produtoRepository.save(segunda);
 
         curtir(usuario, primeira);
         Thread.sleep(10);
@@ -123,6 +125,7 @@ class CurtidaControllerTest {
                 .andExpect(jsonPath("$[0].nome").value("Saia"))
                 .andExpect(jsonPath("$[0].curtidasCount").value(1))
                 .andExpect(jsonPath("$[0].passosCount").value(0))
+                .andExpect(jsonPath("$[0].precoCusto").doesNotExist())
                 .andExpect(jsonPath("$[1].id").value(primeira.getId()))
                 .andExpect(jsonPath("$[1].nome").value("Camisa"));
     }

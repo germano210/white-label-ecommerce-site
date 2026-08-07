@@ -15,18 +15,21 @@ import { CurtidasScreen } from './pages/CurtidasScreen';
 import { ExplorarScreen } from './pages/ExplorarScreen';
 import { PerfilScreen } from './pages/PerfilScreen';
 import { IndiqueScreen } from './pages/IndiqueScreen';
+import { RoletaVipScreen } from './pages/RoletaVipScreen';
 import { CheckoutSuccessScreen } from './pages/CheckoutSuccessScreen';
 import { AdminDashboardScreen } from './pages/admin/AdminDashboardScreen';
 import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
 import { type CurtidasMode, useDiscoveryStore } from './store/useDiscoveryStore';
 import { useMissaoStore } from './store/useMissaoStore';
 import { useAdminStore } from './store/useAdminStore';
+import { useConfiguracoesStore } from './store/useConfiguracoesStore';
 import { type AuthUser, useAuthStore } from './store/useAuthStore';
 import { api, isCookieAuthMode } from './utils/api';
 import { apiRoutes } from './utils/apiRoutes';
 import { appRoutes } from './utils/appRoutes';
 
 const pendingShareStorageKey = 'viabras-pending-share-code';
+const pendingRoletaInviteStorageKey = 'viabras-pending-roleta-invite-code';
 
 interface AuthMeResponse {
     usuario?: Partial<AuthUser> | null;
@@ -67,6 +70,7 @@ function AppRoutes() {
     const location = useLocation();
     const setCurtidasMode = useDiscoveryStore((state) => state.setCurtidasMode);
     const fetchMissoes = useMissaoStore((state) => state.fetchMissoes);
+    const fetchPublicConfiguracoes = useConfiguracoesStore((state) => state.fetchPublicConfiguracoes);
     const adminUser = useAdminStore((state) => state.currentUser);
     const token = useAuthStore((state) => state.token);
     const user = useAuthStore((state) => state.user);
@@ -74,13 +78,17 @@ function AppRoutes() {
     const setSession = useAuthStore((state) => state.setSession);
     const logout = useAuthStore((state) => state.logout);
     const [pendingShareCode, setPendingShareCode] = useState<string | null>(null);
+    const [pendingRoletaInviteCode, setPendingRoletaInviteCode] = useState<string | null>(null);
     const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const isAdminRoute = location.pathname === appRoutes.admin;
     const isCurtidasRoute = location.pathname.startsWith('/curtidas');
-    const shouldShowGlobalMissions = !isAdminRoute && location.pathname !== appRoutes.forYou;
+    const isRoletaRoute = location.pathname === appRoutes.roletaVip;
+    const shouldShowGlobalMissions = !isAdminRoute && !isRoletaRoute && location.pathname !== appRoutes.forYou;
     const hasFloatingWindowBackground = isCurtidasRoute || location.pathname === appRoutes.perfil;
-    const appBackground = hasFloatingWindowBackground ? '#e6e6e6' : '#FAF7F2';
+    const appBackground = isRoletaRoute
+        ? '#fff7e6'
+        : hasFloatingWindowBackground ? '#e6e6e6' : '#FAF7F2';
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -95,6 +103,20 @@ function AppRoutes() {
     }, [location.search]);
 
     useEffect(() => {
+        if (!isRoletaRoute) return;
+
+        const params = new URLSearchParams(location.search);
+        const inviteCode = params.get('ref')?.trim();
+        const storedInviteCode = window.sessionStorage.getItem(pendingRoletaInviteStorageKey);
+        const nextInviteCode = inviteCode || storedInviteCode;
+
+        if (nextInviteCode) {
+            window.sessionStorage.setItem(pendingRoletaInviteStorageKey, nextInviteCode);
+            setPendingRoletaInviteCode(nextInviteCode);
+        }
+    }, [isRoletaRoute, location.search]);
+
+    useEffect(() => {
         const handleFocus = () => {
             void fetchMissoes();
         };
@@ -103,6 +125,10 @@ function AppRoutes() {
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
     }, [fetchMissoes]);
+
+    useEffect(() => {
+        void fetchPublicConfiguracoes();
+    }, [fetchPublicConfiguracoes]);
 
     useEffect(() => {
         if (!isCookieAuthMode || !hasHydrated) return;
@@ -178,6 +204,49 @@ function AppRoutes() {
         user,
     ]);
 
+    useEffect(() => {
+        if (!isRoletaRoute || !hasHydrated || !pendingRoletaInviteCode || !isAuthenticated || !user) return;
+
+        let isActive = true;
+
+        const registerRoletaInvite = async () => {
+            try {
+                await api.post(apiRoutes.roleta.convites, {
+                    codigoConvite: pendingRoletaInviteCode,
+                });
+            } catch {
+                // O acesso a roleta nao depende da conversao do convite.
+            } finally {
+                if (!isActive) return;
+
+                window.sessionStorage.removeItem(pendingRoletaInviteStorageKey);
+                setPendingRoletaInviteCode(null);
+
+                const params = new URLSearchParams(location.search);
+                params.delete('ref');
+                navigate({
+                    pathname: location.pathname,
+                    search: params.toString() ? `?${params.toString()}` : '',
+                }, { replace: true });
+            }
+        };
+
+        void registerRoletaInvite();
+
+        return () => {
+            isActive = false;
+        };
+    }, [
+        hasHydrated,
+        isAuthenticated,
+        isRoletaRoute,
+        location.pathname,
+        location.search,
+        navigate,
+        pendingRoletaInviteCode,
+        user,
+    ]);
+
     if (!hasHydrated || isRestoringCookieSession) {
         return (
             <div
@@ -226,6 +295,7 @@ function AppRoutes() {
                 />
                 <Route path={appRoutes.perfil} element={<PerfilScreen />} />
                 <Route path={appRoutes.indique} element={<IndiqueScreen />} />
+                <Route path={appRoutes.roletaVip} element={<RoletaVipScreen />} />
                 <Route path={appRoutes.checkoutSuccess} element={<CheckoutSuccessScreen />} />
                 <Route
                     path={appRoutes.admin}
@@ -234,7 +304,7 @@ function AppRoutes() {
                 <Route path="*" element={<Navigate to={appRoutes.forYou} replace />} />
             </Routes>
 
-            {!isAdminRoute && !isCurtidasRoute && <AppHamburgerMenu />}
+            {!isAdminRoute && !isCurtidasRoute && !isRoletaRoute && <AppHamburgerMenu />}
             {shouldShowGlobalMissions && (
                 <div style={globalMissionsRailShellStyle}>
                     <MissionsRail
@@ -244,7 +314,7 @@ function AppRoutes() {
                     />
                 </div>
             )}
-            {!isAdminRoute && !isAuthenticated && <LoginModal />}
+            {!isAdminRoute && !isAuthenticated && <LoginModal roletaBackdrop={isRoletaRoute} />}
         </div>
     );
 }

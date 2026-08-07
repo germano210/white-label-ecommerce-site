@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import {type ProdutoVitrine, useCartStore } from '../../store/useCartStore';
+import { useConfiguracoesStore } from '../../store/useConfiguracoesStore';
+import { formatCondicao } from '../../utils/condicao';
 import { getImageUrl } from '../../utils/imageUtils';
 
 interface ProductModalProps {
@@ -20,10 +22,12 @@ const SIZES = ['P', 'M', 'G', 'GG']; // Grade de tamanhos padrão
 export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
     const [selectedSize, setSelectedSize] = useState<string>('');
     const addItem = useCartStore((state) => state.addItem);
+    const condicaoCasasDecimais = useConfiguracoesStore((state) => state.condicaoCasasDecimais);
 
     if (!isOpen || !product) return null;
 
     const imageUrl = getImageUrl(product.images?.[0]);
+    const productCondition = formatCondicao(product.condicao, condicaoCasasDecimais);
 
     const handleAddToCart = () => {
         if (!selectedSize) return;
@@ -65,6 +69,11 @@ export function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
                         <p className="text-lg text-gray-500 mt-1">
                             {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(product.price)}
                         </p>
+                        {productCondition && (
+                            <p className="text-sm text-gray-400 mt-1">
+                                Cond. {productCondition}
+                            </p>
+                        )}
 
                         {/* Seleção de Tamanhos (Afunilamento Cognitivo) */}
                         <div className="mt-6">

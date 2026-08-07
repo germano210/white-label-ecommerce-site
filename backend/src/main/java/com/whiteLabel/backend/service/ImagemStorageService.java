@@ -16,8 +16,14 @@ import java.util.UUID;
 @Service
 public class ImagemStorageService {
 
+    private static final long TAMANHO_MAXIMO_IMAGEM_BYTES = 15L * 1024L * 1024L;
+    public static final String MENSAGEM_IMAGEM_GRANDE =
+            "Imagem muito grande. Envie fotos de até 15 MB cada.";
+
     private static final Set<String> EXTENSOES_PERMITIDAS =
             Set.of(".jpg", ".jpeg", ".png", ".webp");
+    private static final Set<String> CONTENT_TYPES_PERMITIDOS =
+            Set.of("image/jpeg", "image/jpg", "image/png", "image/webp");
 
     private final Path uploadsPath = Path.of("uploads").toAbsolutePath().normalize();
 
@@ -50,8 +56,16 @@ public class ImagemStorageService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Imagem e obrigatoria");
         }
 
+        if (imagem.getSize() > TAMANHO_MAXIMO_IMAGEM_BYTES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, MENSAGEM_IMAGEM_GRANDE);
+        }
+
         String contentType = imagem.getContentType();
-        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+        if (
+                contentType == null
+                        || !CONTENT_TYPES_PERMITIDOS.contains(
+                        contentType.toLowerCase(Locale.ROOT))
+        ) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "O arquivo enviado deve ser uma imagem"

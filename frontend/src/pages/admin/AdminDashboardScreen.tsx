@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdminStore } from '../../store/useAdminStore';
+import {
+    normalizeCondicaoCasasDecimais,
+    readCondicaoCasasDecimais,
+    type CondicaoCasasDecimais,
+    useConfiguracoesStore,
+} from '../../store/useConfiguracoesStore';
 import { type ProdutoVitrine } from '../../store/useCartStore';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
+import { formatCondicao, parseCondicao } from '../../utils/condicao';
 import { appRoutes } from '../../utils/appRoutes';
 import { MissoesAdminPanel } from '../../components/admin/MissoesAdminPanel';
+import { RoletaAdminPanel } from '../../components/admin/RoletaAdminPanel';
 import {
     LogOut, Package, PackagePlus, ShoppingBag, Users,
     RefreshCcw, Search, CheckCircle, Clock, Plus, Trash2,
     UploadCloud, Phone, User as UserIcon, Calendar, ArrowRight,
     BarChart3, UserPlus, AlertTriangle, Sparkles, Pencil,
-    ArrowUp, ArrowDown, Star, ImagePlus
+    ArrowUp, ArrowDown, Star, ImagePlus, Gift, Settings
 } from 'lucide-react';
 
-type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'PRODUTOS' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | 'MISSOES' | null;
+type AdminAction = 'BAIXA' | 'NOVO_ITEM' | 'PRODUTOS' | 'CRM' | 'TROCA' | 'ESTATISTICAS' | 'EQUIPE' | 'MISSOES' | 'ROLETA' | 'CONFIGURACOES' | null;
 type FiltroTempo = 'HOJE' | 'SEMANA' | 'MES' | 'ANO' | 'PERSONALIZADO';
 
 interface ItemVenda extends ProdutoVitrine {
@@ -34,6 +42,11 @@ interface ProdutoAdmin {
     nome: string;
     precoVenda: number | string;
     precoAntigo?: number | string | null;
+    precoCusto?: number | string | null;
+    preco_custo?: number | string | null;
+    condicao?: number | string | null;
+    condicaoRoupa?: number | string | null;
+    condicao_roupa?: number | string | null;
     tamanho: string;
     imagemUrl?: string | null;
     imagens?: ProdutoImagemApi[];
@@ -41,6 +54,11 @@ interface ProdutoAdmin {
 
 interface ProdutosPage {
     content?: ProdutoAdmin[];
+}
+
+interface ConfiguracoesAdminResponse {
+    condicaoCasasDecimais?: number | string | null;
+    condicao_casas_decimais?: number | string | null;
 }
 
 type ProdutoImagemApi = string | {
@@ -69,16 +87,41 @@ interface ProdutoEditPhoto {
     isExisting: boolean;
 }
 
+interface ProdutoCreateImage {
+    file: File;
+    previewUrl: string;
+    key: string;
+}
+
 interface ProdutoEditState {
     id: ProdutoAdmin['id'];
     nome: string;
     precoVenda: string;
     precoAntigo: string;
+    precoCusto: string;
+    condicao: string;
     tamanho: string;
     fotos: ProdutoEditPhoto[];
 }
 
 const filtrosTempo: FiltroTempo[] = ['HOJE', 'SEMANA', 'MES', 'ANO', 'PERSONALIZADO'];
+const uploadTimeoutMs = 60000;
+const bytesPerMegabyte = 1024 * 1024;
+const maxImageUploadBytes = 15 * bytesPerMegabyte;
+const maxTotalUploadBytes = 80 * bytesPerMegabyte;
+
+function getUploadSizeError(files: File[]) {
+    if (files.some((file) => file.size > maxImageUploadBytes)) {
+        return 'Cada foto pode ter até 15 MB.';
+    }
+
+    const totalBytes = files.reduce((total, file) => total + file.size, 0);
+    if (totalBytes > maxTotalUploadBytes) {
+        return 'O envio total pode ter até 80 MB.';
+    }
+
+    return '';
+}
 
 function parsePrice(value: number | string | null | undefined) {
     if (typeof value === 'number') return value;
@@ -97,6 +140,24 @@ function formatPrice(value: number) {
 function formatPriceInput(value: number | string | null | undefined) {
     if (value === null || value === undefined || value === '') return '';
     return String(value).replace(',', '.');
+}
+
+function getProdutoCondicao(produto: ProdutoAdmin) {
+    return parseCondicao(produto.condicao ?? produto.condicaoRoupa ?? produto.condicao_roupa);
+}
+
+function getProdutoPrecoCusto(produto: ProdutoAdmin) {
+    return parsePrice(produto.precoCusto ?? produto.preco_custo);
+}
+
+function formatAdminCondicao(produto: ProdutoAdmin) {
+    const condicao = getProdutoCondicao(produto);
+    return condicao === null ? '--' : formatCondicao(condicao, 2);
+}
+
+function formatAdminPrecoCusto(produto: ProdutoAdmin) {
+    const precoCusto = getProdutoPrecoCusto(produto);
+    return precoCusto > 0 ? formatPrice(precoCusto) : '--';
 }
 
 function getProdutoImageSources(produto: ProdutoAdmin): ProdutoImageSource[] {
@@ -168,6 +229,7 @@ function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
         passosCount: 0,
         images: images.length > 0 ? images.map((image) => image.displayUrl) : [getImageUrl(null)],
         secondaryImages: images.slice(1).map((image) => image.displayUrl),
+        condicao: getProdutoCondicao(produto),
         priceNew: formatPrice(price),
         priceOld: oldPrice > 0 ? formatPrice(oldPrice) : undefined,
     };
@@ -179,6 +241,8 @@ function createProdutoEditState(produto: ProdutoAdmin): ProdutoEditState {
         nome: produto.nome,
         precoVenda: formatPriceInput(produto.precoVenda),
         precoAntigo: formatPriceInput(produto.precoAntigo),
+        precoCusto: formatPriceInput(produto.precoCusto ?? produto.preco_custo),
+        condicao: formatPriceInput(getProdutoCondicao(produto)),
         tamanho: produto.tamanho,
         fotos: getProdutoImageSources(produto).map((image, index) => ({
             key: `existing-${image.id}-${index}`,
@@ -197,6 +261,8 @@ function getProdutoOrderValue(produto: ProdutoAdmin) {
 export function AdminDashboardScreen() {
     const navigate = useNavigate();
     const { currentUser, logout } = useAdminStore();
+    const condicaoCasasDecimais = useConfiguracoesStore((state) => state.condicaoCasasDecimais);
+    const setCondicaoCasasDecimais = useConfiguracoesStore((state) => state.setCondicaoCasasDecimais);
     const [activeAction, setActiveAction] = useState<AdminAction>(null);
 
     // --- ESTADOS: OPERAÇÕES DIÁRIAS ---
@@ -211,8 +277,12 @@ export function AdminDashboardScreen() {
     const [nome, setNome] = useState('');
     const [precoVenda, setPrecoVenda] = useState('');
     const [precoAntigo, setPrecoAntigo] = useState('');
+    const [precoCusto, setPrecoCusto] = useState('');
+    const [condicao, setCondicao] = useState('');
     const [tamanho, setTamanho] = useState('');
-    const [imagem, setImagem] = useState<File | null>(null);
+    const [imagens, setImagens] = useState<ProdutoCreateImage[]>([]);
+    const imagensRef = useRef<ProdutoCreateImage[]>([]);
+    const [imagemPrincipalIndex, setImagemPrincipalIndex] = useState(0);
     const [produtos, setProdutos] = useState<ProdutoAdmin[]>([]);
     const [isLoadingProdutos, setIsLoadingProdutos] = useState(true);
     const [isSavingProduto, setIsSavingProduto] = useState(false);
@@ -221,6 +291,10 @@ export function AdminDashboardScreen() {
     const [editingProduto, setEditingProduto] = useState<ProdutoEditState | null>(null);
     const [produtoError, setProdutoError] = useState('');
     const [produtoSuccess, setProdutoSuccess] = useState('');
+    const [isLoadingConfiguracoes, setIsLoadingConfiguracoes] = useState(false);
+    const [isSavingConfiguracoes, setIsSavingConfiguracoes] = useState(false);
+    const [configuracoesError, setConfiguracoesError] = useState('');
+    const [configuracoesSuccess, setConfiguracoesSuccess] = useState('');
 
     // --- ESTADOS: GERENCIAL ---
     const [filtroTempo, setFiltroTempo] = useState<FiltroTempo>('MES');
@@ -256,6 +330,22 @@ export function AdminDashboardScreen() {
         }
     }, []);
 
+    const carregarConfiguracoesAdmin = useCallback(async () => {
+        setIsLoadingConfiguracoes(true);
+        setConfiguracoesError('');
+
+        try {
+            const { data } = await api.get<ConfiguracoesAdminResponse>(
+                apiRoutes.admin.configuracoes,
+            );
+            setCondicaoCasasDecimais(readCondicaoCasasDecimais(data));
+        } catch {
+            setConfiguracoesError('Não foi possível carregar as configurações da loja.');
+        } finally {
+            setIsLoadingConfiguracoes(false);
+        }
+    }, [setCondicaoCasasDecimais]);
+
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
             void carregarProdutos();
@@ -264,12 +354,105 @@ export function AdminDashboardScreen() {
         return () => window.clearTimeout(timeoutId);
     }, [carregarProdutos]);
 
+    useEffect(() => {
+        if (activeAction !== 'CONFIGURACOES' || currentUser?.role !== 'ADMIN') return;
+        void carregarConfiguracoesAdmin();
+    }, [activeAction, carregarConfiguracoesAdmin, currentUser?.role]);
+
+    const salvarCondicaoCasasDecimais = async (casasDecimais: CondicaoCasasDecimais) => {
+        setIsSavingConfiguracoes(true);
+        setConfiguracoesError('');
+        setConfiguracoesSuccess('');
+
+        try {
+            const { data } = await api.put<ConfiguracoesAdminResponse>(
+                apiRoutes.admin.configuracoes,
+                { condicaoCasasDecimais: casasDecimais },
+            );
+            setCondicaoCasasDecimais(
+                data ? readCondicaoCasasDecimais(data) : casasDecimais,
+            );
+            setConfiguracoesSuccess('Configurações salvas com sucesso.');
+        } catch {
+            setConfiguracoesError('Não foi possível salvar as configurações agora.');
+        } finally {
+            setIsSavingConfiguracoes(false);
+        }
+    };
+
+    useEffect(() => {
+        imagensRef.current = imagens;
+    }, [imagens]);
+
+    useEffect(() => {
+        return () => {
+            imagensRef.current.forEach((imagemProduto) => {
+                URL.revokeObjectURL(imagemProduto.previewUrl);
+            });
+        };
+    }, []);
+
+    const adicionarImagensProduto = (files: FileList | null) => {
+        if (!files?.length) return;
+
+        const novasImagens = Array.from(files).map((file, index): ProdutoCreateImage => ({
+            file,
+            previewUrl: URL.createObjectURL(file),
+            key: `create-${Date.now()}-${index}-${file.name}`,
+        }));
+
+        setImagens((currentImages) => {
+            if (currentImages.length === 0 && novasImagens.length > 0) {
+                setImagemPrincipalIndex(0);
+            }
+
+            return [...currentImages, ...novasImagens];
+        });
+    };
+
+    const removerImagemProduto = (imageKey: string) => {
+        setImagens((currentImages) => {
+            const removedIndex = currentImages.findIndex((imagemProduto) => imagemProduto.key === imageKey);
+            if (removedIndex < 0) return currentImages;
+
+            const removedImage = currentImages[removedIndex];
+            URL.revokeObjectURL(removedImage.previewUrl);
+            const nextImages = currentImages.filter((imagemProduto) => imagemProduto.key !== imageKey);
+
+            setImagemPrincipalIndex((currentIndex) => {
+                if (nextImages.length === 0) return 0;
+                if (removedIndex === currentIndex) return 0;
+                if (removedIndex < currentIndex) return Math.max(currentIndex - 1, 0);
+                return Math.min(currentIndex, nextImages.length - 1);
+            });
+
+            return nextImages;
+        });
+    };
+
+    const limparImagensProduto = () => {
+        setImagens((currentImages) => {
+            currentImages.forEach((imagemProduto) => {
+                URL.revokeObjectURL(imagemProduto.previewUrl);
+            });
+            return [];
+        });
+        setImagemPrincipalIndex(0);
+    };
+
     const cadastrarProduto = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const form = event.currentTarget;
 
-        if (!imagem) {
-            setProdutoError('Selecione uma imagem para cadastrar o produto.');
+        if (imagens.length === 0) {
+            setProdutoError('Selecione ao menos uma foto para cadastrar o produto.');
+            return;
+        }
+
+        const uploadSizeError = getUploadSizeError(imagens.map((imagemProduto) => imagemProduto.file));
+        if (uploadSizeError) {
+            setProdutoError(uploadSizeError);
+            setProdutoSuccess('');
             return;
         }
 
@@ -277,8 +460,14 @@ export function AdminDashboardScreen() {
         formData.append('nome', nome.trim());
         formData.append('precoVenda', precoVenda);
         formData.append('precoAntigo', precoAntigo);
+        formData.append('precoCusto', precoCusto);
+        formData.append('condicao', condicao);
         formData.append('tamanho', tamanho.trim());
-        formData.append('imagem', imagem);
+        const principalIndex = Math.min(Math.max(imagemPrincipalIndex, 0), imagens.length - 1);
+        imagens.forEach((imagemProduto) => {
+            formData.append('imagens', imagemProduto.file);
+        });
+        formData.append('imagemPrincipalIndex', String(principalIndex));
 
         setIsSavingProduto(true);
         setProdutoError('');
@@ -289,13 +478,16 @@ export function AdminDashboardScreen() {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
+                timeout: uploadTimeoutMs,
             });
 
             setNome('');
             setPrecoVenda('');
             setPrecoAntigo('');
+            setPrecoCusto('');
+            setCondicao('');
             setTamanho('');
-            setImagem(null);
+            limparImagensProduto();
             form.reset();
             setProdutoSuccess('Produto cadastrado com sucesso.');
             await carregarProdutos();
@@ -346,7 +538,7 @@ export function AdminDashboardScreen() {
     };
 
     const atualizarCampoEdicaoProduto = (
-        campo: keyof Pick<ProdutoEditState, 'nome' | 'precoVenda' | 'precoAntigo' | 'tamanho'>,
+        campo: keyof Pick<ProdutoEditState, 'nome' | 'precoVenda' | 'precoAntigo' | 'precoCusto' | 'condicao' | 'tamanho'>,
         valor: string,
     ) => {
         setEditingProduto((currentEditing) => (
@@ -443,10 +635,24 @@ export function AdminDashboardScreen() {
         }));
         const novasFotos = editingProduto.fotos.filter((foto) => !foto.isExisting && foto.file);
         const primeiraFotoNovaPrincipal = editingProduto.fotos[0]?.file;
+        const arquivosUploadEdicao = novasFotos.flatMap((foto) => (
+            foto.file ? [foto.file] : []
+        ));
+        const arquivosRequestEdicao = primeiraFotoNovaPrincipal
+            ? [primeiraFotoNovaPrincipal, ...arquivosUploadEdicao]
+            : arquivosUploadEdicao;
+        const uploadSizeError = getUploadSizeError(arquivosRequestEdicao);
+        if (uploadSizeError) {
+            setProdutoError(uploadSizeError);
+            setProdutoSuccess('');
+            return;
+        }
 
         formData.append('nome', editingProduto.nome.trim());
         formData.append('precoVenda', editingProduto.precoVenda);
         formData.append('precoAntigo', editingProduto.precoAntigo);
+        formData.append('precoCusto', editingProduto.precoCusto);
+        formData.append('condicao', editingProduto.condicao);
         formData.append('tamanho', editingProduto.tamanho.trim());
         formData.append('imagensExistentes', JSON.stringify(fotosExistentes));
         formData.append('ordemFotos', JSON.stringify(ordemFotos));
@@ -473,6 +679,7 @@ export function AdminDashboardScreen() {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
+                timeout: uploadTimeoutMs,
             });
 
             setProdutoSuccess('Produto atualizado com sucesso.');
@@ -558,6 +765,12 @@ export function AdminDashboardScreen() {
                         </button>
                         <button onClick={() => setActiveAction('MISSOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'MISSOES' ? '#687152' : 'white', color: activeAction === 'MISSOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                             <Sparkles size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Missões</span>
+                        </button>
+                        <button onClick={() => setActiveAction('ROLETA')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'ROLETA' ? '#687152' : 'white', color: activeAction === 'ROLETA' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                            <Gift size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Roleta</span>
+                        </button>
+                        <button onClick={() => setActiveAction('CONFIGURACOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'CONFIGURACOES' ? '#687152' : 'white', color: activeAction === 'CONFIGURACOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                            <Settings size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Configurações</span>
                         </button>
                     </div>
                 </div>
@@ -680,6 +893,21 @@ export function AdminDashboardScreen() {
 
             {activeAction === 'MISSOES' && currentUser?.role === 'ADMIN' && (
                 <MissoesAdminPanel />
+            )}
+
+            {activeAction === 'ROLETA' && currentUser?.role === 'ADMIN' && (
+                <RoletaAdminPanel />
+            )}
+
+            {activeAction === 'CONFIGURACOES' && currentUser?.role === 'ADMIN' && (
+                <ConfiguracoesAdminPanel
+                    condicaoCasasDecimais={condicaoCasasDecimais}
+                    isLoading={isLoadingConfiguracoes}
+                    isSaving={isSavingConfiguracoes}
+                    error={configuracoesError}
+                    success={configuracoesSuccess}
+                    onChange={(casasDecimais) => void salvarCondicaoCasasDecimais(casasDecimais)}
+                />
             )}
 
             {activeAction === 'EQUIPE' && currentUser?.role === 'ADMIN' && (
@@ -1019,25 +1247,99 @@ export function AdminDashboardScreen() {
                     </h3>
 
                     <form onSubmit={cadastrarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <label style={{ minHeight: '120px', padding: '18px', borderRadius: '16px', border: '2px dashed #DDD', background: '#F9F9F9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: imagem ? '#4A90E2' : '#999', cursor: 'pointer', textAlign: 'center' }}>
+                        <label style={{ minHeight: '120px', padding: '18px', borderRadius: '16px', border: '2px dashed #DDD', background: '#F9F9F9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: imagens.length > 0 ? '#687152' : '#999', cursor: 'pointer', textAlign: 'center' }}>
                             <UploadCloud size={32} />
                             <span style={{ fontSize: '13px', fontWeight: 700 }}>
-                                {imagem ? imagem.name : 'Selecionar imagem do produto'}
+                                {imagens.length > 0
+                                    ? `${imagens.length} foto${imagens.length > 1 ? 's' : ''} selecionada${imagens.length > 1 ? 's' : ''}`
+                                    : 'Selecionar fotos do produto'}
+                            </span>
+                            <span style={{ color: '#888', fontSize: '11px', fontWeight: 600 }}>
+                                A primeira foto selecionada vira principal. Você pode trocar abaixo.
                             </span>
                             <input
                                 type="file"
                                 accept="image/*"
-                                onChange={(event) => setImagem(event.target.files?.[0] ?? null)}
+                                multiple
+                                onChange={(event) => {
+                                    adicionarImagensProduto(event.target.files);
+                                    event.target.value = '';
+                                }}
                                 style={{ width: '100%', fontSize: '12px' }}
-                                required
                             />
                         </label>
+
+                        {imagens.length > 0 && (
+                            <div style={createImagesPreviewTrackStyle} aria-label="Fotos selecionadas">
+                                {imagens.map((imagemProduto, index) => {
+                                    const isPrincipal = index === imagemPrincipalIndex;
+
+                                    return (
+                                        <div
+                                            key={imagemProduto.key}
+                                            style={{
+                                                ...createImagePreviewCardStyle,
+                                                borderColor: isPrincipal ? '#687152' : '#E6E6E6',
+                                                background: isPrincipal ? '#F4F7EF' : '#FFFFFF',
+                                            }}
+                                        >
+                                            <img
+                                                src={imagemProduto.previewUrl}
+                                                alt={`Foto selecionada ${index + 1}`}
+                                                style={createImagePreviewStyle}
+                                            />
+
+                                            <div style={createImagePreviewInfoStyle}>
+                                                <span style={{
+                                                    ...createImageBadgeStyle,
+                                                    color: isPrincipal ? '#687152' : '#777',
+                                                }}>
+                                                    {isPrincipal ? 'Principal' : `Foto ${index + 1}`}
+                                                </span>
+                                                <div style={createImagePreviewActionsStyle}>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isPrincipal}
+                                                        onClick={() => setImagemPrincipalIndex(index)}
+                                                        style={{
+                                                            ...photoActionButtonStyle,
+                                                            minHeight: '26px',
+                                                            opacity: isPrincipal ? 0.62 : 1,
+                                                            cursor: isPrincipal ? 'default' : 'pointer',
+                                                        }}
+                                                    >
+                                                        Principal
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removerImagemProduto(imagemProduto.key)}
+                                                        style={{
+                                                            ...photoIconButtonStyle,
+                                                            color: '#FF3B30',
+                                                            background: '#FFF1F0',
+                                                        }}
+                                                        aria-label={`Remover foto ${index + 1}`}
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         <input type="text" placeholder="Nome da peça" value={nome} onChange={(event) => setNome(event.target.value)} style={adminInputStyle} required />
 
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <input type="number" min="0" step="0.01" placeholder="Preço de venda" value={precoVenda} onChange={(event) => setPrecoVenda(event.target.value)} style={{ ...adminInputStyle, flex: 1, minWidth: 0 }} required />
                             <input type="number" min="0" step="0.01" placeholder="Preço antigo" value={precoAntigo} onChange={(event) => setPrecoAntigo(event.target.value)} style={{ ...adminInputStyle, flex: 1, minWidth: 0 }} />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <input type="number" min="0" max="10" step="0.01" placeholder="Condição da peça" value={condicao} onChange={(event) => setCondicao(event.target.value)} style={{ ...adminInputStyle, flex: 1, minWidth: 0 }} required />
+                            <input type="number" min="0" step="0.01" placeholder="Preço de custo" value={precoCusto} onChange={(event) => setPrecoCusto(event.target.value)} style={{ ...adminInputStyle, flex: 1, minWidth: 0 }} />
                         </div>
 
                         <input type="text" placeholder="Tamanho (ex.: M ou P · M · G)" value={tamanho} onChange={(event) => setTamanho(event.target.value)} style={adminInputStyle} required />
@@ -1062,12 +1364,14 @@ export function AdminDashboardScreen() {
                             <div style={{ padding: '24px', borderRadius: '14px', background: '#F9F9F9', textAlign: 'center', color: '#999', fontSize: '13px' }}>Nenhum produto cadastrado.</div>
                         ) : (
                             <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '430px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
                                     <thead>
                                         <tr style={{ color: '#999', fontSize: '10px', textAlign: 'left', textTransform: 'uppercase' }}>
                                             <th style={adminTableHeaderStyle}>Foto</th>
                                             <th style={adminTableHeaderStyle}>Nome</th>
                                             <th style={adminTableHeaderStyle}>Tamanho</th>
+                                            <th style={adminTableHeaderStyle}>Cond.</th>
+                                            <th style={adminTableHeaderStyle}>Custo</th>
                                             <th style={{ ...adminTableHeaderStyle, textAlign: 'right' }}>Ações</th>
                                         </tr>
                                     </thead>
@@ -1082,6 +1386,8 @@ export function AdminDashboardScreen() {
                                                     </td>
                                                     <td style={{ ...adminTableCellStyle, fontSize: '13px', fontWeight: 700 }}>{produto.nome}</td>
                                                     <td style={{ ...adminTableCellStyle, fontSize: '12px', color: '#666' }}>{produto.tamanho}</td>
+                                                    <td style={{ ...adminTableCellStyle, fontSize: '12px', color: '#666', fontWeight: 700 }}>{formatAdminCondicao(produto)}</td>
+                                                    <td style={{ ...adminTableCellStyle, fontSize: '12px', color: '#666' }}>{formatAdminPrecoCusto(produto)}</td>
                                                     <td style={{ ...adminTableCellStyle, textAlign: 'right' }}>
                                                         <button type="button" aria-label={`Editar ${produto.nome}`} onClick={() => abrirEdicaoProduto(produto)} style={{ width: '36px', height: '36px', border: 0, borderRadius: '10px', color: '#4A90E2', background: '#EEF5FF', cursor: 'pointer', marginRight: '8px' }}>
                                                             <Pencil size={17} />
@@ -1124,6 +1430,77 @@ interface UnsupportedModulePanelProps {
     icon: React.ReactNode;
 }
 
+interface ConfiguracoesAdminPanelProps {
+    condicaoCasasDecimais: CondicaoCasasDecimais;
+    isLoading: boolean;
+    isSaving: boolean;
+    error: string;
+    success: string;
+    onChange: (casasDecimais: CondicaoCasasDecimais) => void;
+}
+
+function ConfiguracoesAdminPanel({
+    condicaoCasasDecimais,
+    isLoading,
+    isSaving,
+    error,
+    success,
+    onChange,
+}: ConfiguracoesAdminPanelProps) {
+    return (
+        <div style={{ margin: '0 20px', background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: '18px', color: 'var(--dark)', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={20} color="#687152" /> Configurações
+            </h3>
+
+            <section style={{ padding: '16px', borderRadius: '16px', background: '#F9F9F9', border: '1px solid #EEE' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+                    <strong style={{ color: 'var(--dark)', fontSize: '13px' }}>
+                        Casas decimais da condição
+                    </strong>
+                    <span style={{ color: '#777', fontSize: '12px', lineHeight: 1.35 }}>
+                        Define como a condição da peça aparece para os clientes.
+                    </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {[1, 2].map((casasDecimais) => {
+                        const value = normalizeCondicaoCasasDecimais(casasDecimais);
+                        const isActive = condicaoCasasDecimais === value;
+
+                        return (
+                            <button
+                                key={value}
+                                type="button"
+                                disabled={isLoading || isSaving}
+                                onClick={() => onChange(value)}
+                                style={{
+                                    minHeight: '42px',
+                                    border: 0,
+                                    borderRadius: '12px',
+                                    background: isActive ? '#687152' : '#FFFFFF',
+                                    color: isActive ? '#FFFFFF' : '#333',
+                                    cursor: isSaving ? 'wait' : 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: 800,
+                                    opacity: isLoading ? 0.62 : 1,
+                                }}
+                            >
+                                Mostrar {value} casa{value === 1 ? '' : 's'}
+                            </button>
+                        );
+                    })}
+                </div>
+            </section>
+
+            {isLoading && <p style={configStatusStyle}>Carregando configurações...</p>}
+            {isSaving && <p style={configStatusStyle}>Salvando configurações...</p>}
+            {error && <p role="alert" style={configErrorStyle}>{error}</p>}
+            {success && <p role="status" style={configSuccessStyle}>{success}</p>}
+        </div>
+    );
+}
+
 interface ProdutoAdminListItemProps {
     produto: ProdutoAdmin;
     onEdit: () => void;
@@ -1150,6 +1527,8 @@ function ProdutoAdminListItem({
                     <div style={{ fontSize: '10px', color: '#999', fontWeight: 800 }}>#{produto.id}</div>
                     <h4 style={{ margin: '2px 0 0', overflow: 'hidden', color: 'var(--dark)', fontSize: '14px', fontWeight: 800, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{produto.nome}</h4>
                     <div style={{ marginTop: '3px', color: '#666', fontSize: '11px', fontWeight: 700 }}>Tam. {produto.tamanho || 'Único'}</div>
+                    <div style={{ marginTop: '3px', color: '#666', fontSize: '11px', fontWeight: 700 }}>Cond. {formatAdminCondicao(produto)}</div>
+                    <div style={{ marginTop: '3px', color: '#999', fontSize: '11px', fontWeight: 700 }}>Custo {formatAdminPrecoCusto(produto)}</div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
@@ -1178,7 +1557,7 @@ interface ProdutoEditModalProps {
     onClose: () => void;
     onSubmit: (event: FormEvent<HTMLFormElement>) => void;
     onFieldChange: (
-        campo: keyof Pick<ProdutoEditState, 'nome' | 'precoVenda' | 'precoAntigo' | 'tamanho'>,
+        campo: keyof Pick<ProdutoEditState, 'nome' | 'precoVenda' | 'precoAntigo' | 'precoCusto' | 'condicao' | 'tamanho'>,
         valor: string,
     ) => void;
     onAddPhotos: (files: FileList | null) => void;
@@ -1217,6 +1596,11 @@ function ProdutoEditModal({
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <input type="number" min="0" step="0.01" value={produto.precoVenda} onChange={(event) => onFieldChange('precoVenda', event.target.value)} placeholder="Preço venda" style={adminInputStyle} required />
                         <input type="number" min="0" step="0.01" value={produto.precoAntigo} onChange={(event) => onFieldChange('precoAntigo', event.target.value)} placeholder="Preço antigo" style={adminInputStyle} />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <input type="number" min="0" max="10" step="0.01" value={produto.condicao} onChange={(event) => onFieldChange('condicao', event.target.value)} placeholder="Condição" style={adminInputStyle} required />
+                        <input type="number" min="0" step="0.01" value={produto.precoCusto} onChange={(event) => onFieldChange('precoCusto', event.target.value)} placeholder="Preço de custo" style={adminInputStyle} />
                     </div>
 
                     <input value={produto.tamanho} onChange={(event) => onFieldChange('tamanho', event.target.value)} placeholder="Tamanho" style={adminInputStyle} required />
@@ -1315,6 +1699,27 @@ const adminTableCellStyle: React.CSSProperties = {
     verticalAlign: 'middle',
 };
 
+const configStatusStyle: React.CSSProperties = {
+    margin: '12px 0 0',
+    color: '#777',
+    fontSize: '12px',
+    fontWeight: 700,
+};
+
+const configErrorStyle: React.CSSProperties = {
+    margin: '12px 0 0',
+    color: '#A63D2F',
+    fontSize: '12px',
+    fontWeight: 700,
+};
+
+const configSuccessStyle: React.CSSProperties = {
+    margin: '12px 0 0',
+    color: '#2D6A4F',
+    fontSize: '12px',
+    fontWeight: 700,
+};
+
 const modalOverlayStyle: React.CSSProperties = {
     position: 'fixed',
     inset: 0,
@@ -1334,6 +1739,56 @@ const productEditModalStyle: React.CSSProperties = {
     background: 'white',
     padding: '22px',
     boxShadow: '0 24px 70px rgba(0, 0, 0, 0.24)',
+};
+
+const createImagesPreviewTrackStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: '10px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    padding: '2px 0 4px',
+    scrollbarWidth: 'thin',
+};
+
+const createImagePreviewCardStyle: React.CSSProperties = {
+    display: 'grid',
+    minWidth: '138px',
+    maxWidth: '138px',
+    gridTemplateRows: '104px auto',
+    overflow: 'hidden',
+    border: '1.5px solid #E6E6E6',
+    borderRadius: '14px',
+};
+
+const createImagePreviewStyle: React.CSSProperties = {
+    width: '100%',
+    height: '104px',
+    objectFit: 'cover',
+    background: '#EEE',
+};
+
+const createImagePreviewInfoStyle: React.CSSProperties = {
+    display: 'flex',
+    minHeight: '72px',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    gap: '8px',
+    padding: '9px',
+};
+
+const createImageBadgeStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    minHeight: '16px',
+    alignItems: 'center',
+    fontSize: '10px',
+    fontWeight: 900,
+    lineHeight: 1,
+};
+
+const createImagePreviewActionsStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
 };
 
 const photoActionButtonStyle: React.CSSProperties = {
