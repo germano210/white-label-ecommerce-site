@@ -109,6 +109,37 @@ const uploadTimeoutMs = 60000;
 const bytesPerMegabyte = 1024 * 1024;
 const maxImageUploadBytes = 15 * bytesPerMegabyte;
 const maxTotalUploadBytes = 80 * bytesPerMegabyte;
+const productImageAccept = 'image/jpeg,image/jpg,image/png,image/webp,image/svg+xml,.svg';
+const acceptedProductImageMimeTypes = new Set([
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/svg+xml',
+]);
+const acceptedProductImageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.svg'];
+
+function isAcceptedProductImage(file: File) {
+    const fileType = file.type.trim().toLowerCase();
+    const fileName = file.name.trim().toLowerCase();
+
+    return (
+        acceptedProductImageMimeTypes.has(fileType)
+        || acceptedProductImageExtensions.some((extension) => fileName.endsWith(extension))
+    );
+}
+
+function getUploadFormatError(files: File[]) {
+    if (files.some((file) => !isAcceptedProductImage(file))) {
+        return 'Formato inválido. Envie JPG, PNG, WEBP ou SVG.';
+    }
+
+    return '';
+}
+
+function getUploadValidationError(files: File[]) {
+    return getUploadFormatError(files) || getUploadSizeError(files);
+}
 
 function getUploadSizeError(files: File[]) {
     if (files.some((file) => file.size > maxImageUploadBytes)) {
@@ -395,7 +426,16 @@ export function AdminDashboardScreen() {
     const adicionarImagensProduto = (files: FileList | null) => {
         if (!files?.length) return;
 
-        const novasImagens = Array.from(files).map((file, index): ProdutoCreateImage => ({
+        const selectedFiles = Array.from(files);
+        const uploadFormatError = getUploadFormatError(selectedFiles);
+        if (uploadFormatError) {
+            setProdutoError(uploadFormatError);
+            setProdutoSuccess('');
+            return;
+        }
+        setProdutoError('');
+
+        const novasImagens = selectedFiles.map((file, index): ProdutoCreateImage => ({
             file,
             previewUrl: URL.createObjectURL(file),
             key: `create-${Date.now()}-${index}-${file.name}`,
@@ -449,9 +489,9 @@ export function AdminDashboardScreen() {
             return;
         }
 
-        const uploadSizeError = getUploadSizeError(imagens.map((imagemProduto) => imagemProduto.file));
-        if (uploadSizeError) {
-            setProdutoError(uploadSizeError);
+        const uploadValidationError = getUploadValidationError(imagens.map((imagemProduto) => imagemProduto.file));
+        if (uploadValidationError) {
+            setProdutoError(uploadValidationError);
             setProdutoSuccess('');
             return;
         }
@@ -549,7 +589,16 @@ export function AdminDashboardScreen() {
     const adicionarFotosEdicaoProduto = (files: FileList | null) => {
         if (!files?.length) return;
 
-        const novasFotos = Array.from(files).map((file, index): ProdutoEditPhoto => ({
+        const selectedFiles = Array.from(files);
+        const uploadFormatError = getUploadFormatError(selectedFiles);
+        if (uploadFormatError) {
+            setProdutoError(uploadFormatError);
+            setProdutoSuccess('');
+            return;
+        }
+        setProdutoError('');
+
+        const novasFotos = selectedFiles.map((file, index): ProdutoEditPhoto => ({
             key: `new-${Date.now()}-${index}-${file.name}`,
             file,
             previewUrl: URL.createObjectURL(file),
@@ -641,9 +690,9 @@ export function AdminDashboardScreen() {
         const arquivosRequestEdicao = primeiraFotoNovaPrincipal
             ? [primeiraFotoNovaPrincipal, ...arquivosUploadEdicao]
             : arquivosUploadEdicao;
-        const uploadSizeError = getUploadSizeError(arquivosRequestEdicao);
-        if (uploadSizeError) {
-            setProdutoError(uploadSizeError);
+        const uploadValidationError = getUploadValidationError(arquivosRequestEdicao);
+        if (uploadValidationError) {
+            setProdutoError(uploadValidationError);
             setProdutoSuccess('');
             return;
         }
@@ -1259,7 +1308,7 @@ export function AdminDashboardScreen() {
                             </span>
                             <input
                                 type="file"
-                                accept="image/*"
+                                accept={productImageAccept}
                                 multiple
                                 onChange={(event) => {
                                     adicionarImagensProduto(event.target.files);
@@ -1283,9 +1332,10 @@ export function AdminDashboardScreen() {
                                                 background: isPrincipal ? '#F4F7EF' : '#FFFFFF',
                                             }}
                                         >
-                                            <img
+                                            <AdminImagePreview
                                                 src={imagemProduto.previewUrl}
                                                 alt={`Foto selecionada ${index + 1}`}
+                                                fileName={imagemProduto.file.name}
                                                 style={createImagePreviewStyle}
                                             />
 
@@ -1507,6 +1557,54 @@ interface ProdutoAdminListItemProps {
     onDelete: () => void;
 }
 
+interface AdminImagePreviewProps {
+    src: string;
+    alt: string;
+    fileName?: string;
+    style: React.CSSProperties;
+}
+
+function AdminImagePreview({
+    src,
+    alt,
+    fileName,
+    style,
+}: AdminImagePreviewProps) {
+    const [hasError, setHasError] = useState(false);
+
+    if (hasError) {
+        return (
+            <div
+                aria-label={alt}
+                role="img"
+                style={{
+                    ...style,
+                    display: 'grid',
+                    placeItems: 'center',
+                    padding: '8px',
+                    color: '#777',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    textAlign: 'center',
+                    wordBreak: 'break-word',
+                }}
+            >
+                {fileName || 'Preview indisponível'}
+            </div>
+        );
+    }
+
+    return (
+        <img
+            src={src}
+            alt={alt}
+            style={style}
+            onError={() => setHasError(true)}
+        />
+    );
+}
+
 function ProdutoAdminListItem({
     produto,
     onEdit,
@@ -1613,7 +1711,7 @@ function ProdutoEditModal({
                                 Adicionar
                                 <input
                                     type="file"
-                                    accept="image/*"
+                                    accept={productImageAccept}
                                     multiple
                                     onChange={(event) => {
                                         onAddPhotos(event.target.files);
@@ -1632,7 +1730,12 @@ function ProdutoEditModal({
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {produto.fotos.map((foto, index) => (
                                     <div key={foto.key} style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: '10px', alignItems: 'center', padding: '10px', borderRadius: '14px', background: index === 0 ? '#F4F7EF' : '#F9F9F9', border: `1px solid ${index === 0 ? '#CAD5BA' : '#EEE'}` }}>
-                                        <img src={foto.previewUrl} alt={`Foto ${index + 1}`} style={{ width: '64px', height: '74px', objectFit: 'cover', borderRadius: '10px', background: '#EEE' }} />
+                                        <AdminImagePreview
+                                            src={foto.previewUrl}
+                                            alt={`Foto ${index + 1}`}
+                                            fileName={foto.file?.name ?? foto.rawUrl ?? `Foto ${index + 1}`}
+                                            style={{ width: '64px', height: '74px', objectFit: 'cover', borderRadius: '10px', background: '#EEE' }}
+                                        />
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: index === 0 ? '#687152' : '#777', fontSize: '11px', fontWeight: 800 }}>
                                                 {index === 0 && <Star size={13} fill="currentColor" />}

@@ -80,7 +80,9 @@ export function SwipeCard({
 
     const productImages = product.images?.length ? product.images : [getImageUrl(null)];
     const totalPhotos = productImages.length;
+    const mainImageSrc = getImageUrl(productImages[0]);
     const activeImageSrc = getImageUrl(productImages[currentPhoto]);
+    const isInitialPhoto = currentPhoto === 0;
 
     const x = useMotionValue(0);
     const rotate = useTransform(x, [-220, 220], [-16, 16]);
@@ -190,17 +192,62 @@ export function SwipeCard({
                     cursor: isTop ? 'pointer' : 'default',
                 }}
             >
-                <img
-                    src={activeImageSrc}
-                    alt={product.name}
-                    draggable={false}
-                    style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        userSelect: 'none',
-                    }}
-                />
+                {isInitialPhoto ? (
+                    <img
+                        src={activeImageSrc}
+                        alt={product.name}
+                        draggable={false}
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            userSelect: 'none',
+                        }}
+                    />
+                ) : (
+                    <>
+                        <img
+                            src={mainImageSrc}
+                            alt=""
+                            aria-hidden="true"
+                            draggable={false}
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                userSelect: 'none',
+                            }}
+                        />
+                        <div
+                            aria-hidden="true"
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                zIndex: 2,
+                                background: 'rgba(0, 0, 0, 0.5)',
+                                pointerEvents: 'none',
+                            }}
+                        />
+                        <img
+                            src={activeImageSrc}
+                            alt={product.name}
+                            draggable={false}
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                zIndex: 5,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'contain',
+                                transform: 'scale(1.4)',
+                                transformOrigin: 'center',
+                                userSelect: 'none',
+                            }}
+                        />
+                    </>
+                )}
 
                 <div
                     aria-hidden="true"
