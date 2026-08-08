@@ -1,10 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import axios from 'axios';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
-import { useDiscoveryStore } from '../../store/useDiscoveryStore';
 import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
-import { getImageUrl } from '../../utils/imageUtils';
 import { BrechoDaCamiLogo } from './BrechoDaCamiLogo';
 import './LoginModal.css';
 
@@ -106,7 +104,6 @@ function isDuplicatePhoneResponse(response?: RequestOtpResponse) {
 
 export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
     const setSession = useAuthStore((state) => state.setSession);
-    const products = useDiscoveryStore((state) => state.products);
     const [step, setStep] = useState<LoginStep>('choice');
     const [accessMode, setAccessMode] = useState<AccessMode>('login');
     const [phone, setPhone] = useState('');
@@ -116,23 +113,6 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
     const [isLoading, setIsLoading] = useState(false);
 
     const phoneDigits = onlyDigits(phone);
-
-    const galleryImages = useMemo(() => {
-        const productImages = products
-            .flatMap((product) => product.images ?? [])
-            .filter(Boolean)
-            .map((imageUrl) => getImageUrl(imageUrl))
-            .slice(0, 3);
-
-        if (productImages.length === 0) {
-            return Array.from({ length: 3 }, () => getImageUrl(null));
-        }
-
-        return [
-            ...productImages,
-            ...Array.from({ length: 3 - productImages.length }, () => getImageUrl(null)),
-        ].slice(0, 3);
-    }, [products]);
 
     const startAuthFlow = (mode: AccessMode) => {
         setAccessMode(mode);
@@ -242,18 +222,6 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                         <h1 id="login-modal-title" className="login-modal__brand">
                             <BrechoDaCamiLogo className="login-modal__brand-logo" />
                         </h1>
-
-                        <div className="login-modal__gallery grid grid-cols-3 gap-2">
-                            {galleryImages.map((imageUrl, index) => (
-                                <img
-                                    key={`${imageUrl}-${index}`}
-                                    src={imageUrl}
-                                    alt=""
-                                    aria-hidden="true"
-                                    className="login-modal__thumb rounded-xl object-cover"
-                                />
-                            ))}
-                        </div>
 
                         <div className="login-modal__actions flex flex-col gap-3 mt-6">
                             <button

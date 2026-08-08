@@ -73,7 +73,7 @@ export function AdminLoginScreen() {
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'var(--cream)', zIndex: 3000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <button onClick={() => navigate(appRoutes.forYou)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '14px', color: 'var(--muted)', cursor: 'pointer' }}>
+            <button onClick={() => navigate(appRoutes.root)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '14px', color: 'var(--muted)', cursor: 'pointer' }}>
                 Voltar à Loja
             </button>
 
@@ -134,3 +134,4 @@ export function AdminLoginScreen() {
         </div>
     );
 }
+

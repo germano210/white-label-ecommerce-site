@@ -910,7 +910,7 @@ export function AdminDashboardScreen() {
                     <span style={{ fontSize: '10px', color: 'var(--terra)', fontWeight: 800 }}>MODO: {currentUser?.role}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={() => navigate(appRoutes.forYou)} style={{ background: '#F5F5F5', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>LOJA</button>
+                    <button onClick={() => navigate(appRoutes.root)} style={{ background: '#F5F5F5', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>LOJA</button>
                     <button onClick={logout} style={{ color: '#FF3B30', background: 'none', border: 'none', cursor: 'pointer' }}><LogOut size={20}/></button>
                 </div>
             </div>
@@ -2036,3 +2036,4 @@ const photoIconButtonStyle: React.CSSProperties = {
     color: '#333',
     cursor: 'pointer',
 };
+
