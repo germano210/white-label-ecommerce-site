@@ -7,6 +7,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -42,6 +44,18 @@ public class RoletaConfig {
 
     @Column(name = "giros_ganhos_por_convite", nullable = false)
     private Integer girosGanhosPorConvite = 1;
+
+    @Column(
+            name = "multiplicador_dificuldade_padrao",
+            nullable = false,
+            precision = 10,
+            scale = 2,
+            columnDefinition = "numeric(10,2) default 5.00"
+    )
+    private BigDecimal multiplicadorDificuldadePadrao = new BigDecimal("5.00");
+
+    @Column(name = "usar_pesos_manuais", nullable = false, columnDefinition = "boolean default true")
+    private Boolean usarPesosManuais = true;
 
     @Column(name = "atualizada_em", nullable = false)
     private LocalDateTime atualizadaEm;
@@ -125,6 +139,34 @@ public class RoletaConfig {
 
     public void setGirosGanhosPorConvite(Integer girosGanhosPorConvite) {
         this.girosGanhosPorConvite = Math.max(0, girosGanhosPorConvite == null ? 0 : girosGanhosPorConvite);
+    }
+
+    public BigDecimal getMultiplicadorDificuldadePadrao() {
+        BigDecimal multiplicador = multiplicadorDificuldadePadrao == null
+                ? new BigDecimal("5.00")
+                : multiplicadorDificuldadePadrao;
+        if (multiplicador.compareTo(BigDecimal.ONE) <= 0) {
+            return new BigDecimal("5.00");
+        }
+        return multiplicador.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public void setMultiplicadorDificuldadePadrao(BigDecimal multiplicadorDificuldadePadrao) {
+        if (multiplicadorDificuldadePadrao == null
+                || multiplicadorDificuldadePadrao.compareTo(BigDecimal.ONE) <= 0) {
+            this.multiplicadorDificuldadePadrao = new BigDecimal("5.00");
+            return;
+        }
+        this.multiplicadorDificuldadePadrao =
+                multiplicadorDificuldadePadrao.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public Boolean getUsarPesosManuais() {
+        return usarPesosManuais == null || usarPesosManuais;
+    }
+
+    public void setUsarPesosManuais(Boolean usarPesosManuais) {
+        this.usarPesosManuais = usarPesosManuais == null || usarPesosManuais;
     }
 
     public LocalDateTime getAtualizadaEm() {

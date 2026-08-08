@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;700;900&display=swap');
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root {
@@ -29,9 +29,8 @@
   --green: #2D6A4F;
   --red: #A63D2F;
 
-  /* Aplicando a fonte Alice em todo o site */
-  --font-display: 'Alice', serif;
-  --font-body: 'Alice', serif;
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
 
   --nav-h: 60px;
   --strip-h: 32px;
@@ -59,7 +58,21 @@
 .gap-4{gap:1rem}
 
 html,body{height:100%;overflow:hidden}
-body{font-family:var(--font-body);background:var(--cream);color:var(--dark);font-size:15px;line-height:1.6;max-width:430px;margin:0 auto;position:relative}
+body{font-family:var(--font-body);font-weight:300;background:var(--cream);color:var(--dark);font-size:15px;line-height:1.6;max-width:430px;margin:0 auto;position:relative}
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-body);
+  font-weight: 300;
+}
+
+#root,
+#root * {
+  font-family: var(--font-body) !important;
+  font-weight: 300 !important;
+}
 *::-webkit-scrollbar{display:none}
 *{scrollbar-width:none}
 

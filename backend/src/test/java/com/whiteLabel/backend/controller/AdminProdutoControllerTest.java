@@ -37,6 +37,7 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -626,6 +627,60 @@ class AdminProdutoControllerTest {
                 .andExpect(jsonPath("$[0].precoCusto").doesNotExist())
                 .andExpect(jsonPath("$[0].imagens.length()").value(2))
                 .andExpect(jsonPath("$[0].imagens[0].principal").value(true));
+    }
+
+    @Test
+    void shouldChangeMainImageWithDedicatedEndpoint() throws Exception {
+        Usuario admin = criarAdmin("551199991020");
+        ProdutoCriado produtoCriado = criarProdutoComImagens(
+                "Conjunto Linho",
+                "/uploads/conjunto-1.webp",
+                "/uploads/conjunto-2.webp",
+                "/uploads/conjunto-3.webp"
+        );
+        Long produtoId = produtoCriado.produto().getId();
+        Long segundaImagemId = produtoCriado.imagens().get(1).getId();
+
+        mockMvc.perform(patch(
+                        "/api/admin/produtos/{produtoId}/imagens/{imagemId}/principal",
+                        produtoId,
+                        segundaImagemId
+                )
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagemUrl").value("/uploads/conjunto-2.webp"))
+                .andExpect(jsonPath("$.imagens.length()").value(3))
+                .andExpect(jsonPath("$.imagens[0].principal").value(false))
+                .andExpect(jsonPath("$.imagens[1].principal").value(true))
+                .andExpect(jsonPath("$.imagens[2].principal").value(false));
+
+        List<ProdutoImagem> imagens =
+                produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produtoId);
+        assertEquals(1, imagens.stream().filter(ProdutoImagem::getPrincipal).count());
+        assertEquals(segundaImagemId, imagens.stream()
+                .filter(ProdutoImagem::getPrincipal)
+                .findFirst()
+                .orElseThrow()
+                .getId());
+        assertEquals(
+                "/uploads/conjunto-2.webp",
+                produtoRepository.findById(produtoId).orElseThrow().getImagemUrl()
+        );
+
+        mockMvc.perform(get("/api/admin/produtos")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].imagemUrl").value("/uploads/conjunto-2.webp"))
+                .andExpect(jsonPath("$[0].imagens[0].principal").value(false))
+                .andExpect(jsonPath("$[0].imagens[1].principal").value(true));
+
+        mockMvc.perform(get("/api/produtos").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].imagemUrl").value("/uploads/conjunto-2.webp"))
+                .andExpect(jsonPath("$[0].imagens[0].principal").value(false))
+                .andExpect(jsonPath("$[0].imagens[1].principal").value(true));
     }
 
     private void limparDados() {

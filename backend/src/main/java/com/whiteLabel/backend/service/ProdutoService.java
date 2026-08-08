@@ -172,6 +172,37 @@ public class ProdutoService {
         return montarAdminResponse(produtoSalvo, imagensAtuais, List.of());
     }
 
+    @Transactional
+    public AdminProdutoResponseDTO definirImagemPrincipal(Long produtoId, Long imagemId) {
+        Produto produto = produtoRepository.findById(produtoId)
+                .filter(item -> Boolean.TRUE.equals(item.getAtivo()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Produto nao encontrado"
+                ));
+
+        ProdutoImagem imagemPrincipal = produtoImagemRepository.findById(imagemId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Imagem do produto nao encontrada"
+                ));
+
+        if (!produto.getId().equals(imagemPrincipal.getProduto().getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Imagem nao pertence ao produto informado"
+            );
+        }
+
+        List<ProdutoImagem> imagens = buscarImagensEditaveis(produto);
+        marcarPrincipal(produto, imagens, imagemPrincipal);
+
+        Produto produtoSalvo = produtoRepository.save(produto);
+        produtoImagemRepository.saveAll(imagens);
+
+        return montarAdminResponse(produtoSalvo, imagens, List.of());
+    }
+
     @Transactional(readOnly = true)
     public List<ProdutoResponseDTO> listarAtivos() {
         List<Produto> produtos = produtoRepository.findAllByAtivoTrueOrderByCriadoEmDescIdDesc();
@@ -543,6 +574,18 @@ public class ProdutoService {
         for (int ordem = 0; ordem < imagens.size(); ordem++) {
             ProdutoImagem imagem = imagens.get(ordem);
             imagem.setOrdem(ordem);
+            imagem.setPrincipal(mesmoRegistro(imagem, principal));
+        }
+
+        produto.setImagemUrl(principal.getUrl());
+    }
+
+    private void marcarPrincipal(
+            Produto produto,
+            List<ProdutoImagem> imagens,
+            ProdutoImagem principal
+    ) {
+        for (ProdutoImagem imagem : imagens) {
             imagem.setPrincipal(mesmoRegistro(imagem, principal));
         }
 

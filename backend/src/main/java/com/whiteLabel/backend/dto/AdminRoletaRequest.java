@@ -1,7 +1,9 @@
 package com.whiteLabel.backend.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public record AdminRoletaRequest(
@@ -13,6 +15,11 @@ public record AdminRoletaRequest(
         Integer giroDiarioQuantidade,
         Boolean giroDiarioSomenteQuandoZerar,
         Integer girosGanhosPorConvite,
-        List<Long> produtoIds
+        BigDecimal multiplicadorDificuldadePadrao,
+        Boolean usarPesosManuais,
+        List<Long> produtoIds,
+        List<@Valid AdminRoletaNivelRequest> niveis,
+        List<@Valid AdminRoletaOpcaoRequest> opcoes,
+        List<@Valid AdminRoletaPremioRequest> premios
 ) {
 }

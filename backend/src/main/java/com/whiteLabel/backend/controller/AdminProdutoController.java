@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -97,5 +98,13 @@ public class AdminProdutoController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void excluir(@PathVariable Long id) {
         produtoService.excluir(id);
+    }
+
+    @PatchMapping("/{produtoId}/imagens/{imagemId}/principal")
+    public AdminProdutoResponseDTO definirImagemPrincipal(
+            @PathVariable Long produtoId,
+            @PathVariable Long imagemId
+    ) {
+        return produtoService.definirImagemPrincipal(produtoId, imagemId);
     }
 }

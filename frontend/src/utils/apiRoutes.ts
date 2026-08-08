@@ -53,6 +53,9 @@ export const apiRoutes = {
             create: '/api/admin/produtos',
             update: (id: RouteId) => `/api/admin/produtos/${routeId(id)}`,
             delete: (id: RouteId) => `/api/admin/produtos/${routeId(id)}`,
+            setMainImage: (produtoId: RouteId, imagemId: RouteId) => (
+                `/api/admin/produtos/${routeId(produtoId)}/imagens/${routeId(imagemId)}/principal`
+            ),
         },
         missoes: {
             list: '/api/admin/missoes',

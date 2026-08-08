@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -129,5 +130,30 @@ class ApiRouteStandardizationTest {
                         .header("Origin", "https://origem-invalida.example")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldAllowAdminPatchPreflightWithAuthorizationHeader() throws Exception {
+        assertAdminPreflight("/api/admin/produtos", "GET");
+        assertAdminPreflight("/api/admin/produtos", "POST");
+        assertAdminPreflight("/api/admin/produtos/1", "PUT");
+        assertAdminPreflight("/api/admin/produtos/1/imagens/2/principal", "PATCH");
+    }
+
+    private void assertAdminPreflight(String path, String method) throws Exception {
+        mockMvc.perform(options(path)
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", method)
+                        .header(
+                                "Access-Control-Request-Headers",
+                                "Authorization, Content-Type, X-Requested-With"
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsString(method)))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsString("Authorization")))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsString("Content-Type")))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsString("X-Requested-With")));
     }
 }
