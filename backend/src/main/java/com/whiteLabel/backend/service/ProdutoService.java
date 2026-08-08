@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -201,6 +202,34 @@ public class ProdutoService {
         produtoImagemRepository.saveAll(imagens);
 
         return montarAdminResponse(produtoSalvo, imagens, List.of());
+    }
+
+    @Transactional
+    public AdminProdutoResponseDTO atualizarOrdemImagens(Long produtoId, List<Long> imagemIds) {
+        Produto produto = produtoRepository.findById(produtoId)
+                .filter(item -> Boolean.TRUE.equals(item.getAtivo()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Produto nao encontrado"
+                ));
+
+        List<ProdutoImagem> imagens = buscarImagensEditaveis(produto);
+        validarImagemIdsParaOrdenacao(imagens, imagemIds);
+
+        Map<Long, ProdutoImagem> imagensPorId = imagens.stream()
+                .collect(Collectors.toMap(ProdutoImagem::getId, imagem -> imagem));
+
+        for (int ordem = 0; ordem < imagemIds.size(); ordem++) {
+            imagensPorId.get(imagemIds.get(ordem)).setOrdem(ordem);
+        }
+
+        atualizarImagemUrlPelaPrincipal(produto, imagens);
+        Produto produtoSalvo = produtoRepository.save(produto);
+        produtoImagemRepository.saveAll(imagens);
+
+        List<ProdutoImagem> imagensOrdenadas =
+                produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produtoId);
+        return montarAdminResponse(produtoSalvo, imagensOrdenadas, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -590,6 +619,59 @@ public class ProdutoService {
         }
 
         produto.setImagemUrl(principal.getUrl());
+    }
+
+    private void atualizarImagemUrlPelaPrincipal(
+            Produto produto,
+            List<ProdutoImagem> imagens
+    ) {
+        ProdutoImagem principal = imagens.stream()
+                .filter(ProdutoImagem::getPrincipal)
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Produto sem imagem principal"
+                ));
+
+        produto.setImagemUrl(principal.getUrl());
+    }
+
+    private void validarImagemIdsParaOrdenacao(
+            List<ProdutoImagem> imagens,
+            List<Long> imagemIds
+    ) {
+        if (imagemIds == null || imagemIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Lista de imagens e obrigatoria"
+            );
+        }
+
+        if (imagemIds.stream().anyMatch(id -> id == null)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Lista de imagens nao pode conter IDs nulos"
+            );
+        }
+
+        Set<Long> idsAtuais = imagens.stream()
+                .map(ProdutoImagem::getId)
+                .collect(Collectors.toSet());
+        Set<Long> idsRecebidos = new LinkedHashSet<>(imagemIds);
+
+        if (idsRecebidos.size() != imagemIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Lista de imagens nao pode conter IDs duplicados"
+            );
+        }
+
+        if (!idsRecebidos.equals(idsAtuais)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Lista de imagens deve conter exatamente as imagens atuais do produto"
+            );
+        }
     }
 
     private boolean mesmoRegistro(ProdutoImagem imagem, ProdutoImagem outraImagem) {

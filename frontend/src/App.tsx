@@ -57,6 +57,11 @@ function normalizeAuthUser(apiUser: Partial<AuthUser>): AuthUser {
     };
 }
 
+function normalizeRoutePath(pathname: string) {
+    if (pathname === '/') return pathname;
+    return pathname.replace(/\/+$/, '');
+}
+
 export default function App() {
     return (
         <BrowserRouter>
@@ -68,6 +73,7 @@ export default function App() {
 function AppRoutes() {
     const navigate = useNavigate();
     const location = useLocation();
+    const normalizedPathname = normalizeRoutePath(location.pathname);
     const setCurtidasMode = useDiscoveryStore((state) => state.setCurtidasMode);
     const fetchMissoes = useMissaoStore((state) => state.fetchMissoes);
     const fetchPublicConfiguracoes = useConfiguracoesStore((state) => state.fetchPublicConfiguracoes);
@@ -81,11 +87,11 @@ function AppRoutes() {
     const [pendingRoletaInviteCode, setPendingRoletaInviteCode] = useState<string | null>(null);
     const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
-    const isAdminRoute = location.pathname === appRoutes.admin;
-    const isCurtidasRoute = location.pathname.startsWith('/curtidas');
-    const isRoletaRoute = location.pathname === appRoutes.roletaVip;
-    const shouldShowGlobalMissions = !isAdminRoute && !isRoletaRoute && location.pathname !== appRoutes.forYou;
-    const hasFloatingWindowBackground = isCurtidasRoute || location.pathname === appRoutes.perfil;
+    const isAdminRoute = normalizedPathname === appRoutes.admin;
+    const isCurtidasRoute = normalizedPathname.startsWith('/curtidas');
+    const isRoletaRoute = normalizedPathname === appRoutes.roletaVip;
+    const shouldShowGlobalMissions = !isAdminRoute && !isRoletaRoute && normalizedPathname !== appRoutes.forYou;
+    const hasFloatingWindowBackground = isCurtidasRoute || normalizedPathname === appRoutes.perfil;
     const appBackground = isRoletaRoute
         ? '#e6e6e6'
         : hasFloatingWindowBackground ? '#e6e6e6' : '#FAF7F2';

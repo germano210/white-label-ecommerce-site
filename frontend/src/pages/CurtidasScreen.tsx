@@ -605,7 +605,7 @@ const expandedBackgroundOverlayStyle: CSSProperties = {
     position: 'absolute',
     inset: 0,
     zIndex: 0,
-    background: 'rgba(255, 255, 255, 0.86)',
+    background: 'rgba(0, 0, 0, 0.5)',
     pointerEvents: 'none',
 };
 

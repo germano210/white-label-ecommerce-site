@@ -10,13 +10,26 @@ import java.util.List;
 
 public interface ProdutoImagemRepository extends JpaRepository<ProdutoImagem, Long> {
 
-    List<ProdutoImagem> findByProdutoIdOrderByOrdemAscIdAsc(Long produtoId);
+    @Query("""
+            select imagem
+            from ProdutoImagem imagem
+            where imagem.produto.id = :produtoId
+            order by
+                case when imagem.ordem is null then 1 else 0 end asc,
+                imagem.ordem asc,
+                imagem.id asc
+            """)
+    List<ProdutoImagem> findByProdutoIdOrderByOrdemAscIdAsc(@Param("produtoId") Long produtoId);
 
     @Query("""
             select imagem
             from ProdutoImagem imagem
             where imagem.produto.id in :produtoIds
-            order by imagem.produto.id asc, imagem.ordem asc, imagem.id asc
+            order by
+                imagem.produto.id asc,
+                case when imagem.ordem is null then 1 else 0 end asc,
+                imagem.ordem asc,
+                imagem.id asc
             """)
     List<ProdutoImagem> findByProdutoIdInOrderByProdutoIdAscOrdemAscIdAsc(
             @Param("produtoIds") Collection<Long> produtoIds

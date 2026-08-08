@@ -1,7 +1,9 @@
 package com.whiteLabel.backend.controller;
 
 import com.whiteLabel.backend.dto.AdminProdutoResponseDTO;
+import com.whiteLabel.backend.dto.ProdutoImagemOrdemRequest;
 import com.whiteLabel.backend.service.ProdutoService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -106,5 +109,13 @@ public class AdminProdutoController {
             @PathVariable Long imagemId
     ) {
         return produtoService.definirImagemPrincipal(produtoId, imagemId);
+    }
+
+    @PatchMapping("/{produtoId}/imagens/ordem")
+    public AdminProdutoResponseDTO atualizarOrdemImagens(
+            @PathVariable Long produtoId,
+            @Valid @RequestBody ProdutoImagemOrdemRequest request
+    ) {
+        return produtoService.atualizarOrdemImagens(produtoId, request.imagemIds());
     }
 }

@@ -68,7 +68,7 @@ type ProdutoImagemApi = string | {
     imagemUrl?: string | null;
     caminho?: string | null;
     path?: string | null;
-    principal?: boolean | null;
+    principal?: boolean | number | string | null;
     ordem?: number | string | null;
 };
 
@@ -88,6 +88,7 @@ interface ProdutoEditPhoto {
     previewUrl: string;
     file?: File;
     isExisting: boolean;
+    principal: boolean;
 }
 
 interface ProdutoCreateImage {
@@ -232,10 +233,7 @@ function getProdutoImageSources(produto: ProdutoAdmin): ProdutoImageSource[] {
         .filter((imagem): imagem is ProdutoImageSource => Boolean(imagem));
 
     if (sources.length > 0) {
-        return [...sources].sort((a, b) => {
-            if (a.principal !== b.principal) return a.principal ? -1 : 1;
-            return a.ordem - b.ordem;
-        });
+        return [...sources].sort((a, b) => a.ordem - b.ordem);
     }
 
     if (produto.imagemUrl) {
@@ -253,7 +251,10 @@ function getProdutoImageSources(produto: ProdutoAdmin): ProdutoImageSource[] {
 }
 
 function getProdutoMainImage(produto: ProdutoAdmin) {
-    return getProdutoImageSources(produto)[0]?.displayUrl ?? getImageUrl(null);
+    const images = getProdutoImageSources(produto);
+    return images.find((image) => image.principal)?.displayUrl
+        ?? images[0]?.displayUrl
+        ?? getImageUrl(null);
 }
 
 function mapProdutoAdminToVitrine(produto: ProdutoAdmin): ProdutoVitrine {
@@ -294,6 +295,7 @@ function createProdutoEditState(produto: ProdutoAdmin): ProdutoEditState {
             rawUrl: image.rawUrl,
             previewUrl: image.displayUrl,
             isExisting: true,
+            principal: image.principal,
         })),
     };
 }
@@ -647,18 +649,20 @@ export function AdminDashboardScreen() {
         }
         setProdutoError('');
 
-        const novasFotos = selectedFiles.map((file, index): ProdutoEditPhoto => ({
-            key: `new-${Date.now()}-${index}-${file.name}`,
-            file,
-            previewUrl: URL.createObjectURL(file),
-            isExisting: false,
-        }));
+        setEditingProduto((currentEditing) => {
+            if (!currentEditing) return currentEditing;
 
-        setEditingProduto((currentEditing) => (
-            currentEditing
-                ? { ...currentEditing, fotos: [...currentEditing.fotos, ...novasFotos] }
-                : currentEditing
-        ));
+            const hasPrincipalPhoto = currentEditing.fotos.some((foto) => foto.principal);
+            const novasFotos = selectedFiles.map((file, index): ProdutoEditPhoto => ({
+                key: `new-${Date.now()}-${index}-${file.name}`,
+                file,
+                previewUrl: URL.createObjectURL(file),
+                isExisting: false,
+                principal: !hasPrincipalPhoto && index === 0,
+            }));
+
+            return { ...currentEditing, fotos: [...currentEditing.fotos, ...novasFotos] };
+        });
     };
 
     const removerFotoEdicaoProduto = (fotoKey: string) => {
@@ -669,32 +673,75 @@ export function AdminDashboardScreen() {
             if (fotoRemovida && !fotoRemovida.isExisting) {
                 URL.revokeObjectURL(fotoRemovida.previewUrl);
             }
+            const nextFotos = currentEditing.fotos.filter((foto) => foto.key !== fotoKey);
+            const shouldChooseNextPrincipal = Boolean(fotoRemovida?.principal) && nextFotos.length > 0;
 
             return {
                 ...currentEditing,
-                fotos: currentEditing.fotos.filter((foto) => foto.key !== fotoKey),
+                fotos: shouldChooseNextPrincipal
+                    ? nextFotos.map((foto, index) => ({ ...foto, principal: index === 0 }))
+                    : nextFotos,
             };
         });
     };
 
-    const moverFotoEdicaoProduto = (fotoKey: string, direction: -1 | 1) => {
-        setEditingProduto((currentEditing) => {
-            if (!currentEditing) return currentEditing;
+    const moverFotoEdicaoProduto = async (fotoKey: string, direction: -1 | 1) => {
+        if (!editingProduto) return;
 
-            const currentIndex = currentEditing.fotos.findIndex((foto) => foto.key === fotoKey);
-            const nextIndex = currentIndex + direction;
+        const currentIndex = editingProduto.fotos.findIndex((foto) => foto.key === fotoKey);
+        const nextIndex = currentIndex + direction;
 
-            if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentEditing.fotos.length) {
-                return currentEditing;
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= editingProduto.fotos.length) {
+            return;
+        }
+
+        const nextFotos = [...editingProduto.fotos];
+        const currentPhoto = nextFotos[currentIndex];
+        nextFotos[currentIndex] = nextFotos[nextIndex];
+        nextFotos[nextIndex] = currentPhoto;
+        const nextEditingProduto = { ...editingProduto, fotos: nextFotos };
+
+        setEditingProduto(nextEditingProduto);
+        setProdutoError('');
+        setProdutoSuccess('');
+
+        if (nextFotos.some((foto) => !foto.isExisting)) {
+            setProdutoSuccess('A ordem das fotos novas sera salva ao salvar alteracoes.');
+            return;
+        }
+
+        const imagemIds = nextFotos
+            .map((foto) => foto.imageId)
+            .filter((imageId): imageId is number | string => imageId !== null && imageId !== undefined);
+
+        if (imagemIds.length !== nextFotos.length) {
+            setEditingProduto(editingProduto);
+            setProdutoError('Nao foi possivel salvar a ordem porque uma imagem existente esta sem id.');
+            return;
+        }
+
+        setIsUpdatingProduto(true);
+
+        try {
+            const { data } = await api.patch<ProdutoAdmin>(
+                apiRoutes.admin.produtos.updateImageOrder(editingProduto.id),
+                { imagemIds },
+            );
+
+            if (data?.id) {
+                sincronizarProdutoAtualizado(data);
+            } else {
+                await carregarProdutos();
             }
 
-            const nextFotos = [...currentEditing.fotos];
-            const currentPhoto = nextFotos[currentIndex];
-            nextFotos[currentIndex] = nextFotos[nextIndex];
-            nextFotos[nextIndex] = currentPhoto;
-
-            return { ...currentEditing, fotos: nextFotos };
-        });
+            setProdutoSuccess('Ordem das fotos atualizada com sucesso.');
+        } catch (moveImageError) {
+            setEditingProduto(editingProduto);
+            setProdutoError(getAdminProductRequestErrorMessage(moveImageError));
+            await carregarProdutos();
+        } finally {
+            setIsUpdatingProduto(false);
+        }
     };
 
     const marcarFotoPrincipalEdicaoProduto = async (fotoKey: string) => {
@@ -742,25 +789,22 @@ export function AdminDashboardScreen() {
             .filter((foto) => foto.isExisting && foto.rawUrl)
             .map((foto) => ({
                 url: foto.rawUrl,
-                principal: editingProduto.fotos.findIndex((currentPhoto) => currentPhoto.key === foto.key) === 0,
+                principal: foto.principal,
                 ordem: editingProduto.fotos.findIndex((currentPhoto) => currentPhoto.key === foto.key),
             }));
         const ordemFotos = editingProduto.fotos.map((foto, index) => ({
             tipo: foto.isExisting ? 'EXISTENTE' : 'NOVA',
             url: foto.rawUrl,
             nomeArquivo: foto.file?.name,
-            principal: index === 0,
+            principal: foto.principal,
             ordem: index,
         }));
         const novasFotos = editingProduto.fotos.filter((foto) => !foto.isExisting && foto.file);
-        const primeiraFotoNovaPrincipal = editingProduto.fotos[0]?.file;
+        const primeiraFotoNovaPrincipal = novasFotos.find((foto) => foto.principal)?.file;
         const arquivosUploadEdicao = novasFotos.flatMap((foto) => (
             foto.file ? [foto.file] : []
         ));
-        const arquivosRequestEdicao = primeiraFotoNovaPrincipal
-            ? [primeiraFotoNovaPrincipal, ...arquivosUploadEdicao]
-            : arquivosUploadEdicao;
-        const uploadValidationError = getUploadValidationError(arquivosRequestEdicao);
+        const uploadValidationError = getUploadValidationError(arquivosUploadEdicao);
         if (uploadValidationError) {
             setProdutoError(uploadValidationError);
             setProdutoSuccess('');
@@ -775,7 +819,7 @@ export function AdminDashboardScreen() {
         formData.append('tamanho', editingProduto.tamanho.trim());
         formData.append('imagensExistentes', JSON.stringify(fotosExistentes));
         formData.append('ordemFotos', JSON.stringify(ordemFotos));
-        formData.append('imagemPrincipal', fotosExistentes[0]?.url ?? '');
+        formData.append('imagemPrincipal', fotosExistentes.find((foto) => foto.principal)?.url ?? '');
         formData.append('novaImagemPrincipal', primeiraFotoNovaPrincipal ? 'true' : 'false');
 
         if (primeiraFotoNovaPrincipal) {
@@ -1730,7 +1774,7 @@ interface ProdutoEditModalProps {
     ) => void;
     onAddPhotos: (files: FileList | null) => void;
     onRemovePhoto: (fotoKey: string) => void;
-    onMovePhoto: (fotoKey: string, direction: -1 | 1) => void;
+    onMovePhoto: (fotoKey: string, direction: -1 | 1) => void | Promise<void>;
     onSetMainPhoto: (fotoKey: string) => void | Promise<void>;
 }
 
@@ -1799,7 +1843,7 @@ function ProdutoEditModal({
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {produto.fotos.map((foto, index) => (
-                                    <div key={foto.key} style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: '10px', alignItems: 'center', padding: '10px', borderRadius: '14px', background: index === 0 ? '#F4F7EF' : '#F9F9F9', border: `1px solid ${index === 0 ? '#CAD5BA' : '#EEE'}` }}>
+                                    <div key={foto.key} style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: '10px', alignItems: 'center', padding: '10px', borderRadius: '14px', background: foto.principal ? '#F4F7EF' : '#F9F9F9', border: `1px solid ${foto.principal ? '#CAD5BA' : '#EEE'}` }}>
                                         <AdminImagePreview
                                             src={foto.previewUrl}
                                             alt={`Foto ${index + 1}`}
@@ -1807,22 +1851,22 @@ function ProdutoEditModal({
                                             style={{ width: '64px', height: '74px', objectFit: 'cover', borderRadius: '10px', background: '#EEE' }}
                                         />
                                         <div style={{ minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: index === 0 ? '#687152' : '#777', fontSize: '11px', fontWeight: 800 }}>
-                                                {index === 0 && <Star size={13} fill="currentColor" />}
-                                                {index === 0 ? 'Foto principal' : `Foto ${index + 1}`}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: foto.principal ? '#687152' : '#777', fontSize: '11px', fontWeight: 800 }}>
+                                                {foto.principal && <Star size={13} fill="currentColor" />}
+                                                {foto.principal ? 'Foto principal' : `Foto ${index + 1}`}
                                             </div>
 
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                 <button
                                                     type="button"
-                                                    disabled={index === 0 || isSaving}
+                                                    disabled={foto.principal || isSaving}
                                                     onClick={() => void onSetMainPhoto(foto.key)}
                                                     style={photoActionButtonStyle}
                                                 >
                                                     Definir como principal
                                                 </button>
-                                                <button type="button" disabled={index === 0} onClick={() => onMovePhoto(foto.key, -1)} style={photoIconButtonStyle} aria-label="Subir foto"><ArrowUp size={13} /></button>
-                                                <button type="button" disabled={index === produto.fotos.length - 1} onClick={() => onMovePhoto(foto.key, 1)} style={photoIconButtonStyle} aria-label="Descer foto"><ArrowDown size={13} /></button>
+                                                <button type="button" disabled={index === 0 || isSaving} onClick={() => void onMovePhoto(foto.key, -1)} style={photoIconButtonStyle} aria-label="Subir foto"><ArrowUp size={13} /></button>
+                                                <button type="button" disabled={index === produto.fotos.length - 1 || isSaving} onClick={() => void onMovePhoto(foto.key, 1)} style={photoIconButtonStyle} aria-label="Descer foto"><ArrowDown size={13} /></button>
                                                 <button type="button" onClick={() => onRemovePhoto(foto.key)} style={{ ...photoIconButtonStyle, color: '#FF3B30', background: '#FFF1F0' }} aria-label="Remover foto"><Trash2 size={13} /></button>
                                             </div>
                                         </div>

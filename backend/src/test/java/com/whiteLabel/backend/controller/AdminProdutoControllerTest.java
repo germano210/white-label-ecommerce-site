@@ -683,6 +683,101 @@ class AdminProdutoControllerTest {
                 .andExpect(jsonPath("$[0].imagens[1].principal").value(true));
     }
 
+    @Test
+    void shouldPersistProductImageOrderWithoutChangingMainImage() throws Exception {
+        Usuario admin = criarAdmin("551199991021");
+        ProdutoCriado produtoCriado = criarProdutoComImagens(
+                "Camisa Bordada",
+                "/uploads/camisa-1.webp",
+                "/uploads/camisa-2.webp",
+                "/uploads/camisa-3.webp",
+                "/uploads/camisa-4.webp"
+        );
+        Long produtoId = produtoCriado.produto().getId();
+        Long imagem1 = produtoCriado.imagens().get(0).getId();
+        Long imagem2 = produtoCriado.imagens().get(1).getId();
+        Long imagem3 = produtoCriado.imagens().get(2).getId();
+        Long imagem4 = produtoCriado.imagens().get(3).getId();
+
+        mockMvc.perform(patch("/api/admin/produtos/{produtoId}/imagens/ordem", produtoId)
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "imagemIds": [%d, %d, %d, %d]
+                                }
+                                """.formatted(imagem3, imagem1, imagem2, imagem4))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagemUrl").value("/uploads/camisa-1.webp"))
+                .andExpect(jsonPath("$.imagens[0].id").value(imagem3))
+                .andExpect(jsonPath("$.imagens[0].ordem").value(0))
+                .andExpect(jsonPath("$.imagens[0].principal").value(false))
+                .andExpect(jsonPath("$.imagens[1].id").value(imagem1))
+                .andExpect(jsonPath("$.imagens[1].ordem").value(1))
+                .andExpect(jsonPath("$.imagens[1].principal").value(true))
+                .andExpect(jsonPath("$.imagens[2].id").value(imagem2))
+                .andExpect(jsonPath("$.imagens[2].ordem").value(2))
+                .andExpect(jsonPath("$.imagens[3].id").value(imagem4))
+                .andExpect(jsonPath("$.imagens[3].ordem").value(3));
+
+        List<ProdutoImagem> imagens =
+                produtoImagemRepository.findByProdutoIdOrderByOrdemAscIdAsc(produtoId);
+        assertEquals(imagem3, imagens.get(0).getId());
+        assertEquals(0, imagens.get(0).getOrdem());
+        assertEquals(imagem1, imagens.get(1).getId());
+        assertEquals(1, imagens.get(1).getOrdem());
+        assertEquals(1, imagens.stream().filter(ProdutoImagem::getPrincipal).count());
+        assertEquals(imagem1, imagens.stream()
+                .filter(ProdutoImagem::getPrincipal)
+                .findFirst()
+                .orElseThrow()
+                .getId());
+
+        mockMvc.perform(get("/api/admin/produtos")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].imagemUrl").value("/uploads/camisa-1.webp"))
+                .andExpect(jsonPath("$[0].imagens[0].id").value(imagem3))
+                .andExpect(jsonPath("$[0].imagens[1].id").value(imagem1))
+                .andExpect(jsonPath("$[0].imagens[1].principal").value(true));
+
+        mockMvc.perform(get("/api/produtos").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].imagemUrl").value("/uploads/camisa-1.webp"))
+                .andExpect(jsonPath("$[0].imagens[0].id").value(imagem3))
+                .andExpect(jsonPath("$[0].imagens[1].id").value(imagem1))
+                .andExpect(jsonPath("$[0].imagens[1].principal").value(true));
+    }
+
+    @Test
+    void shouldRejectCommonUserWhenUpdatingProductImageOrder() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Comum", "551199991022");
+        ProdutoCriado produtoCriado = criarProdutoComImagens(
+                "Jaqueta Jeans",
+                "/uploads/jaqueta-1.webp",
+                "/uploads/jaqueta-2.webp"
+        );
+
+        mockMvc.perform(patch(
+                        "/api/admin/produtos/{produtoId}/imagens/ordem",
+                        produtoCriado.produto().getId()
+                )
+                        .header("Authorization", bearer(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "imagemIds": [%d, %d]
+                                }
+                                """.formatted(
+                                produtoCriado.imagens().get(1).getId(),
+                                produtoCriado.imagens().get(0).getId()
+                        ))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
     private void limparDados() {
         pagamentoRepository.deleteAll();
         pedidoItemRepository.deleteAll();

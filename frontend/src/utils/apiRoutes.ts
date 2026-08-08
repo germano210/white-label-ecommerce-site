@@ -56,6 +56,9 @@ export const apiRoutes = {
             setMainImage: (produtoId: RouteId, imagemId: RouteId) => (
                 `/api/admin/produtos/${routeId(produtoId)}/imagens/${routeId(imagemId)}/principal`
             ),
+            updateImageOrder: (produtoId: RouteId) => (
+                `/api/admin/produtos/${routeId(produtoId)}/imagens/ordem`
+            ),
         },
         missoes: {
             list: '/api/admin/missoes',

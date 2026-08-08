@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type UIEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type UIEvent } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
@@ -225,6 +225,8 @@ const rarityPresets = [
     { nome: 'Encoberto / Secreto', corHex: '#DC2626' },
     { nome: 'Extremamente Raro / Ouro', corHex: '#D4A017' },
 ];
+
+const DAILY_CARD_TAP_THRESHOLD = 10;
 
 function parseApiNumber(value: NumericApiValue) {
     if (typeof value === 'number') {
@@ -608,10 +610,17 @@ export function RoletaVipScreen() {
     const [dailyProducts, setDailyProducts] = useState<DailyProduct[]>([]);
     const [activeImageByProductId, setActiveImageByProductId] = useState<Record<string, number>>({});
     const [activeProductIndex, setActiveProductIndex] = useState(0);
+    const [dailyCarouselProgress, setDailyCarouselProgress] = useState(0);
     const [expandedDailyProductId, setExpandedDailyProductId] = useState<string | null>(null);
     const [isDailyLoading, setIsDailyLoading] = useState(false);
     const [dailyError, setDailyError] = useState('');
     const [hasLoadedDailyProducts, setHasLoadedDailyProducts] = useState(false);
+    const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
+    const dailyCardGestureRef = useRef({
+        hasDragged: false,
+        startX: 0,
+        startY: 0,
+    });
 
     const progressPercent = useMemo(() => (
         roleta.metaGrupo > 0 ? (roleta.progressoGrupo / roleta.metaGrupo) * 100 : 0
@@ -658,6 +667,8 @@ export function RoletaVipScreen() {
         try {
             const { data } = await api.get<RoletaProdutoApi[] | RoletaProdutosResponse>(apiRoutes.roleta.produtos);
             setDailyProducts(normalizeDailyProductsResponse(data));
+            setActiveProductIndex(0);
+            setDailyCarouselProgress(0);
             setHasLoadedDailyProducts(true);
         } catch (dailyProductsError) {
             setDailyError(getRoletaErrorMessage(dailyProductsError));
@@ -724,12 +735,142 @@ export function RoletaVipScreen() {
         }));
     };
 
+    const clampDailyCarouselProgress = (progress: number) => Math.min(Math.max(progress, 0), 1);
+
+    const getDailyProductIndexFromProgress = (progress: number) => {
+        if (dailyProducts.length <= 1) return 0;
+
+        return Math.min(
+            Math.round(clampDailyCarouselProgress(progress) * (dailyProducts.length - 1)),
+            dailyProducts.length - 1,
+        );
+    };
+
+    const scrollDailyCarouselToProgress = (progress: number, behavior: ScrollBehavior = 'auto') => {
+        const safeProgress = clampDailyCarouselProgress(progress);
+        const carousel = dailyCarouselRef.current;
+
+        setDailyCarouselProgress(safeProgress);
+        setActiveProductIndex(getDailyProductIndexFromProgress(safeProgress));
+
+        if (!carousel) return;
+
+        const maxScrollLeft = Math.max(carousel.scrollWidth - carousel.clientWidth, 0);
+        carousel.scrollTo({
+            left: safeProgress * maxScrollLeft,
+            behavior,
+        });
+    };
+
     const handleDailyCarouselScroll = (event: UIEvent<HTMLDivElement>) => {
         const target = event.currentTarget;
-        const estimatedCardSize = target.clientWidth * 0.82;
-        const nextIndex = Math.round(target.scrollLeft / Math.max(estimatedCardSize, 1));
+        const maxScrollLeft = Math.max(target.scrollWidth - target.clientWidth, 0);
+        setDailyCarouselProgress(maxScrollLeft > 0 ? clampDailyCarouselProgress(target.scrollLeft / maxScrollLeft) : 0);
+
+        const carouselLeft = target.getBoundingClientRect().left;
+        const nextIndex = Array.from(target.children).reduce((nearestIndex, child, childIndex) => {
+            if (!(child instanceof HTMLElement)) return nearestIndex;
+
+            const childDistance = Math.abs(child.getBoundingClientRect().left - carouselLeft);
+            const currentNearest = target.children.item(nearestIndex);
+            const nearestDistance = currentNearest instanceof HTMLElement
+                ? Math.abs(currentNearest.getBoundingClientRect().left - carouselLeft)
+                : Number.POSITIVE_INFINITY;
+
+            return childDistance < nearestDistance ? childIndex : nearestIndex;
+        }, 0);
 
         setActiveProductIndex(Math.min(Math.max(nextIndex, 0), Math.max(dailyProducts.length - 1, 0)));
+    };
+
+    const scrollToDailyProduct = (productIndex: number) => {
+        const carousel = dailyCarouselRef.current;
+        const safeProductIndex = Math.min(Math.max(productIndex, 0), Math.max(dailyProducts.length - 1, 0));
+        setActiveProductIndex(safeProductIndex);
+        setDailyCarouselProgress(dailyProducts.length > 1 ? safeProductIndex / (dailyProducts.length - 1) : 0);
+
+        if (!carousel) {
+            return;
+        }
+
+        const targetCard = carousel.children.item(safeProductIndex);
+        if (targetCard instanceof HTMLElement) {
+            const nextLeft = targetCard.getBoundingClientRect().left
+                - carousel.getBoundingClientRect().left
+                + carousel.scrollLeft;
+
+            carousel.scrollTo({
+                left: nextLeft,
+                behavior: 'smooth',
+            });
+        }
+    };
+
+    const handleDailyProductBarPointer = (event: PointerEvent<HTMLDivElement>) => {
+        if (event.type === 'pointermove' && event.buttons !== 1) return;
+        if (dailyProducts.length === 0) return;
+
+        if (event.type === 'pointerdown') {
+            event.currentTarget.setPointerCapture(event.pointerId);
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+        const progress = position / Math.max(rect.width, 1);
+
+        scrollDailyCarouselToProgress(progress);
+    };
+
+    const handleDailyProductBarPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+        if (dailyProducts.length === 0) return;
+
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+        const productIndex = getDailyProductIndexFromProgress(position / Math.max(rect.width, 1));
+        scrollToDailyProduct(productIndex);
+    };
+
+    const handleDailyCardPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('button')) return;
+
+        dailyCardGestureRef.current = {
+            hasDragged: false,
+            startX: event.clientX,
+            startY: event.clientY,
+        };
+    };
+
+    const handleDailyCardPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+        const gesture = dailyCardGestureRef.current;
+        const deltaX = Math.abs(event.clientX - gesture.startX);
+        const deltaY = Math.abs(event.clientY - gesture.startY);
+
+        if (deltaX > DAILY_CARD_TAP_THRESHOLD || deltaY > DAILY_CARD_TAP_THRESHOLD) {
+            gesture.hasDragged = true;
+        }
+    };
+
+    const handleDailyCardPointerCancel = () => {
+        dailyCardGestureRef.current.hasDragged = true;
+    };
+
+    const handleDailyCardMediaClick = (event: MouseEvent<HTMLDivElement>, product: DailyProduct) => {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('button')) return;
+
+        if (dailyCardGestureRef.current.hasDragged) {
+            dailyCardGestureRef.current.hasDragged = false;
+            return;
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const direction = event.clientX - rect.left < rect.width / 2 ? -1 : 1;
+        setDailyProductImage(product, direction);
     };
 
     return (
@@ -888,54 +1029,50 @@ export function RoletaVipScreen() {
 
                                 {!isDailyLoading && !dailyError && dailyProducts.length > 0 && (
                                     <motion.div
+                                        ref={dailyCarouselRef}
                                         className="roleta-vip-daily-carousel"
                                         aria-label={`Itens diarios, item ${activeProductIndex + 1} de ${dailyProducts.length}`}
                                         onScroll={handleDailyCarouselScroll}
                                     >
                                         {dailyProducts.map((product) => {
-                                            const activeImageIndex = getClampedImageIndex(
-                                                product,
-                                                activeImageByProductId[product.id],
-                                            );
-                                            const activeImage = product.images[activeImageIndex];
-                                            const isExpanded = expandedDailyProductId === product.id;
+                                        const activeImageIndex = getClampedImageIndex(
+                                            product,
+                                            activeImageByProductId[product.id],
+                                        );
+                                        const mainImage = product.images[0];
+                                        const isExpanded = expandedDailyProductId === product.id;
+                                        const detailImageIndex = isExpanded && activeImageIndex === 0 && product.images.length > 1
+                                            ? 1
+                                            : activeImageIndex;
+                                        const activeImage = product.images[getClampedImageIndex(product, detailImageIndex)];
 
-                                            return (
-                                                <motion.article
+                                        return (
+                                            <motion.article
                                                     className="roleta-vip-daily-item"
                                                     key={product.id}
                                                     initial={{ opacity: 0, y: 10 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     transition={{ duration: 0.22 }}
                                                 >
-                                                    <div
-                                                        className={`roleta-vip-daily-card${isExpanded ? ' is-expanded' : ''}`}
-                                                        style={{ backgroundImage: `url("${activeImage}")` }}
-                                                    >
+                                                <div
+                                                    className={`roleta-vip-daily-card${isExpanded ? ' is-expanded' : ''}`}
+                                                    style={{ backgroundImage: `url("${mainImage}")` }}
+                                                    onPointerDown={handleDailyCardPointerDown}
+                                                    onPointerMove={handleDailyCardPointerMove}
+                                                    onPointerCancel={handleDailyCardPointerCancel}
+                                                    onClick={(event) => handleDailyCardMediaClick(event, product)}
+                                                >
                                                         <div className="roleta-vip-daily-story-bars" aria-label="Fotos do item">
                                                             {product.images.map((image, imageIndex) => (
                                                                 <button
                                                                     type="button"
                                                                     key={`${image}-${imageIndex}`}
-                                                                    className={imageIndex === activeImageIndex ? 'is-active' : ''}
+                                                                    className={imageIndex === detailImageIndex ? 'is-active' : ''}
                                                                     onClick={() => selectDailyProductImage(product.id, imageIndex)}
                                                                     aria-label={`Ver foto ${imageIndex + 1}`}
                                                                 />
                                                             ))}
                                                         </div>
-
-                                                        <button
-                                                            type="button"
-                                                            className="roleta-vip-daily-tap roleta-vip-daily-tap--left"
-                                                            onClick={() => setDailyProductImage(product, -1)}
-                                                            aria-label="Foto anterior"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            className="roleta-vip-daily-tap roleta-vip-daily-tap--right"
-                                                            onClick={() => setDailyProductImage(product, 1)}
-                                                            aria-label="Proxima foto"
-                                                        />
 
                                                         {isExpanded ? (
                                                             <>
@@ -944,6 +1081,7 @@ export function RoletaVipScreen() {
                                                                     className="roleta-vip-daily-floating-image"
                                                                     src={activeImage}
                                                                     alt={product.nome}
+                                                                    draggable={false}
                                                                 />
                                                                 {product.priceLabel && (
                                                                     <span className="roleta-vip-daily-price">
@@ -956,6 +1094,7 @@ export function RoletaVipScreen() {
                                                                 className="roleta-vip-daily-cover-image"
                                                                 src={activeImage}
                                                                 alt={product.nome}
+                                                                draggable={false}
                                                             />
                                                         )}
 
@@ -970,18 +1109,61 @@ export function RoletaVipScreen() {
                                                         </button>
                                                     </div>
 
-                                                    {isExpanded && (
-                                                        <div className="roleta-vip-daily-product-info">
-                                                            <strong>{product.nome}</strong>
-                                                            <span>Tam. {product.tamanho}.</span>
-                                                        </div>
-                                                    )}
-                                                </motion.article>
+                                            </motion.article>
+                                        );
+                                    })}
+                                </motion.div>
+                            )}
+
+                            {!isDailyLoading && !dailyError && dailyProducts.length > 0 && (
+                                <div className="roleta-vip-daily-footer">
+                                    <div className={`roleta-vip-daily-product-info${expandedDailyProductId ? ' is-visible' : ''}`}>
+                                        {(() => {
+                                            const activeProduct = dailyProducts[activeProductIndex];
+                                            const shouldShowInfo = Boolean(
+                                                activeProduct && expandedDailyProductId === activeProduct.id,
                                             );
-                                        })}
-                                    </motion.div>
-                                )}
-                            </section>
+
+                                            return (
+                                                <>
+                                                    <strong>{shouldShowInfo ? activeProduct.nome : '\u00A0'}</strong>
+                                                    <span>{shouldShowInfo ? `Tam. ${activeProduct.tamanho}.` : '\u00A0'}</span>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    <div
+                                        className="roleta-vip-daily-product-bars"
+                                        aria-label="Produtos do carrossel"
+                                        onPointerDown={handleDailyProductBarPointer}
+                                        onPointerMove={handleDailyProductBarPointer}
+                                        onPointerUp={handleDailyProductBarPointerEnd}
+                                        onPointerCancel={handleDailyProductBarPointerEnd}
+                                    >
+                                        <span
+                                            className="roleta-vip-daily-product-bar-thumb"
+                                            style={{
+                                                width: `${100 / Math.max(dailyProducts.length, 1)}%`,
+                                                transform: `translateX(${dailyCarouselProgress * Math.max(dailyProducts.length - 1, 0) * 100}%)`,
+                                            }}
+                                        />
+                                        {dailyProducts.map((dailyProduct, productIndex) => (
+                                            <button
+                                                type="button"
+                                                key={dailyProduct.id}
+                                                className={productIndex === activeProductIndex ? 'is-active' : ''}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    scrollToDailyProduct(productIndex);
+                                                }}
+                                                aria-label={`Ir para produto ${productIndex + 1}`}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </section>
                         )}
                     </div>
                 </section>
