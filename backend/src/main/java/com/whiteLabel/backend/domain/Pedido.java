@@ -42,6 +42,22 @@ public class Pedido {
     @Column(name = "valor_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal valorTotal = BigDecimal.ZERO;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "produto_id")
+    private Produto produto;
+
+    @Column(name = "preco_original", precision = 12, scale = 2)
+    private BigDecimal precoOriginal;
+
+    @Column(name = "desconto_aplicado", nullable = false, precision = 12, scale = 2)
+    private BigDecimal descontoAplicado = BigDecimal.ZERO;
+
+    @Column(name = "preco_final", precision = 12, scale = 2)
+    private BigDecimal precoFinal;
+
+    @Column(name = "order_nsu", unique = true, length = 80)
+    private String orderNsu;
+
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PedidoItem> itens = new ArrayList<>();
 
@@ -65,6 +81,23 @@ public class Pedido {
         PedidoItem item = new PedidoItem(this, produto, quantidade);
         itens.add(item);
         valorTotal = valorTotal.add(item.getSubtotal());
+    }
+
+    public void registrarCheckoutProduto(
+            Produto produto,
+            BigDecimal precoOriginal,
+            BigDecimal descontoAplicado,
+            BigDecimal precoFinal
+    ) {
+        this.produto = Objects.requireNonNull(produto);
+        this.precoOriginal = normalizarValor(precoOriginal);
+        this.descontoAplicado = normalizarValor(descontoAplicado);
+        this.precoFinal = normalizarValor(precoFinal);
+        this.valorTotal = this.precoFinal;
+    }
+
+    public void definirOrderNsu(String orderNsu) {
+        this.orderNsu = Objects.requireNonNull(orderNsu);
     }
 
     public void aguardarPagamento() {
@@ -96,6 +129,10 @@ public class Pedido {
         if (valorTotal == null) {
             valorTotal = BigDecimal.ZERO;
         }
+
+        if (descontoAplicado == null) {
+            descontoAplicado = BigDecimal.ZERO;
+        }
     }
 
     @PreUpdate
@@ -119,6 +156,26 @@ public class Pedido {
         return valorTotal == null ? BigDecimal.ZERO : valorTotal;
     }
 
+    public Produto getProduto() {
+        return produto;
+    }
+
+    public BigDecimal getPrecoOriginal() {
+        return precoOriginal == null ? getValorTotal() : precoOriginal;
+    }
+
+    public BigDecimal getDescontoAplicado() {
+        return descontoAplicado == null ? BigDecimal.ZERO : descontoAplicado;
+    }
+
+    public BigDecimal getPrecoFinal() {
+        return precoFinal == null ? getValorTotal() : precoFinal;
+    }
+
+    public String getOrderNsu() {
+        return orderNsu;
+    }
+
     public List<PedidoItem> getItens() {
         return List.copyOf(itens);
     }
@@ -129,5 +186,9 @@ public class Pedido {
 
     public LocalDateTime getDataAtualizacao() {
         return dataAtualizacao;
+    }
+
+    private BigDecimal normalizarValor(BigDecimal valor) {
+        return valor == null ? BigDecimal.ZERO : valor;
     }
 }

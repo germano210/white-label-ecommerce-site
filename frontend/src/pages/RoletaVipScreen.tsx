@@ -101,6 +101,12 @@ type RoletaOpcaoApi = string | {
 interface RoletaStatusApi {
     ativa?: boolean | null;
     titulo?: string | null;
+    premioAtual?: RoletaPremioApi | null;
+    premio_atual?: RoletaPremioApi | null;
+    premioVigente?: RoletaPremioApi | null;
+    premio_vigente?: RoletaPremioApi | null;
+    descontoAtual?: RoletaPremioApi | null;
+    desconto_atual?: RoletaPremioApi | null;
     girosTotaisObtidos?: NumericApiValue;
     giros_totais_obtidos?: NumericApiValue;
     girosDisponiveis?: NumericApiValue;
@@ -125,6 +131,8 @@ interface RoletaStatusApi {
 }
 
 interface RoletaGiroResponse {
+    premioAtual?: RoletaPremioApi | null;
+    premio_atual?: RoletaPremioApi | null;
     premio?: RoletaPremioApi | null;
     premioSorteado?: RoletaPremioApi | null;
     premio_sorteado?: RoletaPremioApi | null;
@@ -133,6 +141,12 @@ interface RoletaGiroResponse {
     girosDisponiveis?: NumericApiValue;
     giros_disponiveis?: NumericApiValue;
     roleta?: RoletaStatusApi | null;
+}
+
+interface ProdutoCheckoutResponse {
+    checkoutUrl?: string;
+    gatewayUrl?: string;
+    url?: string;
 }
 
 interface RoletaWheelSlice {
@@ -148,6 +162,8 @@ interface RoletaSpinResult {
     nivelCor: string;
     premioTitulo: string;
     premioDescricao: string;
+    tipoPremio: string;
+    valor: number;
     valorLabel: string;
 }
 
@@ -190,6 +206,7 @@ interface DailyProduct {
     id: string;
     nome: string;
     tamanho: string;
+    priceValue: number;
     priceLabel: string;
     images: string[];
 }
@@ -204,6 +221,7 @@ interface RoletaViewState {
     girosBonusGrupo: number;
     notificacoes: string[];
     opcoes: RoletaWheelSlice[];
+    premioAtual: RoletaSpinResult | null;
 }
 
 const emptyRoletaState: RoletaViewState = {
@@ -216,6 +234,7 @@ const emptyRoletaState: RoletaViewState = {
     girosBonusGrupo: 0,
     notificacoes: [],
     opcoes: [],
+    premioAtual: null,
 };
 
 const rarityPresets = [
@@ -392,6 +411,29 @@ function normalizeWheelSlices(data?: RoletaStatusApi | null) {
     return normalizeWheelSlicesFromFlatOptions(rawWheelOptions);
 }
 
+function getPremioAtualFromStatus(data?: RoletaStatusApi | null) {
+    return data?.premioAtual
+        ?? data?.premio_atual
+        ?? data?.premioVigente
+        ?? data?.premio_vigente
+        ?? data?.descontoAtual
+        ?? data?.desconto_atual
+        ?? null;
+}
+
+function getPremioAtualFromSpin(data?: RoletaGiroResponse | null) {
+    return data?.premioAtual
+        ?? data?.premio_atual
+        ?? data?.premioSorteado
+        ?? data?.premio_sorteado
+        ?? data?.premio
+        ?? null;
+}
+
+function getPremioTipo(prize?: RoletaPremioApi | null) {
+    return (prize?.tipoPremio ?? prize?.tipo_premio ?? '').trim().toUpperCase();
+}
+
 function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
     const metaGrupo = Math.max(1, Math.floor(parseApiNumber(data?.metaGrupo ?? data?.meta_grupo) || 20));
     const progressoGrupo = Math.min(
@@ -399,6 +441,7 @@ function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
         metaGrupo,
     );
     const rawNotifications = data?.notificacoes ?? data?.ultimosEventos ?? [];
+    const opcoes = normalizeWheelSlices(data);
 
     return {
         ativa: data?.ativa ?? true,
@@ -419,7 +462,8 @@ function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
         notificacoes: rawNotifications
             .map(normalizeNotification)
             .filter(Boolean),
-        opcoes: normalizeWheelSlices(data),
+        opcoes,
+        premioAtual: createPrizeView(getPremioAtualFromStatus(data), opcoes),
     };
 }
 
@@ -434,6 +478,19 @@ function getRoletaErrorMessage(error: unknown) {
     } | undefined;
 
     return responseData?.message ?? responseData?.error ?? 'Nao foi possivel carregar a roleta agora.';
+}
+
+function getRoletaCheckoutErrorMessage(error: unknown) {
+    if (!axios.isAxiosError(error)) {
+        return 'Nao foi possivel iniciar o resgate agora. Tente novamente.';
+    }
+
+    const responseData = error.response?.data as {
+        message?: string;
+        error?: string;
+    } | undefined;
+
+    return responseData?.message ?? responseData?.error ?? 'Nao foi possivel iniciar o resgate agora. Tente novamente.';
 }
 
 function createWheelGradient(slices: RoletaWheelSlice[]) {
@@ -483,9 +540,25 @@ function getPrizeValueLabel(prize?: RoletaPremioApi | null) {
     return '';
 }
 
-function createSpinResult(data: RoletaGiroResponse, slices: RoletaWheelSlice[]): RoletaSpinResult | null {
-    const premio = data.premioSorteado ?? data.premio_sorteado ?? data.premio ?? null;
-    const opcao = data.opcaoSorteada ?? data.opcao_sorteada ?? null;
+function getPrizeNumericValue(prize?: RoletaPremioApi | null) {
+    return parseApiNumber(
+        prize?.valor
+        ?? prize?.valorPremio
+        ?? prize?.valor_premio
+        ?? prize?.valorMaximo
+        ?? prize?.valor_maximo
+        ?? prize?.valorMinimo
+        ?? prize?.valor_minimo,
+    );
+}
+
+function createPrizeView(
+    premio: RoletaPremioApi | null | undefined,
+    slices: RoletaWheelSlice[],
+    opcao?: RoletaOpcaoApi | null,
+): RoletaSpinResult | null {
+    if (!premio && !opcao) return null;
+
     const optionObject = isOptionObject(opcao) ? opcao : null;
     const levelNumber = Math.max(1, Math.floor(parseApiNumber(
         premio?.nivel
@@ -512,6 +585,7 @@ function createSpinResult(data: RoletaGiroResponse, slices: RoletaWheelSlice[]):
         ?? optionObject?.descricao
         ?? ''
     ).trim();
+    const tipoPremio = getPremioTipo(premio);
     const valorLabel = getPrizeValueLabel(premio);
 
     if (!premioTitulo && !nivelNome) return null;
@@ -527,7 +601,41 @@ function createSpinResult(data: RoletaGiroResponse, slices: RoletaWheelSlice[]):
         ),
         premioTitulo: premioTitulo || 'Premio sorteado',
         premioDescricao,
+        tipoPremio,
+        valor: getPrizeNumericValue(premio),
         valorLabel,
+    };
+}
+
+function createSpinResult(data: RoletaGiroResponse, slices: RoletaWheelSlice[]): RoletaSpinResult | null {
+    return createPrizeView(
+        getPremioAtualFromSpin(data),
+        slices,
+        data.opcaoSorteada ?? data.opcao_sorteada ?? null,
+    );
+}
+
+function getDiscountedPricePreview(product: DailyProduct, premioAtual: RoletaSpinResult | null) {
+    if (!premioAtual || product.priceValue <= 0 || premioAtual.valor <= 0) return null;
+
+    let discountValue = 0;
+
+    if (premioAtual.tipoPremio === 'DESCONTO_PERCENTUAL') {
+        discountValue = product.priceValue * Math.min(Math.max(premioAtual.valor, 0), 100) / 100;
+    }
+
+    if (premioAtual.tipoPremio === 'DESCONTO_VALOR') {
+        discountValue = Math.min(Math.max(premioAtual.valor, 0), product.priceValue);
+    }
+
+    if (discountValue <= 0) return null;
+
+    const discountedPrice = Math.max(product.priceValue - discountValue, 0);
+    if (discountedPrice >= product.priceValue) return null;
+
+    return {
+        originalLabel: product.priceLabel,
+        discountedLabel: formatCurrencyBRL(discountedPrice),
     };
 }
 
@@ -585,6 +693,7 @@ function normalizeDailyProductsResponse(data: RoletaProdutoApi[] | RoletaProduto
                 id,
                 nome: (product.nome ?? product.titulo ?? 'Item diario').trim(),
                 tamanho: (product.tamanho ?? 'Unico').trim(),
+                priceValue,
                 priceLabel: priceValue > 0 ? formatCurrencyBRL(priceValue) : '',
                 images: normalizeDailyProductImages(product),
             };
@@ -599,13 +708,13 @@ function getClampedImageIndex(product: DailyProduct, imageIndex?: number) {
 export function RoletaVipScreen() {
     const token = useAuthStore((state) => state.token);
     const user = useAuthStore((state) => state.user);
+    const logout = useAuthStore((state) => state.logout);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const [roleta, setRoleta] = useState<RoletaViewState>(emptyRoletaState);
     const [activeTab, setActiveTab] = useState<RoletaTab>('spin');
     const [isLoading, setIsLoading] = useState(true);
     const [isSpinning, setIsSpinning] = useState(false);
     const [wheelRotation, setWheelRotation] = useState(0);
-    const [spinResult, setSpinResult] = useState<RoletaSpinResult | null>(null);
     const [error, setError] = useState('');
     const [dailyProducts, setDailyProducts] = useState<DailyProduct[]>([]);
     const [activeImageByProductId, setActiveImageByProductId] = useState<Record<string, number>>({});
@@ -614,8 +723,11 @@ export function RoletaVipScreen() {
     const [expandedDailyProductId, setExpandedDailyProductId] = useState<string | null>(null);
     const [isDailyLoading, setIsDailyLoading] = useState(false);
     const [dailyError, setDailyError] = useState('');
+    const [dailyCheckoutProductId, setDailyCheckoutProductId] = useState<string | null>(null);
+    const [dailyCheckoutErrorByProductId, setDailyCheckoutErrorByProductId] = useState<Record<string, string>>({});
     const [hasLoadedDailyProducts, setHasLoadedDailyProducts] = useState(false);
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
+    const dailyCheckoutInFlightRef = useRef(false);
     const dailyCardGestureRef = useRef({
         hasDragged: false,
         startX: 0,
@@ -632,6 +744,7 @@ export function RoletaVipScreen() {
     const wheelGradient = useMemo(() => createWheelGradient(roleta.opcoes), [roleta.opcoes]);
     const hasWheelOptions = roleta.opcoes.length > 0;
     const canSpin = isAuthenticated && roleta.ativa && roleta.girosDisponiveis > 0 && hasWheelOptions && !isSpinning;
+    const currentPrize = roleta.premioAtual;
 
     const fetchRoleta = useCallback(async () => {
         setIsLoading(true);
@@ -659,6 +772,22 @@ export function RoletaVipScreen() {
     useEffect(() => {
         void fetchRoleta();
     }, [authRefreshKey, fetchRoleta]);
+
+    useEffect(() => {
+        const syncRoletaOnReturn = () => {
+            if (document.visibilityState === 'visible') {
+                void fetchRoleta();
+            }
+        };
+
+        window.addEventListener('focus', syncRoletaOnReturn);
+        document.addEventListener('visibilitychange', syncRoletaOnReturn);
+
+        return () => {
+            window.removeEventListener('focus', syncRoletaOnReturn);
+            document.removeEventListener('visibilitychange', syncRoletaOnReturn);
+        };
+    }, [fetchRoleta]);
 
     const fetchDailyProducts = useCallback(async () => {
         setIsDailyLoading(true);
@@ -688,23 +817,30 @@ export function RoletaVipScreen() {
 
         setIsSpinning(true);
         setError('');
-        setSpinResult(null);
 
         try {
             const { data } = await api.post<RoletaGiroResponse>(apiRoutes.roleta.girar);
             setWheelRotation((currentRotation) => currentRotation + 1800 + 72);
             await waitForAnimation(1250);
 
-            setSpinResult(createSpinResult(data, roleta.opcoes));
+            const nextPrize = createSpinResult(data, roleta.opcoes);
 
             if (data.roleta) {
-                setRoleta(normalizeRoletaStatus(data.roleta));
-            } else if (data.girosDisponiveis !== undefined || data.giros_disponiveis !== undefined) {
+                const nextRoleta = normalizeRoletaStatus(data.roleta);
+                setRoleta(nextPrize ? { ...nextRoleta, premioAtual: nextPrize } : nextRoleta);
+            } else if (
+                nextPrize
+                || data.girosDisponiveis !== undefined
+                || data.giros_disponiveis !== undefined
+            ) {
                 setRoleta((currentRoleta) => ({
                     ...currentRoleta,
-                    girosDisponiveis: Math.max(0, Math.floor(parseApiNumber(
-                        data.girosDisponiveis ?? data.giros_disponiveis,
-                    ))),
+                    premioAtual: nextPrize,
+                    girosDisponiveis: data.girosDisponiveis !== undefined || data.giros_disponiveis !== undefined
+                        ? Math.max(0, Math.floor(parseApiNumber(
+                            data.girosDisponiveis ?? data.giros_disponiveis,
+                        )))
+                        : currentRoleta.girosDisponiveis,
                 }));
             } else {
                 await fetchRoleta();
@@ -713,6 +849,48 @@ export function RoletaVipScreen() {
             setError(getRoletaErrorMessage(spinError));
         } finally {
             setIsSpinning(false);
+        }
+    };
+
+    const handleRedeemDailyProduct = async (product: DailyProduct) => {
+        if (!isAuthenticated) {
+            setDailyCheckoutErrorByProductId((currentErrors) => ({
+                ...currentErrors,
+                [product.id]: 'Entre para continuar o resgate.',
+            }));
+            return;
+        }
+
+        if (dailyCheckoutInFlightRef.current) return;
+
+        dailyCheckoutInFlightRef.current = true;
+        setDailyCheckoutProductId(product.id);
+        setDailyCheckoutErrorByProductId((currentErrors) => {
+            const { [product.id]: _removedError, ...nextErrors } = currentErrors;
+            return nextErrors;
+        });
+
+        try {
+            const { data } = await api.post<ProdutoCheckoutResponse>(apiRoutes.roleta.resgatarProduto(product.id));
+            const checkoutUrl = data.checkoutUrl ?? data.gatewayUrl ?? data.url;
+
+            if (!checkoutUrl) {
+                throw new Error('Checkout sem URL de redirecionamento.');
+            }
+
+            window.location.href = checkoutUrl;
+        } catch (checkoutError) {
+            if (axios.isAxiosError(checkoutError) && [401, 403].includes(checkoutError.response?.status ?? 0)) {
+                logout();
+            }
+
+            setDailyCheckoutErrorByProductId((currentErrors) => ({
+                ...currentErrors,
+                [product.id]: getRoletaCheckoutErrorMessage(checkoutError),
+            }));
+        } finally {
+            dailyCheckoutInFlightRef.current = false;
+            setDailyCheckoutProductId(null);
         }
     };
 
@@ -993,17 +1171,17 @@ export function RoletaVipScreen() {
                                     </p>
                                 )}
 
-                                {spinResult && (
-                                    <section className="roleta-vip-result-card" aria-label="Resultado do giro">
+                                {currentPrize && (
+                                    <section className="roleta-vip-result-card" aria-label="Premio atual da roleta">
                                         <span
                                             className="roleta-vip-result-level"
-                                            style={{ background: spinResult.nivelCor }}
+                                            style={{ background: currentPrize.nivelCor }}
                                         >
-                                            {spinResult.nivelNome}
+                                            {currentPrize.nivelNome}
                                         </span>
-                                        <strong>{spinResult.premioTitulo}</strong>
-                                        {spinResult.valorLabel && <span>{spinResult.valorLabel}</span>}
-                                        {spinResult.premioDescricao && <p>{spinResult.premioDescricao}</p>}
+                                        <strong>{currentPrize.premioTitulo}</strong>
+                                        {currentPrize.valorLabel && <span>{currentPrize.valorLabel}</span>}
+                                        {currentPrize.premioDescricao && <p>{currentPrize.premioDescricao}</p>}
                                     </section>
                                 )}
                             </section>
@@ -1047,6 +1225,9 @@ export function RoletaVipScreen() {
                                             : activeImageIndex;
                                         const visibleImageIndex = isExpanded ? detailImageIndex : 0;
                                         const activeImage = product.images[getClampedImageIndex(product, detailImageIndex)];
+                                        const checkoutError = dailyCheckoutErrorByProductId[product.id];
+                                        const isCreatingCheckout = dailyCheckoutProductId === product.id;
+                                        const discountedPricePreview = getDiscountedPricePreview(product, currentPrize);
 
                                         return (
                                             <motion.article
@@ -1093,9 +1274,20 @@ export function RoletaVipScreen() {
                                                                     draggable={false}
                                                                 />
                                                                 {product.priceLabel && (
-                                                                    <span className="roleta-vip-daily-price">
-                                                                        {product.priceLabel}
-                                                                    </span>
+                                                                    discountedPricePreview ? (
+                                                                        <span className="roleta-vip-daily-price roleta-vip-daily-price--discount">
+                                                                            <span className="roleta-vip-daily-price-original">
+                                                                                {discountedPricePreview.originalLabel}
+                                                                            </span>
+                                                                            <span className="roleta-vip-daily-price-final">
+                                                                                {discountedPricePreview.discountedLabel}
+                                                                            </span>
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="roleta-vip-daily-price">
+                                                                            {product.priceLabel}
+                                                                        </span>
+                                                                    )
                                                                 )}
                                                             </>
                                                         ) : (
@@ -1110,12 +1302,28 @@ export function RoletaVipScreen() {
                                                         <button
                                                             type="button"
                                                             className="roleta-vip-daily-action"
-                                                            onClick={() => setExpandedDailyProductId((currentProductId) => (
-                                                                currentProductId === product.id ? null : product.id
-                                                            ))}
+                                                            disabled={isCreatingCheckout}
+                                                            onClick={() => {
+                                                                if (!isExpanded) {
+                                                                    setExpandedDailyProductId(product.id);
+                                                                    return;
+                                                                }
+
+                                                                void handleRedeemDailyProduct(product);
+                                                            }}
                                                         >
-                                                            {isExpanded ? 'Resgatar Item' : 'Ver item'}
+                                                            {isCreatingCheckout
+                                                                ? 'Criando...'
+                                                                : isExpanded
+                                                                    ? 'Resgatar Item'
+                                                                    : 'Ver item'}
                                                         </button>
+
+                                                        {isExpanded && checkoutError && (
+                                                            <p className="roleta-vip-daily-card-error" role="alert">
+                                                                {checkoutError}
+                                                            </p>
+                                                        )}
                                                     </div>
 
                                             </motion.article>

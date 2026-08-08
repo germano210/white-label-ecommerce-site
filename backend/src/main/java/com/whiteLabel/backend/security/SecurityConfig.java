@@ -99,7 +99,11 @@ public class SecurityConfig {
                                 "/api/auth/admin/login"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/indicacoes/*/abrir").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/pagamentos/webhook").permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/pagamentos/webhook",
+                                "/api/pagamentos/infinitepay/webhook"
+                        ).permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers(
@@ -114,6 +118,7 @@ public class SecurityConfig {
                                 "/api/missoes/semanais/**"
                         ).authenticated()
                         .requestMatchers("/api/roleta/**").authenticated()
+                        .requestMatchers("/api/checkout/**").authenticated()
                         .requestMatchers("/api/pedidos/**").authenticated()
                         .requestMatchers("/api/usuarios/**").authenticated()
                         .requestMatchers("/api/curtidas", "/api/curtidas/**").authenticated()

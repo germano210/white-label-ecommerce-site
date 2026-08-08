@@ -26,6 +26,7 @@ export const apiRoutes = {
     },
     checkout: {
         create: '/api/checkout',
+        produto: (produtoId: RouteId) => `/api/checkout/produtos/${routeId(produtoId)}`,
         status: (pedidoId: RouteId) => `/api/checkout/${routeId(pedidoId)}/status`,
     },
     curtidas: {
@@ -43,6 +44,7 @@ export const apiRoutes = {
         status: '/api/roleta',
         girar: '/api/roleta/girar',
         produtos: '/api/roleta/produtos',
+        resgatarProduto: (produtoId: RouteId) => `/api/roleta/produtos/${routeId(produtoId)}/resgatar`,
         convites: '/api/roleta/convites',
     },
     admin: {

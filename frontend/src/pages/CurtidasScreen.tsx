@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { type ProdutoVitrine } from '../store/useCartStore';
-import { useAuthStore, type AuthUser } from '../store/useAuthStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { useConfiguracoesStore } from '../store/useConfiguracoesStore';
 import { type CurtidasMode, useDiscoveryStore } from '../store/useDiscoveryStore';
 import { AppHamburgerMenu } from '../components/layout/AppHamburgerMenu';
-import { api } from '../utils/api';
+import { api, isCookieAuthMode } from '../utils/api';
 import { getImageUrl } from '../utils/imageUtils';
 import { formatCondicao } from '../utils/condicao';
 import { apiRoutes } from '../utils/apiRoutes';
@@ -41,17 +41,6 @@ function getProductSize(item: ProdutoVitrine) {
     if (!size) return 'Tam. Único';
 
     return `Tam. ${size.charAt(0).toUpperCase()}${size.slice(1).toLowerCase()}`;
-}
-
-function getAuthUserName(user: AuthUser | null) {
-    const nome = typeof user?.nome === 'string' ? user.nome.trim() : '';
-    const name = typeof user?.name === 'string' ? user.name.trim() : '';
-    const telefone = typeof user?.telefone === 'string' ? user.telefone.trim() : '';
-    const phone = typeof user?.phone === 'string' ? user.phone.trim() : '';
-    const fallbackPhone = telefone || phone;
-    const displayName = nome || name;
-
-    return displayName && displayName !== fallbackPhone ? displayName : '';
 }
 
 function getCheckoutErrorMessage(error: unknown) {
@@ -104,11 +93,12 @@ function isPurchasedLikedItem(item: ProdutoVitrine) {
 export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
     const navigate = useNavigate();
     const authUser = useAuthStore((state) => state.user);
+    const authToken = useAuthStore((state) => state.token);
+    const logout = useAuthStore((state) => state.logout);
     const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
     const [checkoutItemId, setCheckoutItemId] = useState<string | null>(null);
     const [checkoutErrorByItemId, setCheckoutErrorByItemId] = useState<Record<string, string>>({});
-    const [namePromptItemId, setNamePromptItemId] = useState<string | null>(null);
-    const [checkoutName, setCheckoutName] = useState('');
+    const checkoutInFlightRef = useRef(false);
     const {
         products,
         likedItems,
@@ -119,6 +109,7 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
         fetchCurtidas,
         setCurtidasMode,
     } = useDiscoveryStore();
+    const isAuthenticated = isCookieAuthMode ? Boolean(authUser) : Boolean(authToken && authUser);
 
     useEffect(() => {
         void fetchCurtidas();
@@ -181,19 +172,17 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
     };
 
     const handleCreateCheckout = async (item: ProdutoVitrine) => {
-        const storedName = getAuthUserName(authUser);
-        const typedName = checkoutName.trim();
-        const clienteNome = storedName || typedName;
-
-        if (!clienteNome) {
-            setNamePromptItemId(item.id);
+        if (!isAuthenticated) {
             setCheckoutErrorByItemId((currentErrors) => ({
                 ...currentErrors,
-                [item.id]: 'Informe seu nome para continuar o resgate.',
+                [item.id]: 'Entre para continuar o resgate.',
             }));
             return;
         }
 
+        if (checkoutInFlightRef.current) return;
+
+        checkoutInFlightRef.current = true;
         setCheckoutItemId(item.id);
         setCheckoutErrorByItemId((currentErrors) => {
             const { [item.id]: _removedError, ...nextErrors } = currentErrors;
@@ -201,17 +190,7 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
         });
 
         try {
-            const cancelUrl = new URL(window.location.href);
-            const { data } = await api.post<CreateCheckoutResponse>(apiRoutes.checkout.create, {
-                clienteNome,
-                itens: [{
-                    produtoId: item.id,
-                    tamanho: item.tamanho,
-                    quantidade: 1,
-                }],
-                successUrl: appRoutes.checkoutSuccess,
-                cancelUrl: cancelUrl.toString(),
-            });
+            const { data } = await api.post<CreateCheckoutResponse>(apiRoutes.checkout.produto(item.id));
             const checkoutUrl = data.checkoutUrl ?? data.gatewayUrl ?? data.url;
 
             if (!checkoutUrl) {
@@ -220,11 +199,16 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
 
             window.location.assign(checkoutUrl);
         } catch (error) {
+            if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) {
+                logout();
+            }
+
             setCheckoutErrorByItemId((currentErrors) => ({
                 ...currentErrors,
                 [item.id]: getCheckoutErrorMessage(error),
             }));
         } finally {
+            checkoutInFlightRef.current = false;
             setCheckoutItemId(null);
         }
     };
@@ -296,15 +280,6 @@ export function CurtidasScreen({ onBack }: CurtidasScreenProps) {
                                 isExpanded={expandedItemId === item.id}
                                 isCreatingCheckout={checkoutItemId === item.id}
                                 checkoutError={checkoutErrorByItemId[item.id]}
-                                shouldAskName={namePromptItemId === item.id && !getAuthUserName(authUser)}
-                                checkoutName={checkoutName}
-                                onCheckoutNameChange={(name) => {
-                                    setCheckoutName(name);
-                                    setCheckoutErrorByItemId((currentErrors) => {
-                                        const { [item.id]: _removedError, ...nextErrors } = currentErrors;
-                                        return nextErrors;
-                                    });
-                                }}
                                 onExpand={() => setExpandedItemId(item.id)}
                                 onRedeem={() => void handleCreateCheckout(item)}
                             />
@@ -323,9 +298,6 @@ interface LikedProductCardProps {
     isExpanded: boolean;
     isCreatingCheckout: boolean;
     checkoutError?: string;
-    shouldAskName: boolean;
-    checkoutName: string;
-    onCheckoutNameChange: (name: string) => void;
     onExpand: () => void;
     onRedeem: () => void;
 }
@@ -336,9 +308,6 @@ function LikedProductCard({
     isExpanded,
     isCreatingCheckout,
     checkoutError,
-    shouldAskName,
-    checkoutName,
-    onCheckoutNameChange,
     onExpand,
     onRedeem,
 }: LikedProductCardProps) {
@@ -447,18 +416,6 @@ function LikedProductCard({
                             : 'Resgatar item'
                         : 'Ver item'}
             </button>
-
-            {isExpanded && shouldAskName && (
-                <label style={namePromptStyle}>
-                    <span style={namePromptLabelStyle}>Seu nome</span>
-                    <input
-                        value={checkoutName}
-                        onChange={(event) => onCheckoutNameChange(event.target.value)}
-                        placeholder="Nome para resgate"
-                        style={namePromptInputStyle}
-                    />
-                </label>
-            )}
 
             {isExpanded && checkoutError && (
                 <p role="alert" style={cardErrorStyle}>{checkoutError}</p>
@@ -790,35 +747,6 @@ const cardButtonExpandedStyle: CSSProperties = {
     background: '#687152',
     color: '#ffffff',
     boxShadow: 'none',
-};
-
-const namePromptStyle: CSSProperties = {
-    position: 'relative',
-    zIndex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    margin: '-4px 13px 10px',
-};
-
-const namePromptLabelStyle: CSSProperties = {
-    color: '#4d4d4d',
-    fontSize: '6.8px',
-    fontWeight: 800,
-    lineHeight: 1,
-};
-
-const namePromptInputStyle: CSSProperties = {
-    width: '100%',
-    minHeight: '30px',
-    border: '1px solid rgba(104, 113, 82, 0.28)',
-    borderRadius: '8px',
-    background: 'rgba(255, 255, 255, 0.86)',
-    color: '#000000',
-    outline: 'none',
-    padding: '0 9px',
-    fontSize: '9px',
-    fontWeight: 700,
 };
 
 const cardErrorStyle: CSSProperties = {

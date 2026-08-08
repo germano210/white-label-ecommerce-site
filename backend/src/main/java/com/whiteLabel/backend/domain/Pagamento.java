@@ -71,8 +71,13 @@ public class Pagamento {
     }
 
     public Pagamento(Pedido pedido, String checkoutId) {
+        this(pedido, checkoutId, "EXTERNAL_CHECKOUT");
+    }
+
+    public Pagamento(Pedido pedido, String checkoutId, String provider) {
         this.pedido = Objects.requireNonNull(pedido);
         this.checkoutId = Objects.requireNonNull(checkoutId);
+        this.provider = Objects.requireNonNull(provider);
         this.valor = pedido.getValorTotal();
     }
 

@@ -9,7 +9,8 @@ public record CheckoutResponse(
         String checkoutId,
         String checkoutUrl,
         String status,
-        BigDecimal valorTotal
+        BigDecimal valorTotal,
+        BigDecimal precoFinal
 ) {
 
     public static CheckoutResponse from(Pagamento pagamento, String checkoutUrl) {
@@ -18,7 +19,8 @@ public record CheckoutResponse(
                 pagamento.getCheckoutId(),
                 checkoutUrl,
                 pagamento.getPedido().getStatus().name(),
-                pagamento.getPedido().getValorTotal()
+                pagamento.getPedido().getValorTotal(),
+                pagamento.getPedido().getPrecoFinal()
         );
     }
 }

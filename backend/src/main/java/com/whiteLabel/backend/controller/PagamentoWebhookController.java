@@ -18,7 +18,7 @@ public class PagamentoWebhookController {
         this.pagamentoWebhookService = pagamentoWebhookService;
     }
 
-    @PostMapping("/webhook")
+    @PostMapping({"/webhook", "/infinitepay/webhook"})
     public PagamentoWebhookResponse receberWebhook(
             @RequestBody String payload,
             @RequestHeader(name = "X-Payment-Signature", required = false) String assinatura

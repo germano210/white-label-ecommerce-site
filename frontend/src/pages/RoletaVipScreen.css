@@ -526,13 +526,35 @@
 .roleta-vip-daily-price {
     position: absolute;
     right: 0;
-    bottom: 96px;
+    bottom: 92px;
     left: 0;
     z-index: 6;
     color: #ffffff;
     font-size: 10px;
     line-height: 1;
     text-align: center;
+}
+
+.roleta-vip-daily-price--discount {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.roleta-vip-daily-price-original {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 9px;
+    line-height: 1;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.roleta-vip-daily-price-final {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
 }
 
 .roleta-vip-daily-action {
@@ -551,9 +573,28 @@
     line-height: 1;
 }
 
+.roleta-vip-daily-action:disabled {
+    cursor: wait;
+    opacity: 0.72;
+}
+
 .roleta-vip-daily-card.is-expanded .roleta-vip-daily-action {
     background: #687152;
     color: #ffffff;
+}
+
+.roleta-vip-daily-card-error {
+    position: absolute;
+    right: 16px;
+    bottom: 70px;
+    left: 16px;
+    z-index: 8;
+    margin: 0;
+    color: #ffffff;
+    font-size: 10px;
+    line-height: 1.2;
+    text-align: center;
+    text-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
 
 .roleta-vip-daily-product-info {
