@@ -19,6 +19,12 @@ public interface RoletaParticipanteRepository extends JpaRepository<RoletaPartic
     boolean existsByCodigoConvite(String codigoConvite);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select participante from RoletaParticipante participante where participante.codigoConvite = :codigoConvite")
+    Optional<RoletaParticipante> findByCodigoConviteForUpdate(
+            @Param("codigoConvite") String codigoConvite
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select participante from RoletaParticipante participante where participante.usuario.id = :usuarioId")
     Optional<RoletaParticipante> findByUsuarioIdForUpdate(@Param("usuarioId") UUID usuarioId);
 }

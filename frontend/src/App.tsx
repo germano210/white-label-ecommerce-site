@@ -87,7 +87,7 @@ function AppRoutes() {
     const shouldShowGlobalMissions = !isAdminRoute && !isRoletaRoute && location.pathname !== appRoutes.forYou;
     const hasFloatingWindowBackground = isCurtidasRoute || location.pathname === appRoutes.perfil;
     const appBackground = isRoletaRoute
-        ? '#fff7e6'
+        ? '#e6e6e6'
         : hasFloatingWindowBackground ? '#e6e6e6' : '#FAF7F2';
 
     useEffect(() => {

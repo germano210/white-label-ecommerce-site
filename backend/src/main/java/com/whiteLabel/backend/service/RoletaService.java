@@ -15,6 +15,7 @@ import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
 import com.whiteLabel.backend.dto.RoletaGiroResponse;
+import com.whiteLabel.backend.dto.RoletaNotificacaoResponse;
 import com.whiteLabel.backend.dto.RoletaPremioFaixaResponse;
 import com.whiteLabel.backend.dto.RoletaPremioResponse;
 import com.whiteLabel.backend.dto.RoletaStatusResponse;
@@ -135,13 +136,15 @@ public class RoletaService {
             participante.consumirGiro();
         } else if (isGiroDiarioDisponivel(participante, config, now)) {
             participante.setUltimoGiroDiarioEm(now);
-            participante.adicionarGiros(config.getGiroDiarioQuantidade() - 1);
+            participante.adicionarGirosAoHistorico(config.getGiroDiarioQuantidade());
+            participante.adicionarGirosDisponiveis(config.getGiroDiarioQuantidade() - 1);
         } else {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Usuario sem giros disponiveis");
         }
 
         BigDecimal valorDesconto = sortearDesconto();
         RoletaGiro giro = roletaGiroRepository.save(new RoletaGiro(usuario, valorDesconto));
+        participante.adicionarValorDisponivel(valorDesconto);
 
         incrementarProgressoGrupo(config);
         roletaParticipanteRepository.save(participante);
@@ -174,7 +177,7 @@ public class RoletaService {
         RoletaParticipante participanteIndicado = garantirParticipante(usuarioIndicado, config);
         String codigo = normalizarCodigo(request.codigoConvite());
 
-        RoletaParticipante participanteIndicador = roletaParticipanteRepository.findByCodigoConvite(codigo)
+        RoletaParticipante participanteIndicador = roletaParticipanteRepository.findByCodigoConviteForUpdate(codigo)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Codigo de convite da roleta nao encontrado"
@@ -189,14 +192,16 @@ public class RoletaService {
         }
 
         if (!roletaConviteRepository.existsByUsuarioIndicadoId(usuarioIndicado.getId())) {
+            int girosConcedidos = config.getGirosGanhosPorConvite();
             roletaConviteRepository.save(new RoletaConvite(
                     codigo,
                     usuarioIndicador,
                     usuarioIndicado,
-                    RoletaConviteStatus.CONVERTIDO
+                    RoletaConviteStatus.CONVERTIDO,
+                    girosConcedidos
             ));
             participanteIndicador.incrementarConvitesConvertidos();
-            participanteIndicador.adicionarGiros(config.getGirosGanhosPorConvite());
+            participanteIndicador.adicionarGiros(girosConcedidos);
             roletaParticipanteRepository.save(participanteIndicador);
         }
 
@@ -314,19 +319,39 @@ public class RoletaService {
                 .map(RoletaPremioResponse::from)
                 .orElse(null);
 
+        long convitesConvertidos = participante == null
+                ? 0L
+                : roletaConviteRepository.countByUsuarioIndicadorIdAndStatus(
+                        participante.getUsuario().getId(),
+                        RoletaConviteStatus.CONVERTIDO
+                );
+
         return new RoletaStatusResponse(
-                config.getAtiva(),
-                config.getTitulo(),
+                null,
+                montarNotificacoes(),
+                participante == null ? 0 : participante.getGirosTotaisObtidos(),
+                participante == null ? 0 : participante.getGirosDisponiveis(),
+                participante == null ? BigDecimal.ZERO : participante.getValorDisponivelResgate(),
+                participante == null ? BigDecimal.ZERO : participante.getValorTotalResgatado(),
                 config.getMetaGrupo(),
                 config.getProgressoGrupo(),
                 config.getGirosBonusGrupo(),
-                participante == null ? null : participante.getGirosDisponiveis(),
+                participante == null ? null : participante.getCodigoConvite(),
+                participante == null ? null : montarUrlConvite(participante.getCodigoConvite()),
+                convitesConvertidos,
+                config.getGirosGanhosPorConvite(),
+                config.getAtiva(),
+                config.getTitulo(),
                 participante != null && isGiroDiarioDisponivel(participante, config, now),
                 participante == null ? null : calcularProximoGiroDiarioEm(participante, config, now),
                 premioPendente,
                 montarUltimosEventos(),
                 montarPremiosEmJogo()
         );
+    }
+
+    private List<RoletaNotificacaoResponse> montarNotificacoes() {
+        return List.of();
     }
 
     private List<String> montarUltimosEventos() {
@@ -485,6 +510,8 @@ public class RoletaService {
                 participante.getCodigoConvite(),
                 montarUrlConvite(participante.getCodigoConvite()),
                 quantidadeConvertida,
+                quantidadeConvertida,
+                config.getGirosGanhosPorConvite(),
                 config.getGirosGanhosPorConvite()
         );
     }

@@ -4,6 +4,8 @@ public record RoletaConvitesResponse(
         String codigoConvite,
         String urlConvite,
         Long quantidadeConvertida,
-        Integer girosGanhosPorConvite
+        Long convitesConvertidos,
+        Integer girosGanhosPorConvite,
+        Integer girosPorConvite
 ) {
 }

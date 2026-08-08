@@ -22,6 +22,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -76,6 +78,11 @@ class RoletaControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ativa").value(true))
                 .andExpect(jsonPath("$.metaGrupo").value(20))
+                .andExpect(jsonPath("$.progressoGrupo").value(0))
+                .andExpect(jsonPath("$.girosBonusGrupo").value(5))
+                .andExpect(jsonPath("$.notificacoes.length()").value(0))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(0))
+                .andExpect(jsonPath("$.girosDisponiveis").value(0))
                 .andExpect(jsonPath("$.premiosEmJogo.length()").value(greaterThanOrEqualTo(1)));
     }
 
@@ -93,7 +100,14 @@ class RoletaControllerTest {
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.girosDisponiveis").value(8));
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(8))
+                .andExpect(jsonPath("$.girosDisponiveis").value(8))
+                .andExpect(jsonPath("$.valorDisponivelResgate").value(0.00))
+                .andExpect(jsonPath("$.valorTotalResgatado").value(0.00))
+                .andExpect(jsonPath("$.codigoConvite").isNotEmpty())
+                .andExpect(jsonPath("$.urlConvite").isNotEmpty())
+                .andExpect(jsonPath("$.convitesConvertidos").value(0))
+                .andExpect(jsonPath("$.girosPorConvite").value(1));
 
         mockMvc.perform(post("/api/roleta/girar")
                         .header("Authorization", bearer(usuario))
@@ -101,6 +115,8 @@ class RoletaControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.premio.valorDesconto").exists())
                 .andExpect(jsonPath("$.roleta.girosDisponiveis").value(7))
+                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(8))
+                .andExpect(jsonPath("$.roleta.valorDisponivelResgate").exists())
                 .andExpect(jsonPath("$.roleta.progressoGrupo").value(1));
     }
 
@@ -143,7 +159,97 @@ class RoletaControllerTest {
                         .header("Authorization", bearer(indicador))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quantidadeConvertida").value(1));
+                .andExpect(jsonPath("$.quantidadeConvertida").value(1))
+                .andExpect(jsonPath("$.convitesConvertidos").value(1))
+                .andExpect(jsonPath("$.girosPorConvite").value(1));
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(indicador))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.convitesConvertidos").value(1))
+                .andExpect(jsonPath("$.girosDisponiveis").value(9))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(9));
+
+        var convite = roletaConviteRepository.findAll().get(0);
+        assertEquals(1, convite.getGirosConcedidos());
+        assertTrue(convite.getConvertidoEm() != null);
+    }
+
+    @Test
+    void shouldReturnSameInviteCodeForSameUser() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Link", "551199992007");
+
+        String primeiro = mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.codigoConvite").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String segundo = mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String primeiroCodigo = primeiro.replaceAll(".*\"codigoConvite\":\"([^\"]+)\".*", "$1");
+        String segundoCodigo = segundo.replaceAll(".*\"codigoConvite\":\"([^\"]+)\".*", "$1");
+
+        assertEquals(primeiroCodigo, segundoCodigo);
+        assertTrue(primeiro.contains("\"urlConvite\":\"http://localhost:5173/vip/roleta?ref="));
+    }
+
+    @Test
+    void shouldRejectSelfInvite() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Self", "551199992008");
+        String response = mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String codigo = response.replaceAll(".*\"codigoConvite\":\"([^\"]+)\".*", "$1");
+
+        mockMvc.perform(post("/api/roleta/convites")
+                        .header("Authorization", bearer(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "codigoConvite": "%s"
+                                }
+                                """.formatted(codigo))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(0, roletaConviteRepository.count());
+    }
+
+    @Test
+    void shouldPersistRescueValuesOnParticipant() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Valores", "551199992009");
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valorDisponivelResgate").exists())
+                .andExpect(jsonPath("$.valorTotalResgatado").value(0.00));
+
+        assertEquals(1, roletaParticipanteRepository.count());
+        assertTrue(roletaParticipanteRepository.findByUsuarioId(usuario.getId())
+                .orElseThrow()
+                .getValorDisponivelResgate()
+                .compareTo(BigDecimal.ZERO) > 0);
     }
 
     @Test

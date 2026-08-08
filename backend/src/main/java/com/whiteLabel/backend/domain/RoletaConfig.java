@@ -29,7 +29,7 @@ public class RoletaConfig {
     private Integer progressoGrupo = 0;
 
     @Column(name = "giros_bonus_grupo", nullable = false)
-    private Integer girosBonusGrupo = 2;
+    private Integer girosBonusGrupo = 5;
 
     @Column(name = "giros_iniciais", nullable = false)
     private Integer girosIniciais = 8;
@@ -87,11 +87,11 @@ public class RoletaConfig {
     }
 
     public Integer getGirosBonusGrupo() {
-        return Math.max(0, girosBonusGrupo == null ? 0 : girosBonusGrupo);
+        return Math.max(0, girosBonusGrupo == null ? 5 : girosBonusGrupo);
     }
 
     public void setGirosBonusGrupo(Integer girosBonusGrupo) {
-        this.girosBonusGrupo = Math.max(0, girosBonusGrupo == null ? 0 : girosBonusGrupo);
+        this.girosBonusGrupo = Math.max(0, girosBonusGrupo == null ? 5 : girosBonusGrupo);
     }
 
     public Integer getGirosIniciais() {

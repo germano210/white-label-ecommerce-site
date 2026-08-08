@@ -13,6 +13,8 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
@@ -37,13 +39,34 @@ public class RoletaParticipante {
     @Column(name = "codigo_convite", nullable = false, length = 40)
     private String codigoConvite;
 
+    @Column(name = "giros_totais_obtidos", nullable = false, columnDefinition = "integer default 0")
+    private Integer girosTotaisObtidos = 0;
+
     @Column(name = "giros_disponiveis", nullable = false)
     private Integer girosDisponiveis = 0;
+
+    @Column(
+            name = "valor_disponivel_resgate",
+            nullable = false,
+            precision = 12,
+            scale = 2,
+            columnDefinition = "numeric(12,2) default 0.00"
+    )
+    private BigDecimal valorDisponivelResgate = BigDecimal.ZERO;
+
+    @Column(
+            name = "valor_total_resgatado",
+            nullable = false,
+            precision = 12,
+            scale = 2,
+            columnDefinition = "numeric(12,2) default 0.00"
+    )
+    private BigDecimal valorTotalResgatado = BigDecimal.ZERO;
 
     @Column(name = "ultimo_giro_diario_em")
     private LocalDateTime ultimoGiroDiarioEm;
 
-    @Column(name = "convites_convertidos", nullable = false)
+    @Column(name = "convites_convertidos", nullable = false, columnDefinition = "integer default 0")
     private Integer convitesConvertidos = 0;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
@@ -58,7 +81,7 @@ public class RoletaParticipante {
     public RoletaParticipante(Usuario usuario, String codigoConvite, Integer girosDisponiveis) {
         this.usuario = Objects.requireNonNull(usuario);
         this.codigoConvite = Objects.requireNonNull(codigoConvite);
-        setGirosDisponiveis(girosDisponiveis);
+        adicionarGiros(girosDisponiveis);
     }
 
     public Long getId() {
@@ -73,6 +96,10 @@ public class RoletaParticipante {
         return codigoConvite;
     }
 
+    public Integer getGirosTotaisObtidos() {
+        return Math.max(0, girosTotaisObtidos == null ? 0 : girosTotaisObtidos);
+    }
+
     public Integer getGirosDisponiveis() {
         return Math.max(0, girosDisponiveis == null ? 0 : girosDisponiveis);
     }
@@ -83,13 +110,36 @@ public class RoletaParticipante {
 
     public void adicionarGiros(Integer quantidade) {
         int incremento = Math.max(0, quantidade == null ? 0 : quantidade);
-        setGirosDisponiveis(getGirosDisponiveis() + incremento);
+        adicionarGirosAoHistorico(incremento);
+        adicionarGirosDisponiveis(incremento);
+    }
+
+    public void adicionarGirosAoHistorico(Integer quantidade) {
+        int incremento = Math.max(0, quantidade == null ? 0 : quantidade);
+        girosTotaisObtidos = getGirosTotaisObtidos() + incremento;
+    }
+
+    public void adicionarGirosDisponiveis(Integer quantidade) {
+        int incremento = Math.max(0, quantidade == null ? 0 : quantidade);
+        girosDisponiveis = getGirosDisponiveis() + incremento;
     }
 
     public void consumirGiro() {
         if (getGirosDisponiveis() > 0) {
             girosDisponiveis = getGirosDisponiveis() - 1;
         }
+    }
+
+    public BigDecimal getValorDisponivelResgate() {
+        return normalizarValor(valorDisponivelResgate);
+    }
+
+    public BigDecimal getValorTotalResgatado() {
+        return normalizarValor(valorTotalResgatado);
+    }
+
+    public void adicionarValorDisponivel(BigDecimal valor) {
+        valorDisponivelResgate = getValorDisponivelResgate().add(normalizarValor(valor));
     }
 
     public LocalDateTime getUltimoGiroDiarioEm() {
@@ -121,11 +171,35 @@ public class RoletaParticipante {
         if (criadoEm == null) {
             criadoEm = LocalDateTime.now();
         }
+        preencherPadroes();
         atualizadoEm = LocalDateTime.now();
     }
 
     @PreUpdate
     void preencherAtualizadoEm() {
+        preencherPadroes();
         atualizadoEm = LocalDateTime.now();
+    }
+
+    private void preencherPadroes() {
+        if (girosTotaisObtidos == null) {
+            girosTotaisObtidos = 0;
+        }
+        if (girosDisponiveis == null) {
+            girosDisponiveis = 0;
+        }
+        if (valorDisponivelResgate == null) {
+            valorDisponivelResgate = BigDecimal.ZERO;
+        }
+        if (valorTotalResgatado == null) {
+            valorTotalResgatado = BigDecimal.ZERO;
+        }
+        if (convitesConvertidos == null) {
+            convitesConvertidos = 0;
+        }
+    }
+
+    private BigDecimal normalizarValor(BigDecimal valor) {
+        return (valor == null ? BigDecimal.ZERO : valor).setScale(2, RoundingMode.HALF_UP);
     }
 }

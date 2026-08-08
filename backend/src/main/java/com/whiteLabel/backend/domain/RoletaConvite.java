@@ -41,12 +41,18 @@ public class RoletaConvite {
     @Column(nullable = false, length = 40)
     private String codigo;
 
+    @Column(name = "giros_concedidos", nullable = false, columnDefinition = "integer default 0")
+    private Integer girosConcedidos = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private RoletaConviteStatus status = RoletaConviteStatus.CONVERTIDO;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
+
+    @Column(name = "convertido_em")
+    private LocalDateTime convertidoEm;
 
     protected RoletaConvite() {
     }
@@ -55,12 +61,14 @@ public class RoletaConvite {
             String codigo,
             Usuario usuarioIndicador,
             Usuario usuarioIndicado,
-            RoletaConviteStatus status
+            RoletaConviteStatus status,
+            Integer girosConcedidos
     ) {
         this.codigo = Objects.requireNonNull(codigo);
         this.usuarioIndicador = Objects.requireNonNull(usuarioIndicador);
         this.usuarioIndicado = usuarioIndicado;
         setStatus(status);
+        setGirosConcedidos(girosConcedidos);
     }
 
     public Long getId() {
@@ -79,6 +87,14 @@ public class RoletaConvite {
         return codigo;
     }
 
+    public Integer getGirosConcedidos() {
+        return Math.max(0, girosConcedidos == null ? 0 : girosConcedidos);
+    }
+
+    public void setGirosConcedidos(Integer girosConcedidos) {
+        this.girosConcedidos = Math.max(0, girosConcedidos == null ? 0 : girosConcedidos);
+    }
+
     public RoletaConviteStatus getStatus() {
         return status;
     }
@@ -91,10 +107,20 @@ public class RoletaConvite {
         return criadoEm;
     }
 
+    public LocalDateTime getConvertidoEm() {
+        return convertidoEm;
+    }
+
     @PrePersist
     void preencherCriadoEm() {
         if (criadoEm == null) {
             criadoEm = LocalDateTime.now();
+        }
+        if (girosConcedidos == null) {
+            girosConcedidos = 0;
+        }
+        if (status == RoletaConviteStatus.CONVERTIDO && convertidoEm == null) {
+            convertidoEm = LocalDateTime.now();
         }
     }
 }
