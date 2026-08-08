@@ -501,7 +501,8 @@
     gap: 4px;
 }
 
-.roleta-vip-daily-story-bars button {
+.roleta-vip-daily-story-bars button,
+.roleta-vip-daily-story-bars span {
     display: block;
     flex: 1 1 0;
     height: 3px;
@@ -513,7 +514,12 @@
     padding: 0;
 }
 
-.roleta-vip-daily-story-bars button.is-active {
+.roleta-vip-daily-story-bars span {
+    pointer-events: none;
+}
+
+.roleta-vip-daily-story-bars button.is-active,
+.roleta-vip-daily-story-bars span.is-active {
     background: #ffffff;
 }
 

@@ -862,6 +862,7 @@ export function RoletaVipScreen() {
     const handleDailyCardMediaClick = (event: MouseEvent<HTMLDivElement>, product: DailyProduct) => {
         const target = event.target;
         if (target instanceof HTMLElement && target.closest('button')) return;
+        if (expandedDailyProductId !== product.id) return;
 
         if (dailyCardGestureRef.current.hasDragged) {
             dailyCardGestureRef.current.hasDragged = false;
@@ -1044,6 +1045,7 @@ export function RoletaVipScreen() {
                                         const detailImageIndex = isExpanded && activeImageIndex === 0 && product.images.length > 1
                                             ? 1
                                             : activeImageIndex;
+                                        const visibleImageIndex = isExpanded ? detailImageIndex : 0;
                                         const activeImage = product.images[getClampedImageIndex(product, detailImageIndex)];
 
                                         return (
@@ -1057,20 +1059,27 @@ export function RoletaVipScreen() {
                                                 <div
                                                     className={`roleta-vip-daily-card${isExpanded ? ' is-expanded' : ''}`}
                                                     style={{ backgroundImage: `url("${mainImage}")` }}
-                                                    onPointerDown={handleDailyCardPointerDown}
-                                                    onPointerMove={handleDailyCardPointerMove}
-                                                    onPointerCancel={handleDailyCardPointerCancel}
-                                                    onClick={(event) => handleDailyCardMediaClick(event, product)}
+                                                    onPointerDown={isExpanded ? handleDailyCardPointerDown : undefined}
+                                                    onPointerMove={isExpanded ? handleDailyCardPointerMove : undefined}
+                                                    onPointerCancel={isExpanded ? handleDailyCardPointerCancel : undefined}
+                                                    onClick={isExpanded ? (event) => handleDailyCardMediaClick(event, product) : undefined}
                                                 >
                                                         <div className="roleta-vip-daily-story-bars" aria-label="Fotos do item">
                                                             {product.images.map((image, imageIndex) => (
-                                                                <button
-                                                                    type="button"
-                                                                    key={`${image}-${imageIndex}`}
-                                                                    className={imageIndex === detailImageIndex ? 'is-active' : ''}
-                                                                    onClick={() => selectDailyProductImage(product.id, imageIndex)}
-                                                                    aria-label={`Ver foto ${imageIndex + 1}`}
-                                                                />
+                                                                isExpanded ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={`${image}-${imageIndex}`}
+                                                                        className={imageIndex === visibleImageIndex ? 'is-active' : ''}
+                                                                        onClick={() => selectDailyProductImage(product.id, imageIndex)}
+                                                                        aria-label={`Ver foto ${imageIndex + 1}`}
+                                                                    />
+                                                                ) : (
+                                                                    <span
+                                                                        key={`${image}-${imageIndex}`}
+                                                                        className={imageIndex === visibleImageIndex ? 'is-active' : ''}
+                                                                    />
+                                                                )
                                                             ))}
                                                         </div>
 
@@ -1092,7 +1101,7 @@ export function RoletaVipScreen() {
                                                         ) : (
                                                             <img
                                                                 className="roleta-vip-daily-cover-image"
-                                                                src={activeImage}
+                                                                src={mainImage}
                                                                 alt={product.nome}
                                                                 draggable={false}
                                                             />
