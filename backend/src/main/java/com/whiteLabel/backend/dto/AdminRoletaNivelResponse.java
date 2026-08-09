@@ -35,12 +35,17 @@ public record AdminRoletaNivelResponse(
                 nivel.getDescricao(),
                 nivel.getCorHex(),
                 nivel.getOrdem(),
-                nivel.getPesoRelativo(),
+                pesoRelativoParaResposta(nivel.getPesoRelativo()),
                 chancePercentual,
                 nivel.getAtivo(),
                 premios == null ? List.of() : premios,
                 nivel.getCriadoEm(),
                 nivel.getAtualizadoEm()
         );
+    }
+
+    private static BigDecimal pesoRelativoParaResposta(BigDecimal pesoRelativo) {
+        BigDecimal peso = pesoRelativo == null ? BigDecimal.ONE : pesoRelativo.stripTrailingZeros();
+        return peso.scale() < 0 ? peso.setScale(0) : peso;
     }
 }

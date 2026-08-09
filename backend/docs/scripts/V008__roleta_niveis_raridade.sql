@@ -22,32 +22,8 @@ CREATE TABLE IF NOT EXISTS roleta_niveis (
     atualizado_em timestamp NOT NULL DEFAULT now()
 );
 
-INSERT INTO roleta_niveis (
-    nome,
-    descricao,
-    cor_hex,
-    ordem,
-    peso_relativo,
-    ativo,
-    criado_em,
-    atualizado_em
-)
-SELECT *
-FROM (
-    VALUES
-        ('Grau Militar', 'Azul, raridade mais comum.', '#4b69ff', 1, 1.00000000, true, now(), now()),
-        ('Restrito', 'Roxo, aproximadamente cinco vezes mais dificil.', '#8847ff', 2, 0.20000000, true, now(), now()),
-        ('Classificado', 'Rosa, queda rara.', '#d32ce6', 3, 0.04000000, true, now(), now()),
-        ('Encoberto', 'Vermelho, premio secreto.', '#eb4b4b', 4, 0.00800000, true, now(), now()),
-        ('Extremamente Raro', 'Ouro, queda premium.', '#ffd700', 5, 0.00325000, true, now(), now())
-) AS padrao (
-    nome,
-    descricao,
-    cor_hex,
-    ordem,
-    peso_relativo,
-    ativo,
-    criado_em,
-    atualizado_em
-)
-WHERE NOT EXISTS (SELECT 1 FROM roleta_niveis);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_roleta_niveis_ordem
+    ON roleta_niveis (ordem);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_roleta_niveis_nome_normalizado
+    ON roleta_niveis (lower(trim(nome)));

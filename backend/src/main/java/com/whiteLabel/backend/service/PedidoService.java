@@ -2,9 +2,13 @@ package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Pagamento;
 import com.whiteLabel.backend.domain.Pedido;
+import com.whiteLabel.backend.domain.PedidoStatus;
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.domain.RoletaGiro;
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.domain.UsuarioRole;
 import com.whiteLabel.backend.dto.CheckoutResponse;
+import com.whiteLabel.backend.dto.CheckoutStatusResponse;
 import com.whiteLabel.backend.dto.CriarCheckoutRequest;
 import com.whiteLabel.backend.dto.InfinitePayLinkRequest;
 import com.whiteLabel.backend.dto.InfinitePayLinkResponse;
@@ -97,9 +101,64 @@ public class PedidoService {
                         "Produto nao encontrado"
                 ));
 
+        return criarCheckoutProduto(usuario, produto, BigDecimal.ZERO, null);
+    }
+
+    @Transactional(readOnly = true)
+    public CheckoutStatusResponse consultarStatusCheckout(Long pedidoId) {
+        Usuario usuario = buscarUsuarioAutenticado();
+        Pedido pedido = pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Pedido nao encontrado"
+                ));
+
+        boolean pertenceAoUsuario = pedido.getUsuario().getId().equals(usuario.getId());
+        boolean usuarioAdmin = usuario.getRole() == UsuarioRole.ADMIN;
+
+        if (!pertenceAoUsuario && !usuarioAdmin) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Pedido pertence a outro usuario"
+            );
+        }
+
+        Pagamento pagamento = pagamentoRepository
+                .findTopByPedidoIdOrderByDataCriacaoDescIdDesc(pedidoId)
+                .orElse(null);
+
+        return CheckoutStatusResponse.from(pedido, pagamento);
+    }
+
+    @Transactional
+    public CheckoutResponse criarCheckoutProdutoRoleta(
+            Usuario usuario,
+            Produto produto,
+            RoletaGiro premioAtual,
+            BigDecimal descontoAplicado
+    ) {
+        if (premioAtual != null && pedidoRepository.existsByRoletaGiroIdAndStatusIn(
+                premioAtual.getId(),
+                List.of(PedidoStatus.AGUARDANDO_PAGAMENTO, PedidoStatus.PAGO)
+        )) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Premio atual ja esta vinculado a outro checkout"
+            );
+        }
+
+        return criarCheckoutProduto(usuario, produto, descontoAplicado, premioAtual);
+    }
+
+    private CheckoutResponse criarCheckoutProduto(
+            Usuario usuario,
+            Produto produto,
+            BigDecimal descontoAplicado,
+            RoletaGiro premioRoleta
+    ) {
         BigDecimal precoOriginal = normalizarPreco(produto.getPrecoVenda());
-        BigDecimal descontoAplicado = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        BigDecimal precoFinal = precoOriginal.subtract(descontoAplicado)
+        BigDecimal descontoNormalizado = normalizarDesconto(descontoAplicado);
+        BigDecimal precoFinal = precoOriginal.subtract(descontoNormalizado)
                 .setScale(2, RoundingMode.HALF_UP);
 
         if (precoFinal.compareTo(BigDecimal.ZERO) <= 0) {
@@ -114,9 +173,10 @@ public class PedidoService {
         pedido.registrarCheckoutProduto(
                 produto,
                 precoOriginal,
-                descontoAplicado,
+                descontoNormalizado,
                 precoFinal
         );
+        pedido.vincularPremioRoleta(premioRoleta);
         pedido.aguardarPagamento();
 
         Pedido pedidoSalvo = pedidoRepository.saveAndFlush(pedido);
@@ -178,6 +238,20 @@ public class PedidoService {
         }
 
         return preco.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal normalizarDesconto(BigDecimal desconto) {
+        if (desconto == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (desconto.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Desconto invalido para pagamento"
+            );
+        }
+
+        return desconto.setScale(2, RoundingMode.HALF_UP);
     }
 
     private Long converterParaCentavos(BigDecimal valor) {

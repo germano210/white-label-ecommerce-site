@@ -11,12 +11,13 @@ interface CheckoutStatusResponse {
 }
 
 function getStatusLabel(status: string | undefined) {
-    if (!status) return 'Status indisponível';
+    if (!status) return 'Status indisponivel';
 
     const normalizedStatus = status.toUpperCase();
     if (normalizedStatus === 'PAGO' || normalizedStatus === 'APROVADO') return 'Pagamento confirmado';
     if (normalizedStatus === 'PENDENTE') return 'Pagamento pendente';
     if (normalizedStatus === 'CANCELADO') return 'Pagamento cancelado';
+    if (normalizedStatus === 'FALHOU') return 'Pagamento falhou';
 
     return status;
 }
@@ -49,7 +50,7 @@ export function CheckoutSuccessScreen() {
                 setStatus(data.pagamentoStatus ?? data.status ?? '');
             } catch {
                 if (isActive) {
-                    setError('Não foi possível confirmar o status do pedido agora.');
+                    setError('Nao foi possivel confirmar o status do pedido agora.');
                 }
             } finally {
                 if (isActive) setIsLoading(false);
@@ -70,8 +71,8 @@ export function CheckoutSuccessScreen() {
                 <h1 style={titleStyle}>Status do pedido</h1>
 
                 {!pedidoId && (
-                    <p style={descriptionStyle}>
-                        Não recebemos o identificador do pedido para consultar o backend.
+                    <p role="alert" style={errorStyle}>
+                        Nao recebemos o identificador do pedido. Volte para a loja e tente abrir o checkout novamente.
                     </p>
                 )}
 
@@ -93,7 +94,7 @@ export function CheckoutSuccessScreen() {
                 )}
 
                 <p style={securityNoteStyle}>
-                    Produtos, tentativas e recompensas só devem ser liberados após confirmação real no backend.
+                    Produtos, tentativas e recompensas so devem ser liberados apos confirmacao real no backend.
                 </p>
             </section>
         </main>
@@ -182,4 +183,3 @@ const securityNoteStyle: React.CSSProperties = {
     fontSize: '12px',
     lineHeight: 1.45,
 };
-

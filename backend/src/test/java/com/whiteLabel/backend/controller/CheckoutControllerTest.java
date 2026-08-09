@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whiteLabel.backend.domain.PedidoStatus;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.domain.UsuarioRole;
 import com.whiteLabel.backend.dto.InfinitePayLinkRequest;
 import com.whiteLabel.backend.dto.InfinitePayLinkResponse;
 import com.whiteLabel.backend.repository.PagamentoRepository;
@@ -29,10 +30,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,6 +48,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Import(CheckoutControllerTest.InfinitePayTestConfig.class)
 class CheckoutControllerTest {
+
+    private static final String WEBHOOK_SECRET = "test-payment-webhook-secret";
 
     @Autowired
     private MockMvc mockMvc;
@@ -149,6 +158,95 @@ class CheckoutControllerTest {
     }
 
     @Test
+    void shouldRequireAuthenticatedUserToCheckCheckoutStatus() throws Exception {
+        mockMvc.perform(get("/api/checkout/{pedidoId}/status", 999L)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldReturnCheckoutStatusForOwner() throws Exception {
+        Usuario usuario = usuarioRepository.save(new Usuario("Cliente Status", "5511999997003"));
+        Produto produto = criarProduto("Vestido Status", "79.90", true);
+        CheckoutCriado checkout = criarCheckoutProduto(usuario, produto);
+
+        mockMvc.perform(get("/api/checkout/{pedidoId}/status", checkout.pedidoId())
+                        .header("Authorization", "Bearer " + jwtService.generateToken(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pedidoId").value(checkout.pedidoId()))
+                .andExpect(jsonPath("$.status").value("PENDENTE"))
+                .andExpect(jsonPath("$.pagamentoStatus").value("PENDENTE"))
+                .andExpect(jsonPath("$.valorTotal").value(79.90))
+                .andExpect(jsonPath("$.precoFinal").value(79.90));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenCheckoutOrderDoesNotExist() throws Exception {
+        Usuario usuario = usuarioRepository.save(new Usuario("Cliente Sem Pedido", "5511999997004"));
+
+        mockMvc.perform(get("/api/checkout/{pedidoId}/status", 999L)
+                        .header("Authorization", "Bearer " + jwtService.generateToken(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldForbidCheckoutStatusFromAnotherUser() throws Exception {
+        Usuario dono = usuarioRepository.save(new Usuario("Cliente Dono", "5511999997005"));
+        Usuario outroUsuario = usuarioRepository.save(new Usuario("Cliente Outro", "5511999997006"));
+        Produto produto = criarProduto("Saia Privada", "59.90", true);
+        CheckoutCriado checkout = criarCheckoutProduto(dono, produto);
+
+        mockMvc.perform(get("/api/checkout/{pedidoId}/status", checkout.pedidoId())
+                        .header("Authorization", "Bearer " + jwtService.generateToken(outroUsuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldAllowAdminToCheckAnyCheckoutStatus() throws Exception {
+        Usuario dono = usuarioRepository.save(new Usuario("Cliente Admin Check", "5511999997007"));
+        Usuario admin = new Usuario("Admin Checkout", "5511999997008");
+        admin.setRole(UsuarioRole.ADMIN);
+        admin = usuarioRepository.save(admin);
+        Produto produto = criarProduto("Casaco Admin", "129.90", true);
+        CheckoutCriado checkout = criarCheckoutProduto(dono, produto);
+
+        mockMvc.perform(get("/api/checkout/{pedidoId}/status", checkout.pedidoId())
+                        .header("Authorization", "Bearer " + jwtService.generateToken(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pedidoId").value(checkout.pedidoId()))
+                .andExpect(jsonPath("$.status").value("PENDENTE"));
+    }
+
+    @Test
+    void shouldReflectPaidStatusAfterWebhookConfirmation() throws Exception {
+        Usuario usuario = usuarioRepository.save(new Usuario("Cliente Pago", "5511999997009"));
+        Produto produto = criarProduto("Cropped Pago", "49.90", true);
+        CheckoutCriado checkout = criarCheckoutProduto(usuario, produto);
+        String payload = payload("evt_checkout_status_paid", "pay_checkout_status_paid",
+                checkout.checkoutId(), "PAGO");
+
+        mockMvc.perform(post("/api/pagamentos/infinitepay/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Payment-Signature", assinatura(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/checkout/{pedidoId}/status", checkout.pedidoId())
+                        .header("Authorization", "Bearer " + jwtService.generateToken(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pedidoId").value(checkout.pedidoId()))
+                .andExpect(jsonPath("$.status").value("PAGO"))
+                .andExpect(jsonPath("$.pagamentoStatus").value("PAGO"))
+                .andExpect(jsonPath("$.valorTotal").value(49.90))
+                .andExpect(jsonPath("$.precoFinal").value(49.90));
+    }
+
+    @Test
     void shouldRejectInactiveProductCheckout() throws Exception {
         Usuario usuario = usuarioRepository.save(new Usuario("Cliente Inativo", "5511999997002"));
         Produto produto = criarProduto("Produto Inativo", "29.90", false);
@@ -170,6 +268,46 @@ class CheckoutControllerTest {
         produto.setAtivo(ativo);
 
         return produtoRepository.save(produto);
+    }
+
+    private CheckoutCriado criarCheckoutProduto(Usuario usuario, Produto produto) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/checkout/produtos/{produtoId}", produto.getId())
+                        .header("Authorization", "Bearer " + jwtService.generateToken(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+
+        return new CheckoutCriado(
+                json.get("pedidoId").asLong(),
+                json.get("checkoutId").asText()
+        );
+    }
+
+    private String payload(String eventId, String paymentId, String checkoutId, String status) {
+        return """
+                {
+                  "eventId": "%s",
+                  "paymentId": "%s",
+                  "checkoutId": "%s",
+                  "status": "%s"
+                }
+                """.formatted(eventId, paymentId, checkoutId, status);
+    }
+
+    private String assinatura(String payload) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(
+                WEBHOOK_SECRET.getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"
+        ));
+
+        return "sha256=" + HexFormat.of()
+                .formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private record CheckoutCriado(Long pedidoId, String checkoutId) {
     }
 
     @TestConfiguration

@@ -25,6 +25,7 @@ public record RoletaStatusResponse(
         String titulo,
         Boolean giroDiarioDisponivel,
         LocalDateTime proximoGiroDiarioEm,
+        RoletaPremioResponse premioAtual,
         RoletaPremioResponse premioPendente,
         List<String> ultimosEventos,
         List<RoletaPremioFaixaResponse> premiosEmJogo

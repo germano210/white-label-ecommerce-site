@@ -4,7 +4,7 @@ import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
 
-type RoletaTipoPremio = 'DESCONTO_VALOR' | 'DESCONTO_PERCENTUAL' | 'GIRO_EXTRA' | 'SEM_PREMIO';
+type RoletaTipoPremio = 'DESCONTO_VALOR' | 'DESCONTO_PERCENTUAL';
 
 interface ProdutoAdmin {
     id: number | string;
@@ -31,6 +31,8 @@ interface ProdutosPage {
 
 interface AdminRoletaOpcaoApi {
     id?: number | string | null;
+    nivelId?: number | string | null;
+    nivel_id?: number | string | null;
     nivel?: number | string | null;
     titulo?: string | null;
     descricao?: string | null;
@@ -86,18 +88,19 @@ interface AdminRoletaResponse {
     multiplicadorDificuldadePadrao?: number | string | null;
     multiplicador_dificuldade_padrao?: number | string | null;
     produtoIds?: Array<number | string> | null;
+    produto_ids?: Array<number | string> | null;
+    selectedProdutoIds?: Array<number | string> | null;
+    selected_produto_ids?: Array<number | string> | null;
+    produtos?: ProdutoAdmin[] | null;
     niveis?: AdminRoletaNivelApi[] | null;
-    opcoes?: AdminRoletaOpcaoApi[] | null;
 }
 
 interface RoletaPrizeForm {
     localId: string;
     id?: number | string | null;
-    titulo: string;
-    descricao: string;
+    nivelId?: number | string | null;
     tipoPremio: RoletaTipoPremio;
     valor: string;
-    pesoInterno: string;
     ordem: string;
     ativo: boolean;
 }
@@ -134,40 +137,23 @@ interface RoletaNivelPayload {
     descricao?: string | null;
     corHex: string;
     ordem: number;
-    pesoRelativo: number;
+    pesoRelativo: string;
     ativo: boolean;
     premios: RoletaPremioPayload[];
 }
 
 interface RoletaPremioPayload {
     id?: number | string | null;
-    titulo: string;
-    descricao?: string | null;
+    nivelId?: number | string | null;
     tipoPremio: RoletaTipoPremio;
     valor: number;
-    pesoInterno: number;
     ordem: number;
     ativo: boolean;
 }
 
-interface RoletaOpcaoPayload {
-    id?: number | string | null;
-    nivel: number;
-    titulo: string;
-    descricao?: string | null;
-    tipoPremio: RoletaTipoPremio;
-    valorMinimo: number;
-    valorMaximo: number;
-    peso: number;
-    ativa: boolean;
-    ordem: number;
-}
-
 const tipoPremioOptions: Array<{ value: RoletaTipoPremio; label: string }> = [
-    { value: 'DESCONTO_VALOR', label: 'Desconto em valor' },
-    { value: 'DESCONTO_PERCENTUAL', label: 'Desconto percentual' },
-    { value: 'GIRO_EXTRA', label: 'Giro extra' },
-    { value: 'SEM_PREMIO', label: 'Sem premio' },
+    { value: 'DESCONTO_VALOR', label: 'R$ desconto' },
+    { value: 'DESCONTO_PERCENTUAL', label: '% desconto' },
 ];
 
 const rarityPresets = [
@@ -210,6 +196,25 @@ function toPositiveDecimal(value: string, fallback: number, minimum = 0) {
     return Math.max(minimum, parsedValue);
 }
 
+function isDecimalDraft(value: string) {
+    return value === '' || /^\d*(?:[,.]\d*)?$/.test(value.trim());
+}
+
+function decimalInputValue(value: number | string | null | undefined, fallback = '') {
+    if (value === null || value === undefined || value === '') return fallback;
+    return String(value).replace(',', '.');
+}
+
+function decimalPayloadValue(value: string, fallback = '0') {
+    const normalizedValue = value.trim().replace(',', '.');
+    if (!normalizedValue) return fallback;
+
+    const parsedValue = Number(normalizedValue);
+    if (!Number.isFinite(parsedValue) || parsedValue < 0) return fallback;
+
+    return normalizedValue;
+}
+
 function toBoolean(value: boolean | number | string | null | undefined, fallback = true) {
     if (typeof value === 'boolean') return value;
     if (typeof value === 'number') return value === 1;
@@ -236,8 +241,6 @@ function normalizeTipoPremio(value: string | null | undefined): RoletaTipoPremio
     if (
         normalizedValue === 'DESCONTO_VALOR'
         || normalizedValue === 'DESCONTO_PERCENTUAL'
-        || normalizedValue === 'GIRO_EXTRA'
-        || normalizedValue === 'SEM_PREMIO'
     ) {
         return normalizedValue;
     }
@@ -263,17 +266,14 @@ function createDefaultForm(): RoletaFormState {
 function createBlankPrize(order: number): RoletaPrizeForm {
     return {
         localId: createLocalId('premio'),
-        titulo: '',
-        descricao: '',
         tipoPremio: 'DESCONTO_VALOR',
         valor: '0',
-        pesoInterno: '1',
         ordem: String(order),
         ativo: true,
     };
 }
 
-function createBlankLevel(order: number, pesoRelativo: number): RoletaLevelForm {
+function createBlankLevel(order: number, pesoRelativo: number | string): RoletaLevelForm {
     const preset = rarityPresets[(order - 1) % rarityPresets.length];
 
     return {
@@ -282,7 +282,7 @@ function createBlankLevel(order: number, pesoRelativo: number): RoletaLevelForm 
         descricao: '',
         corHex: preset.corHex,
         ordem: String(order),
-        pesoRelativo: Number(pesoRelativo.toFixed(4)).toString(),
+        pesoRelativo: decimalInputValue(pesoRelativo, '1'),
         chanceCalculada: null,
         ativo: true,
         premios: [],
@@ -346,6 +346,21 @@ function normalizeIds(ids?: Array<number | string> | null) {
         .filter((id) => Number.isFinite(id));
 }
 
+function normalizeSelectedProductIds(
+    roleta?: AdminRoletaResponse | null,
+    fallback: number[] = [],
+) {
+    const rawIds = roleta?.produtoIds
+        ?? roleta?.produto_ids
+        ?? roleta?.selectedProdutoIds
+        ?? roleta?.selected_produto_ids;
+
+    if (rawIds) return normalizeIds(rawIds);
+    if (roleta?.produtos) return normalizeIds(roleta.produtos.map((produto) => produto.id));
+
+    return fallback;
+}
+
 function normalizePrizeFromApi(prize: AdminRoletaPremioApi, index: number): RoletaPrizeForm {
     const prizeValue = prize.valor
         ?? prize.valorPremio
@@ -359,11 +374,9 @@ function normalizePrizeFromApi(prize: AdminRoletaPremioApi, index: number): Role
     return {
         localId: createLocalId('premio'),
         id: prize.id,
-        titulo: prize.titulo ?? '',
-        descricao: prize.descricao ?? '',
+        nivelId: prize.nivelId ?? prize.nivel_id,
         tipoPremio: normalizeTipoPremio(prize.tipoPremio ?? prize.tipo_premio ?? prize.tipo),
         valor: String(prizeValue),
-        pesoInterno: String(prize.pesoInterno ?? prize.peso_interno ?? prize.peso ?? 1),
         ordem: String(prize.ordem ?? index + 1),
         ativo: toBoolean(prize.ativo ?? prize.ativa, true),
     };
@@ -383,7 +396,7 @@ function normalizeLevelsFromNestedApi(niveis: AdminRoletaNivelApi[]) {
                 descricao: nivel.descricao ?? '',
                 corHex: normalizeHexColor(nivel.corHex ?? nivel.cor_hex, preset.corHex),
                 ordem: String(ordem),
-                pesoRelativo: String(nivel.pesoRelativo ?? nivel.peso_relativo ?? 1000 / (index + 1)),
+                pesoRelativo: decimalInputValue(nivel.pesoRelativo ?? nivel.peso_relativo, '1'),
                 chanceCalculada: parseOptionalNumber(nivel.chanceCalculada ?? nivel.chance_calculada),
                 ativo: toBoolean(nivel.ativo ?? nivel.ativa, true),
                 premios: rawPremios.map(normalizePrizeFromApi),
@@ -392,47 +405,9 @@ function normalizeLevelsFromNestedApi(niveis: AdminRoletaNivelApi[]) {
         .sort((a, b) => toPositiveInteger(a.ordem, 0) - toPositiveInteger(b.ordem, 0));
 }
 
-function normalizeLevelsFromFlatOptions(opcoes: AdminRoletaOpcaoApi[]) {
-    const groups = new Map<number, RoletaLevelForm>();
-
-    opcoes.forEach((opcao, index) => {
-        const ordemNivel = Math.max(1, Math.floor(parseNumber(opcao.nivel ?? 1)));
-        const preset = rarityPresets[(ordemNivel - 1) % rarityPresets.length];
-        const currentLevel = groups.get(ordemNivel);
-        const prize = normalizePrizeFromApi(opcao, index);
-
-        if (currentLevel) {
-            currentLevel.premios.push(prize);
-            currentLevel.pesoRelativo = String(
-                toPositiveDecimal(currentLevel.pesoRelativo, 0) + Math.max(0, parseNumber(opcao.peso ?? 0)),
-            );
-            return;
-        }
-
-        groups.set(ordemNivel, {
-            localId: createLocalId('nivel'),
-            nome: preset.nome,
-            descricao: '',
-            corHex: preset.corHex,
-            ordem: String(ordemNivel),
-            pesoRelativo: String(Math.max(0, parseNumber(opcao.peso ?? 1000))),
-            chanceCalculada: null,
-            ativo: toBoolean(opcao.ativo ?? opcao.ativa, true),
-            premios: [prize],
-        });
-    });
-
-    return Array.from(groups.values())
-        .sort((a, b) => toPositiveInteger(a.ordem, 0) - toPositiveInteger(b.ordem, 0));
-}
-
 function normalizeRoletaLevels(roleta?: AdminRoletaResponse | null) {
     if (roleta?.niveis?.length) {
         return normalizeLevelsFromNestedApi(roleta.niveis);
-    }
-
-    if (roleta?.opcoes?.length) {
-        return normalizeLevelsFromFlatOptions(roleta.opcoes);
     }
 
     return [];
@@ -479,7 +454,7 @@ function calculateLevelChances(levels: RoletaLevelForm[]) {
     }, {});
 }
 
-function createPayload(form: RoletaFormState, selectedIds: number[]) {
+function createPayload(form: RoletaFormState, selectedIds: number[], atualizarProdutos: boolean) {
     const multiplier = toPositiveDecimal(form.multiplicadorDificuldadePadrao, 5, 1.01);
     const niveis: RoletaNivelPayload[] = form.niveis
         .map((level, levelIndex) => {
@@ -489,25 +464,20 @@ function createPayload(form: RoletaFormState, selectedIds: number[]) {
             return {
                 id: level.id,
                 nome: level.nome.trim() || `Nivel ${ordem}`,
-                descricao: level.descricao.trim() || null,
                 corHex: normalizeHexColor(level.corHex, preset.corHex),
                 ordem,
-                pesoRelativo: toPositiveDecimal(level.pesoRelativo, 0),
+                pesoRelativo: decimalPayloadValue(level.pesoRelativo),
                 ativo: level.ativo,
                 premios: level.premios
                     .map((prize, prizeIndex) => {
                         const tipoPremio = prize.tipoPremio;
-                        const value = tipoPremio === 'SEM_PREMIO'
-                            ? 0
-                            : toPositiveDecimal(prize.valor, 0);
+                        const value = toPositiveDecimal(prize.valor, 0);
 
                         return {
                             id: prize.id,
-                            titulo: prize.titulo.trim(),
-                            descricao: prize.descricao.trim() || null,
+                            nivelId: prize.nivelId ?? level.id,
                             tipoPremio,
                             valor: value,
-                            pesoInterno: toPositiveDecimal(prize.pesoInterno, 1),
                             ordem: Math.max(1, toPositiveInteger(prize.ordem, prizeIndex + 1)),
                             ativo: prize.ativo,
                         };
@@ -517,26 +487,20 @@ function createPayload(form: RoletaFormState, selectedIds: number[]) {
         })
         .sort((a, b) => a.ordem - b.ordem);
 
-    const opcoes: RoletaOpcaoPayload[] = niveis.flatMap((level) => (
-        level.premios.map((prize) => {
-            const effectiveWeight = Math.round(level.pesoRelativo * prize.pesoInterno);
-
-            return {
-                id: prize.id,
-                nivel: level.ordem,
-                titulo: prize.titulo,
-                descricao: prize.descricao ?? level.nome,
-                tipoPremio: prize.tipoPremio,
-                valorMinimo: prize.valor,
-                valorMaximo: prize.valor,
-                peso: Math.max(0, effectiveWeight),
-                ativa: level.ativo && prize.ativo,
-                ordem: prize.ordem,
-            };
-        })
-    ));
-
-    return {
+    const payload: {
+        ativa: boolean;
+        titulo: string;
+        metaGrupo: number;
+        girosBonusGrupo: number;
+        girosIniciais: number;
+        giroDiarioQuantidade: number;
+        giroDiarioSomenteQuandoZerar: boolean;
+        girosGanhosPorConvite: number;
+        multiplicadorDificuldadePadrao: number;
+        atualizarProdutos?: boolean;
+        produtoIds?: number[];
+        niveis: RoletaNivelPayload[];
+    } = {
         ativa: form.ativa,
         titulo: form.titulo.trim(),
         metaGrupo: Math.max(1, toPositiveInteger(form.metaGrupo, 20)),
@@ -546,10 +510,15 @@ function createPayload(form: RoletaFormState, selectedIds: number[]) {
         giroDiarioSomenteQuandoZerar: form.giroDiarioSomenteQuandoZerar,
         girosGanhosPorConvite: toPositiveInteger(form.girosGanhosPorConvite, 1),
         multiplicadorDificuldadePadrao: multiplier,
-        produtoIds: selectedIds,
         niveis,
-        opcoes,
     };
+
+    if (atualizarProdutos) {
+        payload.atualizarProdutos = true;
+        payload.produtoIds = selectedIds;
+    }
+
+    return payload;
 }
 
 function getValidationError(form: RoletaFormState) {
@@ -562,12 +531,24 @@ function getValidationError(form: RoletaFormState) {
         return 'Cadastre pelo menos um nivel ativo com premio ativo antes de salvar.';
     }
 
-    const hasPrizeWithoutTitle = activeLevels.some((level) => (
-        level.premios.some((prize) => prize.ativo && !prize.titulo.trim())
+    const hasPrizeWithoutValue = activeLevels.some((level) => (
+        level.premios.some((prize) => prize.ativo && toPositiveDecimal(prize.valor, 0) <= 0)
     ));
 
-    if (hasPrizeWithoutTitle) {
-        return 'Todo premio ativo precisa ter titulo.';
+    if (hasPrizeWithoutValue) {
+        return 'Todo premio ativo precisa ter valor maior que zero.';
+    }
+
+    const hasInvalidPercentualPrize = activeLevels.some((level) => (
+        level.premios.some((prize) => (
+            prize.ativo
+            && prize.tipoPremio === 'DESCONTO_PERCENTUAL'
+            && toPositiveDecimal(prize.valor, 0) > 100
+        ))
+    ));
+
+    if (hasInvalidPercentualPrize) {
+        return 'Premios percentuais precisam ter valor entre 1 e 100.';
     }
 
     return '';
@@ -577,6 +558,7 @@ export function RoletaAdminPanel() {
     const [form, setForm] = useState<RoletaFormState>(createDefaultForm);
     const [produtos, setProdutos] = useState<ProdutoAdmin[]>([]);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [produtosAlterados, setProdutosAlterados] = useState(false);
     const [addProdutoId, setAddProdutoId] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -620,7 +602,8 @@ export function RoletaAdminPanel() {
                 : produtosData.content ?? [];
 
             setProdutos(apiProdutos);
-            setSelectedIds(normalizeIds(roleta.produtoIds));
+            setSelectedIds(normalizeSelectedProductIds(roleta));
+            setProdutosAlterados(false);
             setForm(createFormFromRoleta(roleta));
         } catch {
             setError('Nao foi possivel carregar a configuracao da roleta.');
@@ -692,8 +675,8 @@ export function RoletaAdminPanel() {
             ));
             const lastLevel = orderedLevels[orderedLevels.length - 1];
             const lastWeight = lastLevel
-                ? toPositiveDecimal(lastLevel.pesoRelativo, 1000)
-                : 1000;
+                ? toPositiveDecimal(lastLevel.pesoRelativo, 1)
+                : 1;
             const nextOrder = lastOrder + 1;
             const nextWeight = currentForm.niveis.length > 0
                 ? Math.max(0.0001, lastWeight / multiplier)
@@ -750,11 +733,13 @@ export function RoletaAdminPanel() {
         if (!Number.isFinite(nextId) || selectedIds.includes(nextId)) return;
 
         setSelectedIds((currentIds) => [...currentIds, nextId]);
+        setProdutosAlterados(true);
         setAddProdutoId('');
     };
 
     const removeProduto = (produtoId: number) => {
         setSelectedIds((currentIds) => currentIds.filter((id) => id !== produtoId));
+        setProdutosAlterados(true);
     };
 
     const moveProduto = (produtoId: number, direction: -1 | 1) => {
@@ -772,6 +757,7 @@ export function RoletaAdminPanel() {
                 nextIds[currentIndex],
             ];
 
+            setProdutosAlterados(true);
             return nextIds;
         });
     };
@@ -792,10 +778,11 @@ export function RoletaAdminPanel() {
         try {
             const { data } = await api.put<AdminRoletaResponse>(
                 apiRoutes.admin.roleta,
-                createPayload(form, selectedIds),
+                createPayload(form, selectedIds, produtosAlterados),
             );
 
-            setSelectedIds(normalizeIds(data.produtoIds));
+            setSelectedIds((currentIds) => normalizeSelectedProductIds(data, currentIds));
+            setProdutosAlterados(false);
             setForm(createFormFromRoleta(data));
             setSuccess('Roleta atualizada com sucesso.');
         } catch {
@@ -888,7 +875,7 @@ export function RoletaAdminPanel() {
                         )}
 
                         {form.niveis.length === 0 ? (
-                            <div style={emptyStyle}>Nenhum nivel cadastrado para a roleta.</div>
+                            <div style={emptyStyle}>Nenhum nível cadastrado.</div>
                         ) : (
                             <div style={levelsListStyle}>
                                 {form.niveis
@@ -959,12 +946,28 @@ export function RoletaAdminPanel() {
                                                     <label style={fieldLabelStyle}>
                                                         Peso relativo
                                                         <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="0.0001"
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            step="0.00001"
                                                             value={level.pesoRelativo}
-                                                            onChange={(event) => updateLevel(level.localId, 'pesoRelativo', event.target.value)}
+                                                            onChange={(event) => {
+                                                                const nextValue = event.target.value;
+                                                                if (isDecimalDraft(nextValue)) {
+                                                                    updateLevel(level.localId, 'pesoRelativo', nextValue);
+                                                                }
+                                                            }}
                                                             style={inputStyle}
+                                                        />
+                                                        <span style={fieldHintStyle}>
+                                                            Peso relativo define a chance. A chance calculada e somente leitura.
+                                                        </span>
+                                                    </label>
+                                                    <label style={fieldLabelStyle}>
+                                                        Chance calculada
+                                                        <input
+                                                            value={formatChance(levelChances[level.localId])}
+                                                            readOnly
+                                                            style={{ ...inputStyle, background: '#F4F4F4', color: '#687152' }}
                                                         />
                                                     </label>
                                                 </div>
@@ -987,7 +990,7 @@ export function RoletaAdminPanel() {
                                                     <strong>Premios do nivel</strong>
                                                     <button type="button" onClick={() => addPrize(level.localId)} style={miniButtonStyle}>
                                                         <Plus size={12} />
-                                                        Premio
+                                                        Adicionar valor
                                                     </button>
                                                 </div>
 
@@ -1001,15 +1004,6 @@ export function RoletaAdminPanel() {
                                                             .map((prize) => (
                                                                 <article key={prize.localId} style={prizeCardStyle}>
                                                                     <div style={prizeGridStyle}>
-                                                                        <label style={fieldLabelStyle}>
-                                                                            Titulo
-                                                                            <input
-                                                                                value={prize.titulo}
-                                                                                onChange={(event) => updatePrize(level.localId, prize.localId, 'titulo', event.target.value)}
-                                                                                placeholder="Ex: R$10 de desconto"
-                                                                                style={inputStyle}
-                                                                            />
-                                                                        </label>
                                                                         <label style={fieldLabelStyle}>
                                                                             Tipo
                                                                             <select
@@ -1032,23 +1026,16 @@ export function RoletaAdminPanel() {
                                                                         <label style={fieldLabelStyle}>
                                                                             Valor
                                                                             <input
-                                                                                type="number"
-                                                                                min="0"
+                                                                                type="text"
+                                                                                inputMode="decimal"
                                                                                 step="0.01"
                                                                                 value={prize.valor}
-                                                                                disabled={prize.tipoPremio === 'SEM_PREMIO'}
-                                                                                onChange={(event) => updatePrize(level.localId, prize.localId, 'valor', event.target.value)}
-                                                                                style={inputStyle}
-                                                                            />
-                                                                        </label>
-                                                                        <label style={fieldLabelStyle}>
-                                                                            Peso interno
-                                                                            <input
-                                                                                type="number"
-                                                                                min="0"
-                                                                                step="0.0001"
-                                                                                value={prize.pesoInterno}
-                                                                                onChange={(event) => updatePrize(level.localId, prize.localId, 'pesoInterno', event.target.value)}
+                                                                                onChange={(event) => {
+                                                                                    const nextValue = event.target.value;
+                                                                                    if (isDecimalDraft(nextValue)) {
+                                                                                        updatePrize(level.localId, prize.localId, 'valor', nextValue);
+                                                                                    }
+                                                                                }}
                                                                                 style={inputStyle}
                                                                             />
                                                                         </label>
@@ -1070,23 +1057,14 @@ export function RoletaAdminPanel() {
                                                                             />
                                                                             Ativo
                                                                         </label>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => removePrize(level.localId, prize.localId)}
+                                                                            style={dangerTextButtonStyle}
+                                                                        >
+                                                                            Remover
+                                                                        </button>
                                                                     </div>
-
-                                                                    <textarea
-                                                                        value={prize.descricao}
-                                                                        onChange={(event) => updatePrize(level.localId, prize.localId, 'descricao', event.target.value)}
-                                                                        placeholder="Descricao opcional do premio"
-                                                                        style={textareaStyle}
-                                                                        rows={2}
-                                                                    />
-
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => removePrize(level.localId, prize.localId)}
-                                                                        style={dangerTextButtonStyle}
-                                                                    >
-                                                                        Remover premio
-                                                                    </button>
                                                                 </article>
                                                             ))}
                                                     </div>
@@ -1265,6 +1243,12 @@ const fieldLabelStyle: CSSProperties = {
     gap: '6px',
     color: '#555',
     fontSize: '11px',
+};
+
+const fieldHintStyle: CSSProperties = {
+    color: '#777',
+    fontSize: '10px',
+    lineHeight: 1.3,
 };
 
 const hintStyle: CSSProperties = {

@@ -170,6 +170,15 @@ public class RoletaGiro {
         this.status = status == null ? RoletaGiroStatus.PENDENTE : status;
     }
 
+    public void descartar() {
+        status = RoletaGiroStatus.DESCARTADO;
+    }
+
+    public void marcarUsado() {
+        status = RoletaGiroStatus.USADO;
+        usadoEm = LocalDateTime.now();
+    }
+
     public LocalDateTime getCriadoEm() {
         return criadoEm;
     }

@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record RoletaGiroResponse(
         RoletaPremioResponse premio,
         RoletaPremioResponse premioSorteado,
+        RoletaPremioResponse premioAtual,
         RoletaOpcaoResponse opcaoSorteada,
         RoletaNivelResponse nivelSorteado,
         String corNivel,

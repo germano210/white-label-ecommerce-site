@@ -91,6 +91,9 @@ public class PagamentoWebhookService {
     private void atualizarPedido(Pedido pedido, PagamentoStatus status) {
         if (status == PagamentoStatus.PAGO) {
             pedido.marcarPago();
+            if (pedido.getRoletaGiro() != null) {
+                pedido.getRoletaGiro().marcarUsado();
+            }
             return;
         }
 

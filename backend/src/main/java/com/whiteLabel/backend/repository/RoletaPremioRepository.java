@@ -3,6 +3,7 @@ package com.whiteLabel.backend.repository;
 import com.whiteLabel.backend.domain.RoletaPremio;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -16,4 +17,9 @@ public interface RoletaPremioRepository extends JpaRepository<RoletaPremio, Long
     @Query("select premio from RoletaPremio premio join fetch premio.nivel nivel "
             + "order by nivel.ordem asc, premio.ordem asc, premio.id asc")
     List<RoletaPremio> findAllOrdenados();
+
+    @Query("select premio from RoletaPremio premio join fetch premio.nivel nivel "
+            + "where nivel.id = :nivelId "
+            + "order by premio.ordem asc, premio.id asc")
+    List<RoletaPremio> findByNivelIdOrdenados(@Param("nivelId") Long nivelId);
 }

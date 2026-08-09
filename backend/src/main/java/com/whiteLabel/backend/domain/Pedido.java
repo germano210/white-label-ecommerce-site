@@ -58,6 +58,10 @@ public class Pedido {
     @Column(name = "order_nsu", unique = true, length = 80)
     private String orderNsu;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "roleta_giro_id")
+    private RoletaGiro roletaGiro;
+
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PedidoItem> itens = new ArrayList<>();
 
@@ -98,6 +102,10 @@ public class Pedido {
 
     public void definirOrderNsu(String orderNsu) {
         this.orderNsu = Objects.requireNonNull(orderNsu);
+    }
+
+    public void vincularPremioRoleta(RoletaGiro roletaGiro) {
+        this.roletaGiro = roletaGiro;
     }
 
     public void aguardarPagamento() {
@@ -174,6 +182,10 @@ public class Pedido {
 
     public String getOrderNsu() {
         return orderNsu;
+    }
+
+    public RoletaGiro getRoletaGiro() {
+        return roletaGiro;
     }
 
     public List<PedidoItem> getItens() {

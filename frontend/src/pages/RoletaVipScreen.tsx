@@ -67,42 +67,15 @@ interface RoletaNivelApi {
     ativo?: boolean | number | string | null;
     ativa?: boolean | number | string | null;
     premios?: RoletaPremioApi[] | null;
-    opcoes?: RoletaPremioApi[] | null;
 }
-
-type RoletaOpcaoApi = string | {
-    id?: number | string | null;
-    label?: string | null;
-    titulo?: string | null;
-    texto?: string | null;
-    nome?: string | null;
-    descricao?: string | null;
-    valorFormatado?: string | null;
-    valor_formatado?: string | null;
-    nivel?: number | string | null;
-    nivelNome?: string | null;
-    nivel_nome?: string | null;
-    corHex?: string | null;
-    cor_hex?: string | null;
-    ordem?: number | string | null;
-    ativo?: boolean | number | string | null;
-    ativa?: boolean | number | string | null;
-    tipoPremio?: RoletaTipoPremio | string | null;
-    tipo_premio?: RoletaTipoPremio | string | null;
-    valor?: NumericApiValue;
-    valorPremio?: NumericApiValue;
-    valor_premio?: NumericApiValue;
-    valorMinimo?: NumericApiValue;
-    valor_minimo?: NumericApiValue;
-    valorMaximo?: NumericApiValue;
-    valor_maximo?: NumericApiValue;
-};
 
 interface RoletaStatusApi {
     ativa?: boolean | null;
     titulo?: string | null;
     premioAtual?: RoletaPremioApi | null;
     premio_atual?: RoletaPremioApi | null;
+    premioPendente?: RoletaPremioApi | null;
+    premio_pendente?: RoletaPremioApi | null;
     premioVigente?: RoletaPremioApi | null;
     premio_vigente?: RoletaPremioApi | null;
     descontoAtual?: RoletaPremioApi | null;
@@ -124,20 +97,16 @@ interface RoletaStatusApi {
     niveis?: RoletaNivelApi[] | null;
     niveisRoleta?: RoletaNivelApi[] | null;
     niveis_roleta?: RoletaNivelApi[] | null;
-    opcoes?: RoletaOpcaoApi[] | null;
-    fatias?: RoletaOpcaoApi[] | null;
-    premiosEmJogo?: RoletaOpcaoApi[] | null;
-    premios_em_jogo?: RoletaOpcaoApi[] | null;
 }
 
 interface RoletaGiroResponse {
     premioAtual?: RoletaPremioApi | null;
     premio_atual?: RoletaPremioApi | null;
+    premioPendente?: RoletaPremioApi | null;
+    premio_pendente?: RoletaPremioApi | null;
     premio?: RoletaPremioApi | null;
     premioSorteado?: RoletaPremioApi | null;
     premio_sorteado?: RoletaPremioApi | null;
-    opcaoSorteada?: RoletaOpcaoApi | null;
-    opcao_sorteada?: RoletaOpcaoApi | null;
     girosDisponiveis?: NumericApiValue;
     giros_disponiveis?: NumericApiValue;
     roleta?: RoletaStatusApi | null;
@@ -296,10 +265,6 @@ function normalizeHexColor(value: string | null | undefined, fallback: string) {
     return fallback;
 }
 
-function isOptionObject(option: RoletaOpcaoApi | null | undefined): option is Exclude<RoletaOpcaoApi, string> {
-    return typeof option === 'object' && option !== null;
-}
-
 function normalizeNotification(notification: RoletaNotificacaoApi) {
     if (typeof notification === 'string') return notification.trim();
 
@@ -323,20 +288,6 @@ function normalizeNotification(notification: RoletaNotificacaoApi) {
     return productName ? `Um membro resgatou a ${productName}` : '';
 }
 
-function getOptionLabel(option: RoletaOpcaoApi, index: number) {
-    if (typeof option === 'string') return option.trim() || `Opcao ${index + 1}`;
-
-    return (
-        option.label
-        ?? option.titulo
-        ?? option.texto
-        ?? option.nome
-        ?? option.valorFormatado
-        ?? option.valor_formatado
-        ?? `Opcao ${index + 1}`
-    ).trim();
-}
-
 function normalizeWheelSlicesFromLevels(levels: RoletaNivelApi[]) {
     return levels
         .filter((level) => toBoolean(level.ativo ?? level.ativa, true))
@@ -355,65 +306,16 @@ function normalizeWheelSlicesFromLevels(levels: RoletaNivelApi[]) {
         .sort((a, b) => a.order - b.order);
 }
 
-function normalizeWheelSlicesFromFlatOptions(options: RoletaOpcaoApi[]) {
-    const groups = new Map<number, RoletaWheelSlice>();
-    const directSlices: RoletaWheelSlice[] = [];
-
-    options.forEach((option, index) => {
-        if (!isOptionObject(option)) {
-            const preset = rarityPresets[index % rarityPresets.length];
-            directSlices.push({
-                id: `opcao-${index}`,
-                label: getOptionLabel(option, index),
-                color: preset.corHex,
-                order: index + 1,
-                level: index + 1,
-            });
-            return;
-        }
-
-        if (!toBoolean(option.ativo ?? option.ativa, true)) return;
-
-        const level = Math.max(1, Math.floor(parseApiNumber(option.nivel ?? index + 1)));
-        const preset = rarityPresets[(level - 1) % rarityPresets.length];
-        const currentGroup = groups.get(level);
-
-        if (currentGroup) return;
-
-        groups.set(level, {
-            id: String(option.id ?? `nivel-${level}`),
-            label: (
-                option.nivelNome
-                ?? option.nivel_nome
-                ?? preset.nome
-                ?? getOptionLabel(option, index)
-            ).trim(),
-            color: normalizeHexColor(option.corHex ?? option.cor_hex, preset.corHex),
-            order: Math.max(1, Math.floor(parseApiNumber(option.ordem ?? level))),
-            level,
-        });
-    });
-
-    if (groups.size > 0) {
-        return Array.from(groups.values()).sort((a, b) => a.order - b.order);
-    }
-
-    return directSlices;
-}
-
 function normalizeWheelSlices(data?: RoletaStatusApi | null) {
     const rawLevels = data?.niveis ?? data?.niveisRoleta ?? data?.niveis_roleta ?? [];
-    if (rawLevels.length > 0) {
-        return normalizeWheelSlicesFromLevels(rawLevels);
-    }
-
-    const rawWheelOptions = data?.opcoes ?? data?.fatias ?? data?.premiosEmJogo ?? data?.premios_em_jogo ?? [];
-    return normalizeWheelSlicesFromFlatOptions(rawWheelOptions);
+    return normalizeWheelSlicesFromLevels(rawLevels);
 }
 
 function getPremioAtualFromStatus(data?: RoletaStatusApi | null) {
     return data?.premioAtual
         ?? data?.premio_atual
+        ?? data?.premioPendente
+        ?? data?.premio_pendente
         ?? data?.premioVigente
         ?? data?.premio_vigente
         ?? data?.descontoAtual
@@ -424,6 +326,8 @@ function getPremioAtualFromStatus(data?: RoletaStatusApi | null) {
 function getPremioAtualFromSpin(data?: RoletaGiroResponse | null) {
     return data?.premioAtual
         ?? data?.premio_atual
+        ?? data?.premioPendente
+        ?? data?.premio_pendente
         ?? data?.premioSorteado
         ?? data?.premio_sorteado
         ?? data?.premio
@@ -555,14 +459,11 @@ function getPrizeNumericValue(prize?: RoletaPremioApi | null) {
 function createPrizeView(
     premio: RoletaPremioApi | null | undefined,
     slices: RoletaWheelSlice[],
-    opcao?: RoletaOpcaoApi | null,
 ): RoletaSpinResult | null {
-    if (!premio && !opcao) return null;
+    if (!premio) return null;
 
-    const optionObject = isOptionObject(opcao) ? opcao : null;
     const levelNumber = Math.max(1, Math.floor(parseApiNumber(
         premio?.nivel
-        ?? optionObject?.nivel
         ?? 1,
     )));
     const matchedSlice = slices.find((slice) => slice.level === levelNumber) ?? slices[0];
@@ -570,19 +471,15 @@ function createPrizeView(
     const nivelNome = (
         premio?.nivelNome
         ?? premio?.nivel_nome
-        ?? optionObject?.nivelNome
-        ?? optionObject?.nivel_nome
         ?? matchedSlice?.label
         ?? preset.nome
     ).trim();
     const premioTitulo = (
         premio?.titulo
-        ?? (optionObject ? getOptionLabel(optionObject, 0) : '')
         ?? 'Premio sorteado'
     ).trim();
     const premioDescricao = (
         premio?.descricao
-        ?? optionObject?.descricao
         ?? ''
     ).trim();
     const tipoPremio = getPremioTipo(premio);
@@ -595,9 +492,9 @@ function createPrizeView(
         nivelCor: normalizeHexColor(
             premio?.corHex
             ?? premio?.cor_hex
-            ?? optionObject?.corHex
-            ?? optionObject?.cor_hex,
-            matchedSlice?.color ?? preset.corHex,
+            ?? matchedSlice?.color
+            ?? null,
+            preset.corHex,
         ),
         premioTitulo: premioTitulo || 'Premio sorteado',
         premioDescricao,
@@ -611,7 +508,6 @@ function createSpinResult(data: RoletaGiroResponse, slices: RoletaWheelSlice[]):
     return createPrizeView(
         getPremioAtualFromSpin(data),
         slices,
-        data.opcaoSorteada ?? data.opcao_sorteada ?? null,
     );
 }
 

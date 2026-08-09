@@ -1,10 +1,12 @@
 package com.whiteLabel.backend.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record AdminRoletaNivelRequest(
         Long id,
@@ -13,6 +15,7 @@ public record AdminRoletaNivelRequest(
         @Pattern(regexp = "^#[0-9a-fA-F]{6}$") String corHex,
         Integer ordem,
         @DecimalMin(value = "0.00000001") BigDecimal pesoRelativo,
-        Boolean ativo
+        Boolean ativo,
+        List<@Valid AdminRoletaPremioRequest> premios
 ) {
 }

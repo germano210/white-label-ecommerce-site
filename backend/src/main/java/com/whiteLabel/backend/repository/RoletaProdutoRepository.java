@@ -8,4 +8,6 @@ import java.util.List;
 public interface RoletaProdutoRepository extends JpaRepository<RoletaProduto, Long> {
 
     List<RoletaProduto> findByAtivoTrueOrderByOrdemAscIdAsc();
+
+    boolean existsByProdutoIdAndAtivoTrue(Long produtoId);
 }

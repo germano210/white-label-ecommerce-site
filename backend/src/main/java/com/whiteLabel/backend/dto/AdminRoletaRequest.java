@@ -17,6 +17,7 @@ public record AdminRoletaRequest(
         Integer girosGanhosPorConvite,
         BigDecimal multiplicadorDificuldadePadrao,
         Boolean usarPesosManuais,
+        Boolean atualizarProdutos,
         List<Long> produtoIds,
         List<@Valid AdminRoletaNivelRequest> niveis,
         List<@Valid AdminRoletaOpcaoRequest> opcoes,

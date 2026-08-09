@@ -1,5 +1,6 @@
 package com.whiteLabel.backend.controller;
 
+import com.whiteLabel.backend.dto.CheckoutResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
@@ -7,10 +8,13 @@ import com.whiteLabel.backend.dto.RoletaGiroResponse;
 import com.whiteLabel.backend.dto.RoletaStatusResponse;
 import com.whiteLabel.backend.service.RoletaService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -38,6 +42,12 @@ public class RoletaController {
     @GetMapping("/produtos")
     public List<ProdutoResponseDTO> produtos() {
         return roletaService.listarProdutosRoleta();
+    }
+
+    @PostMapping("/produtos/{produtoId}/resgatar")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CheckoutResponse resgatarProduto(@PathVariable Long produtoId) {
+        return roletaService.resgatarProduto(produtoId);
     }
 
     @GetMapping("/convites")

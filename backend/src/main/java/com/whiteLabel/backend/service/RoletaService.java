@@ -21,6 +21,7 @@ import com.whiteLabel.backend.dto.AdminRoletaPremioRequest;
 import com.whiteLabel.backend.dto.AdminRoletaPremioResponse;
 import com.whiteLabel.backend.dto.AdminRoletaRequest;
 import com.whiteLabel.backend.dto.AdminRoletaResponse;
+import com.whiteLabel.backend.dto.CheckoutResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
@@ -77,13 +78,6 @@ public class RoletaService {
     private static final String ALFABETO = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int TAMANHO_CODIGO = 16;
     private static final int MAX_TENTATIVAS_GERACAO = 20;
-    private static final List<NivelPadrao> NIVEIS_PADRAO = List.of(
-            new NivelPadrao("Grau Militar", "Azul, raridade mais comum.", "#4b69ff", 1, "1.00000000"),
-            new NivelPadrao("Restrito", "Roxo, aproximadamente cinco vezes mais dificil.", "#8847ff", 2, "0.20000000"),
-            new NivelPadrao("Classificado", "Rosa, queda rara.", "#d32ce6", 3, "0.04000000"),
-            new NivelPadrao("Encoberto/Secreto", "Vermelho, premio secreto.", "#eb4b4b", 4, "0.00800000"),
-            new NivelPadrao("Extremamente Raro/Ouro", "Dourado, queda premium.", "#ffd700", 5, "0.00325000")
-    );
     private static final List<FaixaDesconto> FAIXAS_PADRAO = List.of(
             new FaixaDesconto("0.82", "1.60"),
             new FaixaDesconto("1.14", "3.36"),
@@ -109,6 +103,7 @@ public class RoletaService {
     private final RoletaPremioRepository roletaPremioRepository;
     private final ProdutoRepository produtoRepository;
     private final ProdutoService produtoService;
+    private final PedidoService pedidoService;
     private final UsuarioRepository usuarioRepository;
     private final SecureRandom secureRandom;
     private final Clock clock;
@@ -125,6 +120,7 @@ public class RoletaService {
             RoletaPremioRepository roletaPremioRepository,
             ProdutoRepository produtoRepository,
             ProdutoService produtoService,
+            PedidoService pedidoService,
             UsuarioRepository usuarioRepository,
             @Value("${app.frontend.public-base-url:https://brechodacami.com}") String frontendBaseUrl
     ) {
@@ -138,6 +134,7 @@ public class RoletaService {
         this.roletaPremioRepository = roletaPremioRepository;
         this.produtoRepository = produtoRepository;
         this.produtoService = produtoService;
+        this.pedidoService = pedidoService;
         this.usuarioRepository = usuarioRepository;
         this.secureRandom = new SecureRandom();
         this.clock = Clock.systemDefaultZone();
@@ -146,8 +143,7 @@ public class RoletaService {
 
     @Transactional
     public RoletaStatusResponse obterStatus() {
-        RoletaConfig config = obterConfig();
-        garantirNiveisPadraoSeNecessario();
+        RoletaConfig config = obterConfigSomenteLeitura();
         RoletaParticipante participante = obterUsuarioAutenticadoOptional()
                 .map(usuario -> garantirParticipante(usuario, config))
                 .orElse(null);
@@ -159,7 +155,6 @@ public class RoletaService {
     public RoletaGiroResponse girar() {
         Usuario usuario = obterUsuarioAutenticado();
         RoletaConfig config = obterConfigForUpdate();
-        garantirNiveisPadraoSeNecessario();
 
         if (!Boolean.TRUE.equals(config.getAtiva())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Roleta inativa");
@@ -183,6 +178,7 @@ public class RoletaService {
         RoletaNivel nivelSorteado = sortearNivel(niveisAtivos);
         RoletaPremio premioSorteado = sortearPremio(premiosDoNivel(premiosAtivos, nivelSorteado));
         PremioCalculado premioCalculado = calcularPremio(premioSorteado);
+        descartarPremiosPendentes(usuario.getId());
         RoletaGiro giro = roletaGiroRepository.save(new RoletaGiro(
                 usuario,
                 nivelSorteado,
@@ -191,9 +187,6 @@ public class RoletaService {
                 premioCalculado.girosExtras()
         ));
 
-        if (premioSorteado.getTipoPremio() == RoletaTipoPremio.DESCONTO_VALOR) {
-            participante.adicionarValorDisponivel(premioCalculado.valorPremio());
-        }
         if (premioSorteado.getTipoPremio() == RoletaTipoPremio.GIRO_EXTRA) {
             participante.adicionarGiros(premioCalculado.girosExtras());
         }
@@ -205,6 +198,7 @@ public class RoletaService {
         RoletaPremioResponse premio = RoletaPremioResponse.from(giro);
         Map<Long, BigDecimal> chances = calcularChances(niveisAtivos);
         return new RoletaGiroResponse(
+                premio,
                 premio,
                 premio,
                 null,
@@ -220,6 +214,34 @@ public class RoletaService {
     @Transactional(readOnly = true)
     public List<ProdutoResponseDTO> listarProdutosRoleta() {
         return montarProdutosSelecionados();
+    }
+
+    @Transactional
+    public CheckoutResponse resgatarProduto(Long produtoId) {
+        Usuario usuario = obterUsuarioAutenticado();
+        Produto produto = produtoRepository.findById(produtoId)
+                .filter(produtoEncontrado -> Boolean.TRUE.equals(produtoEncontrado.getAtivo()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Produto nao encontrado"
+                ));
+
+        if (!roletaProdutoRepository.existsByProdutoIdAndAtivoTrue(produtoId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Produto nao pertence aos produtos ativos da roleta"
+            );
+        }
+
+        RoletaGiro premioAtual = obterPremioAtualForUpdate(usuario).orElse(null);
+        BigDecimal descontoAplicado = calcularDescontoAplicavel(produto, premioAtual);
+
+        return pedidoService.criarCheckoutProdutoRoleta(
+                usuario,
+                produto,
+                premioAtual,
+                descontoAplicado
+        );
     }
 
     @Transactional
@@ -269,19 +291,15 @@ public class RoletaService {
         return montarConvitesResponse(config, participanteIndicado);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public AdminRoletaResponse obterAdmin() {
-        RoletaConfig config = obterConfig();
-        garantirNiveisPadraoSeNecessario();
+        RoletaConfig config = obterConfigSomenteLeitura();
         return montarAdminResponse(config);
     }
 
     @Transactional
     public AdminRoletaResponse atualizarAdmin(AdminRoletaRequest request) {
         RoletaConfig config = obterConfigForUpdate();
-        if (request.niveis() == null) {
-            garantirNiveisPadraoSeNecessario();
-        }
 
         if (request.ativa() != null) {
             config.setAtiva(request.ativa());
@@ -317,25 +335,39 @@ public class RoletaService {
         if (request.usarPesosManuais() != null) {
             config.setUsarPesosManuais(request.usarPesosManuais());
         }
-        if (request.produtoIds() != null) {
+        if (deveAtualizarProdutosSelecionados(request)) {
             atualizarProdutosSelecionados(request.produtoIds());
         }
+        boolean possuiPremiosAninhados = possuiPremiosAninhados(request);
         if (request.niveis() != null) {
             atualizarNiveis(config, request.niveis());
         }
-        if (request.opcoes() != null) {
-            atualizarOpcoes(request.opcoes());
-        }
-        if (request.premios() != null) {
+        if (!possuiPremiosAninhados && request.premios() != null) {
             atualizarPremios(request.premios());
         }
 
         return montarAdminResponse(roletaConfigRepository.save(config));
     }
 
+    private boolean deveAtualizarProdutosSelecionados(AdminRoletaRequest request) {
+        return request.produtoIds() != null
+                && (!request.produtoIds().isEmpty() || Boolean.TRUE.equals(request.atualizarProdutos()));
+    }
+
+    private boolean possuiPremiosAninhados(AdminRoletaRequest request) {
+        return request.niveis() != null
+                && request.niveis().stream()
+                .anyMatch(nivel -> nivel != null && nivel.premios() != null);
+    }
+
     private RoletaConfig obterConfig() {
         return roletaConfigRepository.findById(CONFIG_ID)
                 .orElseGet(() -> roletaConfigRepository.save(criarConfigPadrao()));
+    }
+
+    private RoletaConfig obterConfigSomenteLeitura() {
+        return roletaConfigRepository.findById(CONFIG_ID)
+                .orElseGet(this::criarConfigPadrao);
     }
 
     private RoletaConfig obterConfigForUpdate() {
@@ -347,27 +379,6 @@ public class RoletaService {
         RoletaConfig config = new RoletaConfig();
         config.setId(CONFIG_ID);
         return config;
-    }
-
-    private void garantirNiveisPadraoSeNecessario() {
-        if (roletaNivelRepository.count() > 0) {
-            return;
-        }
-
-        List<RoletaNivel> niveisPadrao = NIVEIS_PADRAO.stream()
-                .map(nivelPadrao -> {
-                    RoletaNivel nivel = new RoletaNivel();
-                    nivel.setNome(nivelPadrao.nome());
-                    nivel.setDescricao(nivelPadrao.descricao());
-                    nivel.setCorHex(nivelPadrao.corHex());
-                    nivel.setOrdem(nivelPadrao.ordem());
-                    nivel.setPesoRelativo(new BigDecimal(nivelPadrao.pesoRelativo()));
-                    nivel.setAtivo(true);
-                    return nivel;
-                })
-                .toList();
-
-        roletaNivelRepository.saveAll(niveisPadrao);
     }
 
     private void validarMultiplicadorDificuldade(BigDecimal multiplicador) {
@@ -415,6 +426,63 @@ public class RoletaService {
         config.setProgressoGrupo(progresso);
     }
 
+    private void descartarPremiosPendentes(UUID usuarioId) {
+        List<RoletaGiro> pendentes = roletaGiroRepository.findByUsuarioIdAndStatusForUpdate(
+                usuarioId,
+                RoletaGiroStatus.PENDENTE
+        );
+
+        pendentes.forEach(RoletaGiro::descartar);
+        roletaGiroRepository.saveAll(pendentes);
+    }
+
+    private Optional<RoletaGiro> obterPremioAtualForUpdate(Usuario usuario) {
+        List<RoletaGiro> pendentes = roletaGiroRepository.findByUsuarioIdAndStatusForUpdate(
+                usuario.getId(),
+                RoletaGiroStatus.PENDENTE
+        );
+
+        if (pendentes.isEmpty()) {
+            return Optional.empty();
+        }
+
+        RoletaGiro premioAtual = pendentes.get(0);
+        if (pendentes.size() > 1) {
+            pendentes.stream()
+                    .skip(1)
+                    .forEach(RoletaGiro::descartar);
+            roletaGiroRepository.saveAll(pendentes.subList(1, pendentes.size()));
+        }
+
+        return Optional.of(premioAtual);
+    }
+
+    private BigDecimal calcularDescontoAplicavel(Produto produto, RoletaGiro premioAtual) {
+        if (premioAtual == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal precoOriginal = produto.getPrecoVenda() == null
+                ? BigDecimal.ZERO
+                : produto.getPrecoVenda().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal desconto = BigDecimal.ZERO;
+
+        if (premioAtual.getTipoPremio() == RoletaTipoPremio.DESCONTO_VALOR) {
+            desconto = premioAtual.getValorPremio();
+        }
+        if (premioAtual.getTipoPremio() == RoletaTipoPremio.DESCONTO_PERCENTUAL) {
+            desconto = precoOriginal
+                    .multiply(premioAtual.getValorPremio())
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        }
+
+        if (desconto.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return desconto.min(precoOriginal).setScale(2, RoundingMode.HALF_UP);
+    }
+
     private RoletaStatusResponse montarStatus(
             RoletaConfig config,
             RoletaParticipante participante
@@ -459,6 +527,7 @@ public class RoletaService {
                 participante != null && isGiroDiarioDisponivel(participante, config, now),
                 participante == null ? null : calcularProximoGiroDiarioEm(participante, config, now),
                 premioPendente,
+                premioPendente,
                 montarUltimosEventos(),
                 montarPremiosEmJogo()
         );
@@ -484,10 +553,8 @@ public class RoletaService {
     }
 
     private List<RoletaOpcaoResponse> montarOpcoesPublicas() {
-        return roletaOpcaoRepository.findByAtivaTrueOrderByNivelAscOrdemAscIdAsc()
-                .stream()
-                .map(RoletaOpcaoResponse::from)
-                .toList();
+        // TODO: roleta_opcoes e legado; remover DTO, repositorio e tabela apos o painel usar apenas niveis/premios.
+        return List.of();
     }
 
     private List<RoletaPremioConfiguradoResponse> montarPremiosPublicos() {
@@ -525,17 +592,12 @@ public class RoletaService {
     }
 
     private List<AdminRoletaOpcaoResponse> montarOpcoesAdmin() {
-        return roletaOpcaoRepository.findAllByOrderByNivelAscOrdemAscIdAsc()
-                .stream()
-                .map(AdminRoletaOpcaoResponse::from)
-                .toList();
+        // TODO: roleta_opcoes e legado; manter lista vazia ate a remocao definitiva da tabela.
+        return List.of();
     }
 
     private List<AdminRoletaPremioResponse> montarPremiosAdmin() {
-        return roletaPremioRepository.findAllOrdenados()
-                .stream()
-                .map(AdminRoletaPremioResponse::from)
-                .toList();
+        return List.of();
     }
 
     private Map<Long, BigDecimal> calcularChances(List<RoletaNivel> niveisAtivos) {
@@ -631,16 +693,13 @@ public class RoletaService {
         if (!Boolean.TRUE.equals(premio.getNivel().getAtivo())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Premio ativo deve pertencer a nivel ativo");
         }
-        if (premio.getTitulo() == null || premio.getTitulo().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Premio da roleta sem titulo");
-        }
         if (premio.getTipoPremio() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Premio da roleta sem tipo");
         }
-        if (premio.getPesoInterno().compareTo(BigDecimal.ZERO) <= 0) {
+        if (!isTipoPremioPermitidoNoAdmin(premio.getTipoPremio())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Premio ativo da roleta deve ter peso interno maior que zero"
+                    "Premio ativo da roleta deve ser desconto em valor ou percentual"
             );
         }
         if (premio.getValor().compareTo(BigDecimal.ZERO) < 0) {
@@ -666,28 +725,14 @@ public class RoletaService {
     }
 
     private RoletaPremio sortearPremio(List<RoletaPremio> premios) {
-        BigDecimal pesoTotal = premios.stream()
-                .map(RoletaPremio::getPesoInterno)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        if (pesoTotal.compareTo(BigDecimal.ZERO) <= 0) {
+        if (premios.isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Roleta sem premios com peso interno valido"
+                    "Roleta sem premios ativos no nivel sorteado"
             );
         }
 
-        BigDecimal pontoSorteado = BigDecimal.valueOf(secureRandom.nextDouble())
-                .multiply(pesoTotal);
-        BigDecimal acumulado = BigDecimal.ZERO;
-        for (RoletaPremio premio : premios) {
-            acumulado = acumulado.add(premio.getPesoInterno());
-            if (pontoSorteado.compareTo(acumulado) < 0) {
-                return premio;
-            }
-        }
-
-        return premios.get(premios.size() - 1);
+        return premios.get(secureRandom.nextInt(premios.size()));
     }
 
     private RoletaNivel sortearNivel(List<RoletaNivel> niveis) {
@@ -841,6 +886,7 @@ public class RoletaService {
 
         Set<Long> idsRecebidos = new LinkedHashSet<>();
         List<RoletaNivel> proximosNiveis = new ArrayList<>();
+        List<PremiosNivelRequest> premiosPorNivel = new ArrayList<>();
         BigDecimal ultimoPeso = BigDecimal.ZERO;
 
         List<AdminRoletaNivelRequest> requestsOrdenados = requests.stream()
@@ -849,6 +895,7 @@ public class RoletaService {
                         Comparator.nullsLast(Comparator.naturalOrder())
                 )))
                 .toList();
+        validarDuplicidadeNiveis(requestsOrdenados);
 
         for (AdminRoletaNivelRequest request : requestsOrdenados) {
             validarNivelRequest(request);
@@ -873,6 +920,9 @@ public class RoletaService {
             aplicarNivel(config, nivel, request, ultimoPeso);
             ultimoPeso = nivel.getPesoRelativo();
             proximosNiveis.add(nivel);
+            if (request.premios() != null) {
+                premiosPorNivel.add(new PremiosNivelRequest(nivel, request.premios()));
+            }
         }
 
         Set<Long> idsMantidos = idsRecebidos;
@@ -884,6 +934,34 @@ public class RoletaService {
                 });
 
         roletaNivelRepository.saveAll(proximosNiveis);
+        roletaNivelRepository.flush();
+        premiosPorNivel.forEach(premios -> atualizarPremiosDoNivel(premios.nivel(), premios.premios()));
+    }
+
+    private void validarDuplicidadeNiveis(List<AdminRoletaNivelRequest> requests) {
+        Set<Integer> ordensRecebidas = new LinkedHashSet<>();
+        Set<String> nomesRecebidos = new LinkedHashSet<>();
+
+        for (AdminRoletaNivelRequest request : requests) {
+            if (request == null) {
+                continue;
+            }
+            if (request.ordem() != null && !ordensRecebidas.add(request.ordem())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Ordem do nivel da roleta repetida: " + request.ordem()
+                );
+            }
+            if (request.nome() != null && !request.nome().isBlank()) {
+                String nomeNormalizado = request.nome().trim().toLowerCase(Locale.ROOT);
+                if (!nomesRecebidos.add(nomeNormalizado)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Nome do nivel da roleta repetido: " + request.nome().trim()
+                    );
+                }
+            }
+        }
     }
 
     private void aplicarNivel(
@@ -1085,7 +1163,7 @@ public class RoletaService {
         List<RoletaPremio> proximosPremios = new ArrayList<>();
 
         for (AdminRoletaPremioRequest request : requests) {
-            validarPremioRequest(request);
+            validarPremioRequest(request, true);
 
             RoletaPremio premio = request.id() == null
                     ? new RoletaPremio()
@@ -1129,6 +1207,64 @@ public class RoletaService {
                 .filter(premio -> premio.getId() != null && !idsMantidos.contains(premio.getId()))
                 .forEach(premio -> {
                     premio.setAtivo(false);
+                    premio.setPesoInterno(BigDecimal.ONE);
+                    proximosPremios.add(premio);
+                });
+
+        roletaPremioRepository.saveAll(proximosPremios);
+    }
+
+    private void atualizarPremiosDoNivel(RoletaNivel nivel, List<AdminRoletaPremioRequest> requests) {
+        List<RoletaPremio> existentes = roletaPremioRepository.findByNivelIdOrdenados(nivel.getId());
+        Map<Long, RoletaPremio> premiosPorId = existentes.stream()
+                .filter(premio -> premio.getId() != null)
+                .collect(Collectors.toMap(RoletaPremio::getId, Function.identity()));
+
+        Set<Long> idsRecebidos = new LinkedHashSet<>();
+        List<RoletaPremio> proximosPremios = new ArrayList<>();
+
+        for (AdminRoletaPremioRequest request : requests) {
+            validarPremioRequest(request, false);
+
+            RoletaPremio premio = request.id() == null
+                    ? new RoletaPremio()
+                    : premiosPorId.get(request.id());
+
+            if (request.id() != null && premio == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Premio da roleta nao encontrado no nivel informado: " + request.id()
+                );
+            }
+            if (request.id() != null && !idsRecebidos.add(request.id())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Premio da roleta repetido: " + request.id()
+                );
+            }
+            if (request.nivelId() != null && !request.nivelId().equals(nivel.getId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Premio informado pertence a outro nivel"
+                );
+            }
+            if ((request.ativo() == null || request.ativo()) && !Boolean.TRUE.equals(nivel.getAtivo())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Premio ativo deve pertencer a nivel ativo"
+                );
+            }
+
+            aplicarPremio(premio, nivel, request);
+            proximosPremios.add(premio);
+        }
+
+        Set<Long> idsMantidos = idsRecebidos;
+        existentes.stream()
+                .filter(premio -> premio.getId() != null && !idsMantidos.contains(premio.getId()))
+                .forEach(premio -> {
+                    premio.setAtivo(false);
+                    premio.setPesoInterno(BigDecimal.ONE);
                     proximosPremios.add(premio);
                 });
 
@@ -1141,23 +1277,11 @@ public class RoletaService {
             AdminRoletaPremioRequest request
     ) {
         premio.setNivel(nivel);
-        if (request.titulo() != null) {
-            premio.setTitulo(request.titulo());
-        } else if (premio.getId() == null) {
-            premio.setTitulo("Premio inativo");
-        }
-        if (request.descricao() != null) {
-            premio.setDescricao(request.descricao());
-        }
-        if (request.tipoPremio() != null) {
-            premio.setTipoPremio(request.tipoPremio());
-        }
-        if (request.valor() != null) {
-            premio.setValor(request.valor());
-        }
-        if (request.pesoInterno() != null) {
-            premio.setPesoInterno(request.pesoInterno());
-        }
+        premio.setTipoPremio(request.tipoPremio());
+        premio.setValor(request.valor());
+        premio.setTitulo(gerarTituloPremio(request.tipoPremio(), request.valor()));
+        premio.setDescricao(null);
+        premio.setPesoInterno(BigDecimal.ONE);
         if (request.ordem() != null) {
             premio.setOrdem(request.ordem());
         }
@@ -1166,52 +1290,50 @@ public class RoletaService {
         }
     }
 
-    private void validarPremioRequest(AdminRoletaPremioRequest request) {
+    private void validarPremioRequest(AdminRoletaPremioRequest request, boolean exigirNivelId) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Premio da roleta e obrigatorio");
         }
-        boolean ativo = request.ativo() == null || request.ativo();
-        if (ativo) {
-            if (request.nivelId() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nivel do premio e obrigatorio");
-            }
-            if (request.titulo() == null || request.titulo().isBlank()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Titulo do premio e obrigatorio");
-            }
-            if (request.tipoPremio() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de premio e obrigatorio");
-            }
+        if (exigirNivelId && request.nivelId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nivel do premio e obrigatorio");
         }
-
-        BigDecimal valor = request.valor() == null ? BigDecimal.ZERO : request.valor();
-        if (valor.compareTo(BigDecimal.ZERO) < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valor do premio nao pode ser negativo");
+        if (request.tipoPremio() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de premio e obrigatorio");
         }
-
-        BigDecimal pesoInterno = request.pesoInterno() == null ? BigDecimal.ONE : request.pesoInterno();
-        if (ativo && pesoInterno.compareTo(BigDecimal.ZERO) <= 0) {
+        if (!isTipoPremioPermitidoNoAdmin(request.tipoPremio())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Peso interno deve ser maior que zero em premios ativos"
+                    "Tipo de premio deve ser DESCONTO_VALOR ou DESCONTO_PERCENTUAL"
             );
         }
 
-        if (ativo
-                && request.tipoPremio() == RoletaTipoPremio.DESCONTO_VALOR
-                && valor.compareTo(BigDecimal.ZERO) <= 0) {
+        if (request.valor() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valor do premio e obrigatorio");
+        }
+
+        BigDecimal valor = request.valor();
+        if (valor.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Desconto em dinheiro deve ter valor positivo"
+                    "Valor do premio deve ser maior que zero"
             );
         }
-        if (ativo
-                && request.tipoPremio() == RoletaTipoPremio.DESCONTO_PERCENTUAL
-                && valor.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Desconto percentual deve ter valor positivo"
-            );
+    }
+
+    private boolean isTipoPremioPermitidoNoAdmin(RoletaTipoPremio tipoPremio) {
+        return tipoPremio == RoletaTipoPremio.DESCONTO_VALOR
+                || tipoPremio == RoletaTipoPremio.DESCONTO_PERCENTUAL;
+    }
+
+    private String gerarTituloPremio(RoletaTipoPremio tipoPremio, BigDecimal valor) {
+        if (tipoPremio == RoletaTipoPremio.DESCONTO_PERCENTUAL) {
+            return valor.stripTrailingZeros().toPlainString().replace('.', ',') + "% OFF";
         }
+
+        return "R$ " + valor.setScale(2, RoundingMode.HALF_UP)
+                .toPlainString()
+                .replace('.', ',')
+                + " OFF";
     }
 
     private AdminRoletaResponse montarAdminResponse(RoletaConfig config) {
@@ -1347,13 +1469,7 @@ public class RoletaService {
     private record PremioCalculado(BigDecimal valorPremio, Integer girosExtras) {
     }
 
-    private record NivelPadrao(
-            String nome,
-            String descricao,
-            String corHex,
-            Integer ordem,
-            String pesoRelativo
-    ) {
+    private record PremiosNivelRequest(RoletaNivel nivel, List<AdminRoletaPremioRequest> premios) {
     }
 
     private record FaixaDesconto(BigDecimal minimo, BigDecimal maximo) {

@@ -1,8 +1,10 @@
 package com.whiteLabel.backend.controller;
 
 import com.whiteLabel.backend.dto.CheckoutResponse;
+import com.whiteLabel.backend.dto.CheckoutStatusResponse;
 import com.whiteLabel.backend.service.PedidoService;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,5 +25,10 @@ public class CheckoutController {
     @ResponseStatus(HttpStatus.CREATED)
     public CheckoutResponse criarCheckoutProduto(@PathVariable Long produtoId) {
         return pedidoService.criarCheckoutProduto(produtoId);
+    }
+
+    @GetMapping("/{pedidoId}/status")
+    public CheckoutStatusResponse consultarStatus(@PathVariable Long pedidoId) {
+        return pedidoService.consultarStatusCheckout(pedidoId);
     }
 }

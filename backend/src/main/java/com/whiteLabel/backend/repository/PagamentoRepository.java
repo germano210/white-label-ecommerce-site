@@ -9,6 +9,8 @@ public interface PagamentoRepository extends JpaRepository<Pagamento, Long> {
 
     Optional<Pagamento> findByCheckoutId(String checkoutId);
 
+    Optional<Pagamento> findTopByPedidoIdOrderByDataCriacaoDescIdDesc(Long pedidoId);
+
     Optional<Pagamento> findByPaymentId(String paymentId);
 
     Optional<Pagamento> findByEventId(String eventId);
