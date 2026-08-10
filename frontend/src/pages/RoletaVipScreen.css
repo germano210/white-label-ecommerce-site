@@ -284,9 +284,49 @@
 }
 
 .roleta-vip-wheel-face {
+    position: relative;
+    --roleta-wheel-label-radius: clamp(48px, 19vw, 76px);
     width: 100%;
     aspect-ratio: 1 / 1;
+    overflow: hidden;
     border-radius: inherit;
+}
+
+.roleta-vip-wheel-slice-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 2;
+    display: flex;
+    width: 23%;
+    max-width: 68px;
+    min-width: 48px;
+    min-height: 40px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 6.6px;
+    font-weight: 600;
+    line-height: 1.05;
+    pointer-events: none;
+    text-align: center;
+    text-transform: uppercase;
+    transform-origin: center center;
+}
+
+.roleta-vip-wheel-slice-label span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roleta-vip-wheel-slice-label .is-level {
+    margin-bottom: 1px;
+    font-size: 7.2px;
+    font-weight: 700;
 }
 
 .roleta-vip-wheel-center-button {
@@ -329,16 +369,43 @@
     font-weight: 900 !important;
 }
 
-.roleta-vip-main-spin-button {
+.roleta-vip-spin-actions {
+    display: flex;
     width: min(100%, 310px);
+    align-items: stretch;
+    justify-content: center;
+    gap: 8px;
+}
+
+.roleta-vip-main-spin-button,
+.roleta-vip-prize-use-button {
     min-height: 47px;
     border: 0;
     border-radius: 13px;
-    background: #687152;
-    color: #ffffff;
     cursor: pointer;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 600;
+    line-height: 1.1;
+}
+
+.roleta-vip-main-spin-button {
+    width: 100%;
+    background: #687152;
+    color: #ffffff;
+}
+
+.roleta-vip-spin-actions.has-prize .roleta-vip-main-spin-button {
+    flex: 0 0 calc(55% - 4px);
+    width: auto;
+}
+
+.roleta-vip-prize-use-button {
+    flex: 0 0 calc(45% - 4px);
+    overflow: hidden;
+    color: #000000;
+    padding: 0 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .roleta-vip-no-spins {
@@ -348,54 +415,6 @@
     font-weight: 500;
     line-height: 1.25;
     text-align: center;
-}
-
-.roleta-vip-result-card {
-    display: flex;
-    width: min(100%, 310px);
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    border-radius: 14px;
-    background: #F7F7F7;
-    color: #000000;
-    padding: 12px;
-    text-align: center;
-}
-
-.roleta-vip-result-level {
-    display: inline-flex;
-    max-width: 100%;
-    min-height: 20px;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-radius: 999px;
-    color: #ffffff;
-    font-size: 10px;
-    line-height: 1;
-    padding: 0 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.roleta-vip-result-card strong {
-    color: #000000;
-    font-size: 13px;
-    line-height: 1.12;
-}
-
-.roleta-vip-result-card span:not(.roleta-vip-result-level) {
-    color: #687152;
-    font-size: 12px;
-    line-height: 1;
-}
-
-.roleta-vip-result-card p {
-    margin: 0;
-    color: rgba(0, 0, 0, 0.58);
-    font-size: 10px;
-    line-height: 1.25;
 }
 
 .roleta-vip-daily-section {
@@ -427,10 +446,13 @@
 
 .roleta-vip-daily-carousel {
     display: flex;
-    gap: 10px;
+    width: calc(100% + 30px);
+    gap: 6px;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 0 34px 8px 0;
+    margin: 0 -15px;
+    padding: 0 6px 8px;
+    scroll-padding-left: 6px;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     touch-action: pan-x pan-y;
@@ -441,14 +463,14 @@
 }
 
 .roleta-vip-daily-item {
-    flex: 0 0 82%;
+    flex: 0 0 calc(100% - 10px);
     scroll-snap-align: start;
 }
 
 .roleta-vip-daily-card {
     position: relative;
     width: 100%;
-    min-height: min(72vh, 470px);
+    min-height: min(calc(100dvh - 48px), 650px);
     overflow: hidden;
     border-radius: 9px;
     background-color: #f2f2f2;
@@ -481,12 +503,12 @@
 .roleta-vip-daily-floating-image {
     position: absolute;
     top: 42px;
-    right: 13px;
-    bottom: 112px;
-    left: 13px;
+    right: 2.5%;
+    bottom: 148px;
+    left: 2.5%;
     z-index: 2;
-    width: calc(100% - 26px);
-    height: calc(100% - 154px);
+    width: 95%;
+    height: calc(100% - 190px);
     object-fit: contain;
     filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.28));
 }
@@ -526,13 +548,52 @@
 .roleta-vip-daily-price {
     position: absolute;
     right: 0;
-    bottom: 92px;
+    bottom: 80px;
     left: 0;
     z-index: 6;
     color: #ffffff;
     font-size: 10px;
     line-height: 1;
     text-align: center;
+}
+
+.roleta-vip-daily-item-info {
+    position: absolute;
+    right: 18px;
+    bottom: 113px;
+    left: 18px;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #ffffff;
+    line-height: 1.12;
+    pointer-events: none;
+    text-align: center;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.roleta-vip-daily-item-info strong {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roleta-vip-daily-item-info span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.84);
+    font-size: 10px;
+    line-height: 1.2;
+    margin-top: 3px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .roleta-vip-daily-price--discount {
@@ -597,41 +658,16 @@
     text-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
 
-.roleta-vip-daily-product-info {
-    display: flex;
-    min-height: 38px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 0 6px;
-    text-align: center;
-}
-
-.roleta-vip-daily-product-info strong {
-    display: block;
-    max-width: 100%;
-    overflow: hidden;
-    color: #000000;
-    font-size: 12px;
-    line-height: 1.16;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.roleta-vip-daily-product-info span {
-    display: block;
-    color: #4C4C4C;
-    font-size: 10px;
-    line-height: 1.2;
-    margin-top: 3px;
-}
-
 .roleta-vip-daily-footer {
+    position: relative;
+    z-index: 8;
     display: flex;
-    min-height: 60px;
+    min-height: 28px;
     flex-direction: column;
     justify-content: flex-start;
-    padding-top: 8px;
+    margin-top: -40px;
+    margin-bottom: 0;
+    padding-top: 0;
 }
 
 .roleta-vip-daily-product-bars {
@@ -643,7 +679,7 @@
     overflow: hidden;
     border-radius: 999px;
     background: #E5E5E5;
-    margin: 10px auto 0;
+    margin: 10px auto 10px;
     touch-action: none;
     user-select: none;
 }
@@ -676,6 +712,135 @@
 
 .roleta-vip-daily-product-bars button.is-active {
     background: transparent;
+}
+
+.roleta-vip-invite-block {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 17px;
+    padding: 18px 0 8px;
+}
+
+.roleta-vip-invite-card {
+    width: min(100%, 350px);
+    border-radius: 5%;
+    background: #687152;
+    color: #ffffff;
+    padding: 22px 16px 18px;
+}
+
+.roleta-vip-invite-card h2 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 0 21px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 0.98;
+    text-align: left;
+}
+
+.roleta-vip-invite-card h2 strong {
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.roleta-vip-invite-card ol {
+    margin: 0;
+    padding-left: 16px;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.34;
+}
+
+
+.roleta-vip-invite-card li strong {
+    color: #ffffff;
+    font-weight: 800;
+}
+
+.roleta-vip-invite-link-row {
+    display: flex;
+    min-height: 43px;
+    align-items: center;
+    gap: 12px;
+    margin-top: 27px;
+}
+
+.roleta-vip-invite-link-row span {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    min-height: 43px;
+    align-items: center;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #484E39;
+    color: #F6F6F5;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roleta-vip-invite-link-row button {
+    flex: 0 0 112px;
+    min-height: 43px;
+    border: 0;
+    border-radius: 8px;
+    background: #F6F6F5;
+    color: #020202;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.roleta-vip-invite-link-row button:disabled {
+    cursor: default;
+    opacity: 0.68;
+}
+
+.roleta-vip-invite-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px 0 0;
+    color: #ffffff;
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: center;
+}
+
+.roleta-vip-invite-error button {
+    border: 0;
+    border-radius: 999px;
+    background: #F6F6F5;
+    color: #020202;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 5px 8px;
+}
+
+.roleta-vip-invite-note,
+.roleta-vip-invite-address {
+    width: min(100%, 360px);
+    margin: 0;
+    color: #000000;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.35;
+    text-align: center;
+}
+
+.roleta-vip-invite-address {
+    margin-top: 1px;
 }
 
 @media (max-width: 360px) {

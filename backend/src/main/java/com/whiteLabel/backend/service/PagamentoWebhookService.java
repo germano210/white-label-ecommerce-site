@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whiteLabel.backend.domain.Pagamento;
 import com.whiteLabel.backend.domain.PagamentoStatus;
 import com.whiteLabel.backend.domain.Pedido;
+import com.whiteLabel.backend.domain.PedidoStatus;
 import com.whiteLabel.backend.dto.PagamentoWebhookPayload;
 import com.whiteLabel.backend.dto.PagamentoWebhookResponse;
 import com.whiteLabel.backend.repository.PagamentoRepository;
@@ -28,17 +29,20 @@ public class PagamentoWebhookService {
 
     private final PagamentoRepository pagamentoRepository;
     private final PedidoRepository pedidoRepository;
+    private final RoletaService roletaService;
     private final ObjectMapper objectMapper;
     private final String webhookSecret;
 
     public PagamentoWebhookService(
             PagamentoRepository pagamentoRepository,
             PedidoRepository pedidoRepository,
+            RoletaService roletaService,
             ObjectMapper objectMapper,
             @Value("${payment.webhook-secret}") String webhookSecret
     ) {
         this.pagamentoRepository = pagamentoRepository;
         this.pedidoRepository = pedidoRepository;
+        this.roletaService = roletaService;
         this.objectMapper = objectMapper;
         this.webhookSecret = webhookSecret;
     }
@@ -64,7 +68,7 @@ public class PagamentoWebhookService {
         }
 
         pagamento.registrarWebhook(evento.eventId(), evento.paymentId(), evento.status());
-        atualizarPedido(pagamento.getPedido(), evento.status());
+        atualizarPedido(pagamento, evento.status());
 
         pedidoRepository.save(pagamento.getPedido());
         Pagamento pagamentoAtualizado = pagamentoRepository.save(pagamento);
@@ -88,11 +92,16 @@ public class PagamentoWebhookService {
                 ));
     }
 
-    private void atualizarPedido(Pedido pedido, PagamentoStatus status) {
+    private void atualizarPedido(Pagamento pagamento, PagamentoStatus status) {
+        Pedido pedido = pagamento.getPedido();
         if (status == PagamentoStatus.PAGO) {
+            boolean pedidoJaEstavaPago = pedido.getStatus() == PedidoStatus.PAGO;
             pedido.marcarPago();
             if (pedido.getRoletaGiro() != null) {
                 pedido.getRoletaGiro().marcarUsado();
+            }
+            if (!pedidoJaEstavaPago) {
+                roletaService.creditarComissaoIndicacao(pedido, pagamento.getValor());
             }
             return;
         }

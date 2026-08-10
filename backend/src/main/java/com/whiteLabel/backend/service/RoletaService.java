@@ -1,6 +1,8 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.domain.MissaoTipoAcao;
+import com.whiteLabel.backend.domain.Pedido;
 import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaConvite;
 import com.whiteLabel.backend.domain.RoletaConviteStatus;
@@ -104,6 +106,7 @@ public class RoletaService {
     private final ProdutoRepository produtoRepository;
     private final ProdutoService produtoService;
     private final PedidoService pedidoService;
+    private final MissaoSemanalService missaoSemanalService;
     private final UsuarioRepository usuarioRepository;
     private final SecureRandom secureRandom;
     private final Clock clock;
@@ -121,6 +124,7 @@ public class RoletaService {
             ProdutoRepository produtoRepository,
             ProdutoService produtoService,
             PedidoService pedidoService,
+            MissaoSemanalService missaoSemanalService,
             UsuarioRepository usuarioRepository,
             @Value("${app.frontend.public-base-url:https://brechodacami.com}") String frontendBaseUrl
     ) {
@@ -135,6 +139,7 @@ public class RoletaService {
         this.produtoRepository = produtoRepository;
         this.produtoService = produtoService;
         this.pedidoService = pedidoService;
+        this.missaoSemanalService = missaoSemanalService;
         this.usuarioRepository = usuarioRepository;
         this.secureRandom = new SecureRandom();
         this.clock = Clock.systemDefaultZone();
@@ -275,7 +280,7 @@ public class RoletaService {
         }
 
         if (!roletaConviteRepository.existsByUsuarioIndicadoId(usuarioIndicado.getId())) {
-            int girosConcedidos = config.getGirosGanhosPorConvite();
+            int girosConcedidos = sortearGirosPorConvite(config);
             roletaConviteRepository.save(new RoletaConvite(
                     codigo,
                     usuarioIndicador,
@@ -286,9 +291,57 @@ public class RoletaService {
             participanteIndicador.incrementarConvitesConvertidos();
             participanteIndicador.adicionarGiros(girosConcedidos);
             roletaParticipanteRepository.save(participanteIndicador);
+            missaoSemanalService.registrarAcao(
+                    usuarioIndicador,
+                    MissaoTipoAcao.CONVIDAR_PESSOAS.name()
+            );
         }
 
         return montarConvitesResponse(config, participanteIndicado);
+    }
+
+    @Transactional
+    public void creditarComissaoIndicacao(Pedido pedido, BigDecimal valorPago) {
+        if (pedido == null || pedido.getUsuario() == null) {
+            return;
+        }
+
+        Optional<RoletaConvite> conviteConvertido =
+                roletaConviteRepository.findByUsuarioIndicadoIdAndStatusFetchIndicador(
+                        pedido.getUsuario().getId(),
+                        RoletaConviteStatus.CONVERTIDO
+                );
+        if (conviteConvertido.isEmpty()) {
+            return;
+        }
+
+        RoletaConfig config = obterConfig();
+        BigDecimal percentual = config.getPercentualComissaoIndicacao();
+        if (percentual.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        conviteConvertido.ifPresent(convite -> {
+            Usuario indicador = convite.getUsuarioIndicador();
+            if (indicador == null || indicador.getId().equals(pedido.getUsuario().getId())) {
+                return;
+            }
+
+            BigDecimal comissao = normalizarValorPago(valorPago, pedido)
+                    .multiply(percentual)
+                    .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+            if (comissao.compareTo(BigDecimal.ZERO) <= 0) {
+                return;
+            }
+
+            RoletaParticipante participanteIndicador = roletaParticipanteRepository
+                    .findByUsuarioIdForUpdate(indicador.getId())
+                    .orElseGet(() -> roletaParticipanteRepository.save(
+                            new RoletaParticipante(indicador, gerarCodigoUnico(), 0)
+                    ));
+            participanteIndicador.adicionarValorDisponivel(comissao);
+            roletaParticipanteRepository.save(participanteIndicador);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -325,8 +378,14 @@ public class RoletaService {
         if (request.giroDiarioSomenteQuandoZerar() != null) {
             config.setGiroDiarioSomenteQuandoZerar(request.giroDiarioSomenteQuandoZerar());
         }
-        if (request.girosGanhosPorConvite() != null) {
-            config.setGirosGanhosPorConvite(request.girosGanhosPorConvite());
+        if (request.girosPorConviteMin() != null) {
+            config.setGirosPorConviteMin(request.girosPorConviteMin());
+        }
+        if (request.girosPorConviteMax() != null) {
+            config.setGirosPorConviteMax(request.girosPorConviteMax());
+        }
+        if (request.percentualComissaoIndicacao() != null) {
+            config.setPercentualComissaoIndicacao(request.percentualComissaoIndicacao());
         }
         if (request.multiplicadorDificuldadePadrao() != null) {
             validarMultiplicadorDificuldade(request.multiplicadorDificuldadePadrao());
@@ -483,6 +542,25 @@ public class RoletaService {
         return desconto.min(precoOriginal).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private int sortearGirosPorConvite(RoletaConfig config) {
+        int minimo = config.getGirosPorConviteMin();
+        int maximo = config.getGirosPorConviteMax();
+        if (maximo <= minimo) {
+            return minimo;
+        }
+
+        return secureRandom.nextInt(maximo - minimo + 1) + minimo;
+    }
+
+    private BigDecimal normalizarValorPago(BigDecimal valorPago, Pedido pedido) {
+        BigDecimal valor = valorPago == null ? pedido.getValorTotal() : valorPago;
+        if (valor == null || valor.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return valor.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private RoletaStatusResponse montarStatus(
             RoletaConfig config,
             RoletaParticipante participante
@@ -519,6 +597,8 @@ public class RoletaService {
                 participante == null ? null : montarUrlConvite(participante.getCodigoConvite()),
                 convitesConvertidos,
                 config.getGirosGanhosPorConvite(),
+                config.getGirosPorConviteMin(),
+                config.getGirosPorConviteMax(),
                 montarNiveisPublicos(),
                 montarOpcoesPublicas(),
                 montarPremiosPublicos(),
@@ -1349,6 +1429,9 @@ public class RoletaService {
                 config.getGiroDiarioQuantidade(),
                 config.getGiroDiarioSomenteQuandoZerar(),
                 config.getGirosGanhosPorConvite(),
+                config.getGirosPorConviteMin(),
+                config.getGirosPorConviteMax(),
+                config.getPercentualComissaoIndicacao(),
                 config.getMultiplicadorDificuldadePadrao(),
                 config.getUsarPesosManuais(),
                 config.getAtualizadaEm(),
@@ -1375,7 +1458,9 @@ public class RoletaService {
                 quantidadeConvertida,
                 quantidadeConvertida,
                 config.getGirosGanhosPorConvite(),
-                config.getGirosGanhosPorConvite()
+                config.getGirosGanhosPorConvite(),
+                config.getGirosPorConviteMin(),
+                config.getGirosPorConviteMax()
         );
     }
 

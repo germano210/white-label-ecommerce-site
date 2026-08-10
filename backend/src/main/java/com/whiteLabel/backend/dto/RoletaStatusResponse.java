@@ -18,6 +18,8 @@ public record RoletaStatusResponse(
         String urlConvite,
         Long convitesConvertidos,
         Integer girosPorConvite,
+        Integer girosPorConviteMin,
+        Integer girosPorConviteMax,
         List<RoletaNivelResponse> niveis,
         List<RoletaOpcaoResponse> opcoes,
         List<RoletaPremioConfiguradoResponse> premios,

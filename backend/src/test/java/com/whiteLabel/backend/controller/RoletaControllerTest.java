@@ -2,6 +2,9 @@ package com.whiteLabel.backend.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whiteLabel.backend.domain.Missao;
+import com.whiteLabel.backend.domain.MissaoCiclo;
+import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaNivel;
@@ -18,6 +21,7 @@ import com.whiteLabel.backend.repository.PagamentoRepository;
 import com.whiteLabel.backend.repository.PedidoItemRepository;
 import com.whiteLabel.backend.repository.PedidoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
+import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
@@ -26,6 +30,7 @@ import com.whiteLabel.backend.repository.RoletaOpcaoRepository;
 import com.whiteLabel.backend.repository.RoletaParticipanteRepository;
 import com.whiteLabel.backend.repository.RoletaPremioRepository;
 import com.whiteLabel.backend.repository.RoletaProdutoRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import com.whiteLabel.backend.service.InfinitePayClient;
 import com.whiteLabel.backend.service.JwtService;
@@ -56,6 +61,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -113,6 +119,12 @@ class RoletaControllerTest {
 
     @Autowired
     private ProdutoRepository produtoRepository;
+
+    @Autowired
+    private MissaoRepository missaoRepository;
+
+    @Autowired
+    private UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository;
 
     @Autowired
     private UsuarioRepository usuarioRepository;
@@ -220,7 +232,9 @@ class RoletaControllerTest {
                 .andExpect(jsonPath("$.codigoConvite").isNotEmpty())
                 .andExpect(jsonPath("$.urlConvite").isNotEmpty())
                 .andExpect(jsonPath("$.convitesConvertidos").value(0))
-                .andExpect(jsonPath("$.girosPorConvite").value(1));
+                .andExpect(jsonPath("$.girosPorConvite").value(2))
+                .andExpect(jsonPath("$.girosPorConviteMin").value(2))
+                .andExpect(jsonPath("$.girosPorConviteMax").value(5));
 
         mockMvc.perform(post("/api/roleta/girar")
                         .header("Authorization", bearer(usuario))
@@ -254,6 +268,9 @@ class RoletaControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.codigoConvite").isNotEmpty())
+                .andExpect(jsonPath("$.urlConvite").isNotEmpty())
+                .andExpect(jsonPath("$.girosPorConviteMin").value(2))
+                .andExpect(jsonPath("$.girosPorConviteMax").value(5))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -285,19 +302,109 @@ class RoletaControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quantidadeConvertida").value(1))
                 .andExpect(jsonPath("$.convitesConvertidos").value(1))
-                .andExpect(jsonPath("$.girosPorConvite").value(1));
+                .andExpect(jsonPath("$.girosPorConvite").value(2))
+                .andExpect(jsonPath("$.girosPorConviteMin").value(2))
+                .andExpect(jsonPath("$.girosPorConviteMax").value(5));
 
         mockMvc.perform(get("/api/roleta")
                         .header("Authorization", bearer(indicador))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.convitesConvertidos").value(1))
-                .andExpect(jsonPath("$.girosDisponiveis").value(9))
-                .andExpect(jsonPath("$.girosTotaisObtidos").value(9));
+                .andExpect(jsonPath("$.girosDisponiveis").value(greaterThanOrEqualTo(10)))
+                .andExpect(jsonPath("$.girosDisponiveis").value(lessThanOrEqualTo(13)))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(greaterThanOrEqualTo(10)))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(lessThanOrEqualTo(13)))
+                .andExpect(jsonPath("$.girosPorConviteMin").value(2))
+                .andExpect(jsonPath("$.girosPorConviteMax").value(5));
 
         var convite = roletaConviteRepository.findAll().get(0);
-        assertEquals(1, convite.getGirosConcedidos());
+        assertTrue(convite.getGirosConcedidos() >= 2);
+        assertTrue(convite.getGirosConcedidos() <= 5);
         assertTrue(convite.getConvertidoEm() != null);
+        var participanteIndicador = roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow();
+        assertEquals(8 + convite.getGirosConcedidos(), participanteIndicador.getGirosDisponiveis());
+        assertEquals(8 + convite.getGirosConcedidos(), participanteIndicador.getGirosTotaisObtidos());
+    }
+
+    @Test
+    void shouldRegisterWeeklyInviteMissionWhenRoletaInviteConverts() throws Exception {
+        Missao missao = criarMissaoSemanalConvite();
+        Usuario indicador = criarUsuario("Indicador Missao", "551199992030");
+        Usuario indicado = criarUsuario("Indicado Missao", "551199992031");
+        String codigo = codigoConvite(indicador);
+
+        mockMvc.perform(post("/api/roleta/convites")
+                        .header("Authorization", bearer(indicado))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "codigoConvite": "%s"
+                                }
+                                """.formatted(codigo))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        var progresso = usuarioMissaoSemanalRepository.findAll().stream()
+                .filter(item -> item.getUsuario().getId().equals(indicador.getId()))
+                .filter(item -> item.getMissao().getId().equals(missao.getId()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(1, progresso.getProgressoAtual());
+        assertTrue(progresso.getConcluida());
+    }
+
+    @Test
+    void shouldCreditReferralCommissionWhenInvitedUserPaymentIsConfirmed() throws Exception {
+        Usuario indicador = criarUsuario("Indicador Comissao", "551199992032");
+        Usuario indicado = criarUsuario("Indicado Comissao", "551199992033");
+        String codigo = codigoConvite(indicador);
+
+        mockMvc.perform(post("/api/roleta/convites")
+                        .header("Authorization", bearer(indicado))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "codigoConvite": "%s"
+                                }
+                                """.formatted(codigo))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        Produto produto = criarProduto("Produto Comissao");
+        produto.setPrecoVenda(new BigDecimal("100.00"));
+        produto = produtoRepository.save(produto);
+
+        String checkoutResponse = mockMvc.perform(post("/api/checkout/produtos/{produtoId}", produto.getId())
+                        .header("Authorization", bearer(indicado))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String checkoutId = objectMapper.readTree(checkoutResponse).path("checkoutId").asText();
+        String payload = """
+                {
+                  "eventId": "evt_roleta_comissao",
+                  "paymentId": "pay_roleta_comissao",
+                  "checkoutId": "%s",
+                  "status": "PAGO"
+                }
+                """.formatted(checkoutId);
+
+        mockMvc.perform(post("/api/pagamentos/infinitepay/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Payment-Signature", assinatura(payload))
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAGO"));
+
+        assertEquals("5.00", roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow()
+                .getValorDisponivelResgate()
+                .toPlainString());
     }
 
     @Test
@@ -1408,6 +1515,32 @@ class RoletaControllerTest {
         return usuarioRepository.save(admin);
     }
 
+    private String codigoConvite(Usuario usuario) throws Exception {
+        String response = mockMvc.perform(get("/api/roleta/convites")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(response).path("codigoConvite").asText();
+    }
+
+    private Missao criarMissaoSemanalConvite() {
+        Missao missao = new Missao(
+                "Convide uma pessoa",
+                "gift",
+                1,
+                MissaoTipoAcao.CONVIDAR_PESSOAS.name(),
+                0,
+                1
+        );
+        missao.setCiclo(MissaoCiclo.SEMANAL);
+
+        return missaoRepository.save(missao);
+    }
+
     private Produto criarProduto(String nome) {
         Produto produto = new Produto();
         produto.setNome(nome);
@@ -1516,6 +1649,8 @@ class RoletaControllerTest {
         roletaProdutoRepository.deleteAll();
         roletaParticipanteRepository.deleteAll();
         roletaConfigRepository.deleteAll();
+        usuarioMissaoSemanalRepository.deleteAll();
+        missaoRepository.deleteAll();
         produtoRepository.deleteAll();
         usuarioRepository.deleteAll();
     }

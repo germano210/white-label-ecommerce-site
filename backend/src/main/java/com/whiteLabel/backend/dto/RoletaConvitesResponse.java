@@ -6,6 +6,8 @@ public record RoletaConvitesResponse(
         Long quantidadeConvertida,
         Long convitesConvertidos,
         Integer girosGanhosPorConvite,
-        Integer girosPorConvite
+        Integer girosPorConvite,
+        Integer girosPorConviteMin,
+        Integer girosPorConviteMax
 ) {
 }

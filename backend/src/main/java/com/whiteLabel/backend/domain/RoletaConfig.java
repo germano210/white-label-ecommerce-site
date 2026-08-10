@@ -45,6 +45,21 @@ public class RoletaConfig {
     @Column(name = "giros_ganhos_por_convite", nullable = false)
     private Integer girosGanhosPorConvite = 1;
 
+    @Column(name = "giros_por_convite_min", nullable = false, columnDefinition = "integer default 2")
+    private Integer girosPorConviteMin = 2;
+
+    @Column(name = "giros_por_convite_max", nullable = false, columnDefinition = "integer default 5")
+    private Integer girosPorConviteMax = 5;
+
+    @Column(
+            name = "percentual_comissao_indicacao",
+            nullable = false,
+            precision = 5,
+            scale = 2,
+            columnDefinition = "numeric(5,2) default 5.00"
+    )
+    private BigDecimal percentualComissaoIndicacao = new BigDecimal("5.00");
+
     @Column(
             name = "multiplicador_dificuldade_padrao",
             nullable = false,
@@ -134,11 +149,50 @@ public class RoletaConfig {
     }
 
     public Integer getGirosGanhosPorConvite() {
-        return Math.max(0, girosGanhosPorConvite == null ? 0 : girosGanhosPorConvite);
+        return getGirosPorConviteMin();
     }
 
     public void setGirosGanhosPorConvite(Integer girosGanhosPorConvite) {
-        this.girosGanhosPorConvite = Math.max(0, girosGanhosPorConvite == null ? 0 : girosGanhosPorConvite);
+        int giros = Math.max(0, girosGanhosPorConvite == null ? 0 : girosGanhosPorConvite);
+        this.girosGanhosPorConvite = giros;
+        this.girosPorConviteMin = giros;
+        this.girosPorConviteMax = giros;
+    }
+
+    public Integer getGirosPorConviteMin() {
+        return Math.max(0, girosPorConviteMin == null ? 2 : girosPorConviteMin);
+    }
+
+    public void setGirosPorConviteMin(Integer girosPorConviteMin) {
+        this.girosPorConviteMin = Math.max(0, girosPorConviteMin == null ? 2 : girosPorConviteMin);
+        if (girosPorConviteMax != null && girosPorConviteMax < this.girosPorConviteMin) {
+            girosPorConviteMax = this.girosPorConviteMin;
+        }
+        girosGanhosPorConvite = this.girosPorConviteMin;
+    }
+
+    public Integer getGirosPorConviteMax() {
+        return Math.max(getGirosPorConviteMin(), girosPorConviteMax == null ? 5 : girosPorConviteMax);
+    }
+
+    public void setGirosPorConviteMax(Integer girosPorConviteMax) {
+        int maximo = Math.max(0, girosPorConviteMax == null ? 5 : girosPorConviteMax);
+        this.girosPorConviteMax = Math.max(getGirosPorConviteMin(), maximo);
+    }
+
+    public BigDecimal getPercentualComissaoIndicacao() {
+        BigDecimal percentual = percentualComissaoIndicacao == null
+                ? new BigDecimal("5.00")
+                : percentualComissaoIndicacao;
+        return percentual.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public void setPercentualComissaoIndicacao(BigDecimal percentualComissaoIndicacao) {
+        BigDecimal percentual = percentualComissaoIndicacao == null
+                ? new BigDecimal("5.00")
+                : percentualComissaoIndicacao;
+        this.percentualComissaoIndicacao = percentual.max(BigDecimal.ZERO)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     public BigDecimal getMultiplicadorDificuldadePadrao() {
@@ -176,6 +230,16 @@ public class RoletaConfig {
     @PrePersist
     @PreUpdate
     void atualizarData() {
+        if (girosPorConviteMin == null) {
+            girosPorConviteMin = 2;
+        }
+        if (girosPorConviteMax == null || girosPorConviteMax < girosPorConviteMin) {
+            girosPorConviteMax = girosPorConviteMin;
+        }
+        girosGanhosPorConvite = girosPorConviteMin;
+        if (percentualComissaoIndicacao == null) {
+            percentualComissaoIndicacao = new BigDecimal("5.00");
+        }
         atualizadaEm = LocalDateTime.now();
     }
 }

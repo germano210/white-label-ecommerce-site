@@ -72,6 +72,12 @@ interface RoletaNivelApi {
 interface RoletaStatusApi {
     ativa?: boolean | null;
     titulo?: string | null;
+    urlConvite?: string | null;
+    url_convite?: string | null;
+    conviteUrl?: string | null;
+    convite_url?: string | null;
+    linkConvite?: string | null;
+    link_convite?: string | null;
     premioAtual?: RoletaPremioApi | null;
     premio_atual?: RoletaPremioApi | null;
     premioPendente?: RoletaPremioApi | null;
@@ -118,12 +124,24 @@ interface ProdutoCheckoutResponse {
     url?: string;
 }
 
+interface RoletaConvitesResponse {
+    urlConvite?: string | null;
+    url_convite?: string | null;
+    conviteUrl?: string | null;
+    convite_url?: string | null;
+    linkConvite?: string | null;
+    link_convite?: string | null;
+    url?: string | null;
+    link?: string | null;
+}
+
 interface RoletaWheelSlice {
     id: string;
     label: string;
     color: string;
     order: number;
     level: number;
+    prizeLabelLines: string[];
 }
 
 interface RoletaSpinResult {
@@ -182,6 +200,7 @@ interface DailyProduct {
 
 interface RoletaViewState {
     ativa: boolean;
+    urlConvite: string;
     girosTotaisObtidos: number;
     girosDisponiveis: number;
     valorDisponivelResgate: number;
@@ -195,6 +214,7 @@ interface RoletaViewState {
 
 const emptyRoletaState: RoletaViewState = {
     ativa: false,
+    urlConvite: '',
     girosTotaisObtidos: 0,
     girosDisponiveis: 0,
     valorDisponivelResgate: 0,
@@ -215,6 +235,17 @@ const rarityPresets = [
 ];
 
 const DAILY_CARD_TAP_THRESHOLD = 10;
+const inviteGuestNames = [
+    'BIRDMAN',
+    '$quanchy',
+    'g33neOgilligan',
+    'magnataCabelo3spinh00s',
+    'pr.andrecurtis',
+    'summer.smith',
+    'mortynt',
+    'beth',
+    'genrejerry',
+];
 
 function parseApiNumber(value: NumericApiValue) {
     if (typeof value === 'number') {
@@ -244,6 +275,13 @@ function formatCurrencyBRL(value: number) {
         .replace(/\s/g, '');
 }
 
+function formatPrizeRangeValue(value: number) {
+    return value.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+}
+
 function toBoolean(value: boolean | number | string | null | undefined, fallback = true) {
     if (typeof value === 'boolean') return value;
     if (typeof value === 'number') return value === 1;
@@ -263,6 +301,66 @@ function normalizeHexColor(value: string | null | undefined, fallback: string) {
     }
 
     return fallback;
+}
+
+function normalizeWheelLevelName(value: string) {
+    const normalizedValue = value.trim().toUpperCase();
+    return normalizedValue === 'NICO' ? 'UNICO' : normalizedValue;
+}
+
+function getPrizeType(prize?: RoletaPremioApi | null) {
+    return (prize?.tipoPremio ?? prize?.tipo_premio ?? '').trim().toUpperCase();
+}
+
+function getPrizeValue(prize?: RoletaPremioApi | null) {
+    return parseApiNumber(
+        prize?.valor
+        ?? prize?.valorPremio
+        ?? prize?.valor_premio
+        ?? prize?.valorMaximo
+        ?? prize?.valor_maximo
+        ?? prize?.valorMinimo
+        ?? prize?.valor_minimo,
+    );
+}
+
+function createWheelPrizeLabelLines(levelName: string, prizes?: RoletaPremioApi[] | null) {
+    const activePrizes = (prizes ?? [])
+        .map((prize) => ({
+            type: getPrizeType(prize),
+            value: getPrizeValue(prize),
+        }))
+        .filter((prize) => prize.value > 0);
+
+    if (activePrizes.length === 0) return [levelName];
+
+    const percentPrizes = activePrizes.filter((prize) => prize.type === 'DESCONTO_PERCENTUAL');
+    const hasFullDiscount = percentPrizes.some((prize) => prize.value >= 100);
+
+    if (hasFullDiscount) {
+        return [levelName, '100%', 'OFF'];
+    }
+
+    if (percentPrizes.length > 0 && percentPrizes.length === activePrizes.length) {
+        const values = percentPrizes.map((prize) => prize.value);
+        const minValue = Math.min(...values);
+        const maxValue = Math.max(...values);
+        const valueLabel = minValue === maxValue
+            ? `${formatPrizeRangeValue(minValue)}%`
+            : `${formatPrizeRangeValue(minValue)}-${formatPrizeRangeValue(maxValue)}%`;
+
+        return [levelName, valueLabel, 'OFF'];
+    }
+
+    const valuePrizes = activePrizes.filter((prize) => prize.type === 'DESCONTO_VALOR');
+    const values = (valuePrizes.length > 0 ? valuePrizes : activePrizes).map((prize) => prize.value);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const valueLabel = minValue === maxValue
+        ? formatPrizeRangeValue(minValue)
+        : `${formatPrizeRangeValue(minValue)}-${formatPrizeRangeValue(maxValue)}`;
+
+    return [levelName, 'R$', valueLabel, 'OFF'];
 }
 
 function normalizeNotification(notification: RoletaNotificacaoApi) {
@@ -294,13 +392,15 @@ function normalizeWheelSlicesFromLevels(levels: RoletaNivelApi[]) {
         .map((level, index) => {
             const preset = rarityPresets[index % rarityPresets.length];
             const order = Math.max(1, Math.floor(parseApiNumber(level.ordem ?? level.nivel ?? index + 1)));
+            const label = normalizeWheelLevelName((level.nome ?? level.titulo ?? preset.nome).trim());
 
             return {
                 id: String(level.id ?? `nivel-${order}`),
-                label: (level.nome ?? level.titulo ?? preset.nome).trim(),
-                color: normalizeHexColor(level.corHex ?? level.cor_hex, preset.corHex),
+                label,
+                color: '#46553A',
                 order,
                 level: Math.max(1, Math.floor(parseApiNumber(level.nivel ?? order))),
+                prizeLabelLines: createWheelPrizeLabelLines(label, level.premios),
             };
         })
         .sort((a, b) => a.order - b.order);
@@ -309,6 +409,20 @@ function normalizeWheelSlicesFromLevels(levels: RoletaNivelApi[]) {
 function normalizeWheelSlices(data?: RoletaStatusApi | null) {
     const rawLevels = data?.niveis ?? data?.niveisRoleta ?? data?.niveis_roleta ?? [];
     return normalizeWheelSlicesFromLevels(rawLevels);
+}
+
+function normalizeInviteUrl(data?: RoletaStatusApi | RoletaConvitesResponse | null) {
+    return (
+        data?.urlConvite
+        ?? data?.url_convite
+        ?? data?.conviteUrl
+        ?? data?.convite_url
+        ?? data?.linkConvite
+        ?? data?.link_convite
+        ?? ('url' in (data ?? {}) ? (data as RoletaConvitesResponse).url : null)
+        ?? ('link' in (data ?? {}) ? (data as RoletaConvitesResponse).link : null)
+        ?? ''
+    ).trim();
 }
 
 function getPremioAtualFromStatus(data?: RoletaStatusApi | null) {
@@ -349,6 +463,7 @@ function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
 
     return {
         ativa: data?.ativa ?? true,
+        urlConvite: normalizeInviteUrl(data),
         girosTotaisObtidos: Math.max(0, parseApiNumber(
             data?.girosTotaisObtidos ?? data?.giros_totais_obtidos,
         )),
@@ -400,16 +515,30 @@ function getRoletaCheckoutErrorMessage(error: unknown) {
 function createWheelGradient(slices: RoletaWheelSlice[]) {
     if (slices.length === 0) return '#E6D9D4';
 
-    const sliceCount = Math.max(slices.length, 2);
+    const sliceCount = Math.max(slices.length * 2, 2);
     const sliceAngle = 360 / sliceCount;
     const segments = Array.from({ length: sliceCount }, (_, index) => {
-        const color = slices[index % slices.length]?.color ?? '#46563A';
+        const color = index % 2 === 0 ? '#FEF2ED' : '#46553A';
         const start = index * sliceAngle;
         const end = (index + 1) * sliceAngle;
         return `${color} ${start}deg ${end}deg`;
     });
 
     return `conic-gradient(from -90deg, ${segments.join(', ')})`;
+}
+
+function getWheelLabelAngle(index: number, totalLevels: number) {
+    const sliceCount = Math.max(totalLevels * 2, 2);
+    const sliceAngle = 360 / sliceCount;
+    return ((index * 2) + 1.5) * sliceAngle;
+}
+
+function getWheelLabelTransform(index: number, totalLevels: number) {
+    const angle = getWheelLabelAngle(index, totalLevels);
+    const normalizedAngle = ((angle % 360) + 360) % 360;
+    const keepReadableRotation = normalizedAngle > 90 && normalizedAngle < 270 ? 180 : 0;
+
+    return `translate(-50%, -50%) rotate(${angle}deg) translateY(calc(-1 * var(--roleta-wheel-label-radius))) rotate(${keepReadableRotation}deg)`;
 }
 
 function waitForAnimation(durationMs: number) {
@@ -622,6 +751,10 @@ export function RoletaVipScreen() {
     const [dailyCheckoutProductId, setDailyCheckoutProductId] = useState<string | null>(null);
     const [dailyCheckoutErrorByProductId, setDailyCheckoutErrorByProductId] = useState<Record<string, string>>({});
     const [hasLoadedDailyProducts, setHasLoadedDailyProducts] = useState(false);
+    const [inviteUrl, setInviteUrl] = useState('');
+    const [isInviteLoading, setIsInviteLoading] = useState(false);
+    const [inviteError, setInviteError] = useState('');
+    const [inviteCopyLabel, setInviteCopyLabel] = useState('Copiar link');
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
     const dailyCheckoutInFlightRef = useRef(false);
     const dailyCardGestureRef = useRef({
@@ -629,6 +762,10 @@ export function RoletaVipScreen() {
         startX: 0,
         startY: 0,
     });
+    const guestInviteUrl = useMemo(() => {
+        const randomName = inviteGuestNames[Math.floor(Math.random() * inviteGuestNames.length)];
+        return `https://brechodacami.com.br/${randomName}`;
+    }, []);
 
     const progressPercent = useMemo(() => (
         roleta.metaGrupo > 0 ? (roleta.progressoGrupo / roleta.metaGrupo) * 100 : 0
@@ -641,6 +778,7 @@ export function RoletaVipScreen() {
     const hasWheelOptions = roleta.opcoes.length > 0;
     const canSpin = isAuthenticated && roleta.ativa && roleta.girosDisponiveis > 0 && hasWheelOptions && !isSpinning;
     const currentPrize = roleta.premioAtual;
+    const visibleInviteUrl = isAuthenticated ? (inviteUrl || roleta.urlConvite) : guestInviteUrl;
 
     const fetchRoleta = useCallback(async () => {
         setIsLoading(true);
@@ -648,7 +786,11 @@ export function RoletaVipScreen() {
 
         try {
             const { data } = await api.get<RoletaStatusApi>(apiRoutes.roleta.status);
-            setRoleta(normalizeRoletaStatus(data));
+            const nextRoleta = normalizeRoletaStatus(data);
+            setRoleta(nextRoleta);
+            if (nextRoleta.urlConvite) {
+                setInviteUrl(nextRoleta.urlConvite);
+            }
         } catch (roletaError) {
             if (axios.isAxiosError(roletaError) && (
                 roletaError.response?.status === 401
@@ -668,6 +810,46 @@ export function RoletaVipScreen() {
     useEffect(() => {
         void fetchRoleta();
     }, [authRefreshKey, fetchRoleta]);
+
+    const fetchInviteUrl = useCallback(async () => {
+        if (!isAuthenticated) {
+            setInviteUrl('');
+            setInviteError('');
+            setIsInviteLoading(false);
+            return;
+        }
+
+        setIsInviteLoading(true);
+        setInviteError('');
+
+        try {
+            const { data } = await api.get<RoletaConvitesResponse>(apiRoutes.roleta.convites);
+            const nextInviteUrl = normalizeInviteUrl(data);
+
+            if (!nextInviteUrl) {
+                throw new Error('Convite sem URL.');
+            }
+
+            setInviteUrl(nextInviteUrl);
+        } catch {
+            setInviteError('Nao foi possivel carregar seu link.');
+        } finally {
+            setIsInviteLoading(false);
+        }
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        if (!isAuthenticated) {
+            setInviteUrl('');
+            setInviteError('');
+            setIsInviteLoading(false);
+            return;
+        }
+
+        if (roleta.urlConvite) return;
+
+        void fetchInviteUrl();
+    }, [fetchInviteUrl, isAuthenticated, roleta.urlConvite]);
 
     useEffect(() => {
         const syncRoletaOnReturn = () => {
@@ -948,6 +1130,19 @@ export function RoletaVipScreen() {
         setDailyProductImage(product, direction);
     };
 
+    const handleCopyInviteUrl = async () => {
+        if (!visibleInviteUrl || isInviteLoading) return;
+
+        try {
+            await navigator.clipboard.writeText(visibleInviteUrl);
+            setInviteCopyLabel('Copiado');
+            window.setTimeout(() => setInviteCopyLabel('Copiar link'), 1800);
+        } catch {
+            setInviteCopyLabel('Erro');
+            window.setTimeout(() => setInviteCopyLabel('Copiar link'), 1800);
+        }
+    };
+
     return (
         <div className="roleta-vip-page">
             <main className="roleta-vip-shell" aria-busy={isLoading}>
@@ -1029,7 +1224,26 @@ export function RoletaVipScreen() {
                                                 animate={{ rotate: wheelRotation }}
                                                 transition={{ duration: 1.25, ease: [0.16, 1, 0.3, 1] }}
                                                 style={{ background: wheelGradient }}
-                                            />
+                                            >
+                                                {roleta.opcoes.map((slice, sliceIndex) => (
+                                                    <span
+                                                        className="roleta-vip-wheel-slice-label"
+                                                        key={slice.id}
+                                                        style={{
+                                                            transform: getWheelLabelTransform(sliceIndex, roleta.opcoes.length),
+                                                        }}
+                                                    >
+                                                        {slice.prizeLabelLines.map((line, lineIndex) => (
+                                                            <span
+                                                                className={lineIndex === 0 ? 'is-level' : ''}
+                                                                key={`${slice.id}-${line}-${lineIndex}`}
+                                                            >
+                                                                {line}
+                                                            </span>
+                                                        ))}
+                                                    </span>
+                                                ))}
+                                            </motion.div>
                                         </div>
                                         <button
                                             type="button"
@@ -1052,14 +1266,30 @@ export function RoletaVipScreen() {
                                     <strong>{roleta.girosDisponiveis}</strong> giro(s) restantes
                                 </p>
 
-                                <button
-                                    type="button"
-                                    className="roleta-vip-main-spin-button"
-                                    onClick={() => void handleSpin()}
-                                    disabled={!canSpin}
-                                >
-                                    {isSpinning ? 'Girando...' : 'Girar a roleta'}
-                                </button>
+                                <div className={`roleta-vip-spin-actions${currentPrize ? ' has-prize' : ''}`}>
+                                    <button
+                                        type="button"
+                                        className="roleta-vip-main-spin-button"
+                                        onClick={() => void handleSpin()}
+                                        disabled={!canSpin}
+                                    >
+                                        {isSpinning ? 'Girando...' : 'Girar a roleta'}
+                                    </button>
+
+                                    {currentPrize && (
+                                        <button
+                                            type="button"
+                                            className="roleta-vip-prize-use-button"
+                                            style={{
+                                                backgroundColor: currentPrize.nivelCor,
+                                                color: '#000000',
+                                            }}
+                                            onClick={() => setActiveTab('daily')}
+                                        >
+                                            Usar -{currentPrize.valorLabel || formatCurrencyBRL(currentPrize.valor)}
+                                        </button>
+                                    )}
+                                </div>
 
                                 {!isLoading && roleta.girosDisponiveis < 1 && (
                                     <p className="roleta-vip-no-spins">
@@ -1067,19 +1297,6 @@ export function RoletaVipScreen() {
                                     </p>
                                 )}
 
-                                {currentPrize && (
-                                    <section className="roleta-vip-result-card" aria-label="Premio atual da roleta">
-                                        <span
-                                            className="roleta-vip-result-level"
-                                            style={{ background: currentPrize.nivelCor }}
-                                        >
-                                            {currentPrize.nivelNome}
-                                        </span>
-                                        <strong>{currentPrize.premioTitulo}</strong>
-                                        {currentPrize.valorLabel && <span>{currentPrize.valorLabel}</span>}
-                                        {currentPrize.premioDescricao && <p>{currentPrize.premioDescricao}</p>}
-                                    </section>
-                                )}
                             </section>
                         )}
 
@@ -1169,6 +1386,10 @@ export function RoletaVipScreen() {
                                                                     alt={product.nome}
                                                                     draggable={false}
                                                                 />
+                                                                <div className="roleta-vip-daily-item-info">
+                                                                    <strong>{product.nome}</strong>
+                                                                    <span>Tam. {product.tamanho}.</span>
+                                                                </div>
                                                                 {product.priceLabel && (
                                                                     discountedPricePreview ? (
                                                                         <span className="roleta-vip-daily-price roleta-vip-daily-price--discount">
@@ -1230,22 +1451,6 @@ export function RoletaVipScreen() {
 
                             {!isDailyLoading && !dailyError && dailyProducts.length > 0 && (
                                 <div className="roleta-vip-daily-footer">
-                                    <div className={`roleta-vip-daily-product-info${expandedDailyProductId ? ' is-visible' : ''}`}>
-                                        {(() => {
-                                            const activeProduct = dailyProducts[activeProductIndex];
-                                            const shouldShowInfo = Boolean(
-                                                activeProduct && expandedDailyProductId === activeProduct.id,
-                                            );
-
-                                            return (
-                                                <>
-                                                    <strong>{shouldShowInfo ? activeProduct.nome : '\u00A0'}</strong>
-                                                    <span>{shouldShowInfo ? `Tam. ${activeProduct.tamanho}.` : '\u00A0'}</span>
-                                                </>
-                                            );
-                                        })()}
-                                    </div>
-
                                     <div
                                         className="roleta-vip-daily-product-bars"
                                         aria-label="Produtos do carrossel"
@@ -1279,6 +1484,57 @@ export function RoletaVipScreen() {
                         </section>
                         )}
                     </div>
+
+                    {activeTab === 'spin' && (
+                        <section className="roleta-vip-invite-block" aria-label="Indique e ganhe">
+                            <div className="roleta-vip-invite-card">
+                                <h2>
+                                    <span>Indique e</span>
+                                    <strong>ganhe.</strong>
+                                </h2>
+
+                                <ol>
+                                    <li>Copie seu link abaixo.</li>
+                                    <li>Envie pra alguém que ainda não tem conta.</li>
+                                    <li>Quando a pessoa criar a conta pelo seu link, você ganha de <strong>2 a 5</strong> giros extras na hora.</li>
+                                    <li>Caso a pessoa que você indicou resgate um item, parte do valor da compra vai pra você (os valores são acumulativos).</li>
+                                </ol>
+
+                                <div className="roleta-vip-invite-link-row">
+                                    <span>
+                                        {isAuthenticated && isInviteLoading
+                                            ? 'Carregando link...'
+                                            : visibleInviteUrl}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleCopyInviteUrl()}
+                                        disabled={isAuthenticated && (isInviteLoading || !visibleInviteUrl)}
+                                    >
+                                        {inviteCopyLabel}
+                                    </button>
+                                </div>
+
+                                {isAuthenticated && inviteError && (
+                                    <p className="roleta-vip-invite-error" role="alert">
+                                        {inviteError}
+                                        <button type="button" onClick={() => void fetchInviteUrl()}>
+                                            Tentar novamente
+                                        </button>
+                                    </p>
+                                )}
+                            </div>
+
+                            <p className="roleta-vip-invite-note">
+                                Benefícios resgatados na roleta valem somente para os itens diários,<br />
+                                todos os itens atualizam em 24 horas.
+                            </p>
+
+                            <p className="roleta-vip-invite-address">
+                                Local — Cidade alta, Borges de Medeiros n°539/03
+                            </p>
+                        </section>
+                    )}
                 </section>
             </main>
         </div>
