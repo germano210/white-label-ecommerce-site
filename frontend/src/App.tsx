@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import {
     BrowserRouter,
     Navigate,
@@ -20,6 +21,46 @@ import { apiRoutes } from './utils/apiRoutes';
 import { appRoutes } from './utils/appRoutes';
 
 const pendingRoletaInviteStorageKey = 'viabras-pending-roleta-invite-code';
+const attemptedRoletaInviteStoragePrefix = 'viabras-attempted-roleta-invite-code';
+
+function getAttemptedRoletaInviteStorageKey(inviteCode: string) {
+    return `${attemptedRoletaInviteStoragePrefix}:${encodeURIComponent(inviteCode)}`;
+}
+
+function waitForRoletaBootstrapRetry(durationMs: number) {
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, durationMs);
+    });
+}
+
+function isRoletaParticipantConflictError(error: unknown) {
+    if (!axios.isAxiosError(error)) return false;
+
+    const responseText = typeof error.response?.data === 'string'
+        ? error.response.data
+        : JSON.stringify(error.response?.data ?? {});
+
+    return error.response?.status === 500 && (
+        responseText.includes('uk_roleta_participante_usuario')
+        || responseText.includes('roleta_participantes')
+        || responseText.toLowerCase().includes('duplicate key')
+    );
+}
+
+async function postRoletaInviteWithParticipantRetry(inviteCode: string) {
+    try {
+        await api.post(apiRoutes.roleta.convites, {
+            codigoConvite: inviteCode,
+        });
+    } catch (error) {
+        if (!isRoletaParticipantConflictError(error)) throw error;
+
+        await waitForRoletaBootstrapRetry(450);
+        await api.post(apiRoutes.roleta.convites, {
+            codigoConvite: inviteCode,
+        });
+    }
+}
 
 interface AuthMeResponse {
     usuario?: Partial<AuthUser> | null;
@@ -73,6 +114,7 @@ function AppRoutes() {
     const logout = useAuthStore((state) => state.logout);
     const [pendingRoletaInviteCode, setPendingRoletaInviteCode] = useState<string | null>(null);
     const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
+    const registeringRoletaInviteCodeRef = useRef<string | null>(null);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const isAdminRoute = normalizedPathname === appRoutes.admin;
     const isRoletaRoute = normalizedPathname === appRoutes.root || normalizedPathname === appRoutes.roletaVip;
@@ -87,6 +129,13 @@ function AppRoutes() {
         const nextInviteCode = inviteCode || storedInviteCode;
 
         if (nextInviteCode) {
+            if (
+                registeringRoletaInviteCodeRef.current === nextInviteCode
+                || window.sessionStorage.getItem(getAttemptedRoletaInviteStorageKey(nextInviteCode)) === '1'
+            ) {
+                return;
+            }
+
             window.sessionStorage.setItem(pendingRoletaInviteStorageKey, nextInviteCode);
             setPendingRoletaInviteCode(nextInviteCode);
         }
@@ -129,17 +178,29 @@ function AppRoutes() {
 
     useEffect(() => {
         if (!isRoletaRoute || !hasHydrated || !pendingRoletaInviteCode || !isAuthenticated || !user) return;
+        if (registeringRoletaInviteCodeRef.current === pendingRoletaInviteCode) return;
+
+        const attemptedInviteStorageKey = getAttemptedRoletaInviteStorageKey(pendingRoletaInviteCode);
+        if (window.sessionStorage.getItem(attemptedInviteStorageKey) === '1') {
+            window.sessionStorage.removeItem(pendingRoletaInviteStorageKey);
+            setPendingRoletaInviteCode(null);
+            return;
+        }
 
         let isActive = true;
+        registeringRoletaInviteCodeRef.current = pendingRoletaInviteCode;
 
         const registerRoletaInvite = async () => {
             try {
-                await api.post(apiRoutes.roleta.convites, {
-                    codigoConvite: pendingRoletaInviteCode,
-                });
+                await postRoletaInviteWithParticipantRetry(pendingRoletaInviteCode);
             } catch {
                 // O acesso a roleta nao depende da conversao do convite.
             } finally {
+                window.sessionStorage.setItem(attemptedInviteStorageKey, '1');
+                if (registeringRoletaInviteCodeRef.current === pendingRoletaInviteCode) {
+                    registeringRoletaInviteCodeRef.current = null;
+                }
+
                 if (!isActive) return;
 
                 window.sessionStorage.removeItem(pendingRoletaInviteStorageKey);

@@ -119,9 +119,7 @@ function getRequestToken(url?: string) {
     const adminToken = getAdminToken();
     const authToken = getAuthToken();
 
-    return isAdminRequest(url)
-        ? adminToken ?? authToken
-        : authToken ?? adminToken;
+    return isAdminRequest(url) ? adminToken : authToken;
 }
 
 /**

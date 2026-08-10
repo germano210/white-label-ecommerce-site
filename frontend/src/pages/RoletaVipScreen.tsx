@@ -639,6 +639,31 @@ function waitForAnimation(durationMs: number) {
     });
 }
 
+function isRoletaParticipantConflictError(error: unknown) {
+    if (!axios.isAxiosError(error)) return false;
+
+    const responseText = typeof error.response?.data === 'string'
+        ? error.response.data
+        : JSON.stringify(error.response?.data ?? {});
+
+    return error.response?.status === 500 && (
+        responseText.includes('uk_roleta_participante_usuario')
+        || responseText.includes('roleta_participantes')
+        || responseText.toLowerCase().includes('duplicate key')
+    );
+}
+
+async function runWithRoletaParticipantRetry<T>(request: () => Promise<T>) {
+    try {
+        return await request();
+    } catch (error) {
+        if (!isRoletaParticipantConflictError(error)) throw error;
+
+        await waitForAnimation(450);
+        return request();
+    }
+}
+
 function removePrizeNegativeSign(label: string) {
     return label
         .trim()
@@ -878,6 +903,7 @@ export function RoletaVipScreen() {
     const [isInviteLoading, setIsInviteLoading] = useState(false);
     const [inviteError, setInviteError] = useState('');
     const [inviteCopyLabel, setInviteCopyLabel] = useState('Copiar link');
+    const fetchRoletaInFlightRef = useRef(false);
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
     const dailyCheckoutInFlightRef = useRef(false);
     const dailyCardGestureRef = useRef({
@@ -904,11 +930,16 @@ export function RoletaVipScreen() {
     const visibleInviteUrl = isAuthenticated ? (inviteUrl || roleta.urlConvite) : guestInviteUrl;
 
     const fetchRoleta = useCallback(async () => {
+        if (fetchRoletaInFlightRef.current) return;
+
+        fetchRoletaInFlightRef.current = true;
         setIsLoading(true);
         setError('');
 
         try {
-            const { data } = await api.get<RoletaStatusApi>(apiRoutes.roleta.status);
+            const { data } = await runWithRoletaParticipantRetry(() => (
+                api.get<RoletaStatusApi>(apiRoutes.roleta.status)
+            ));
             const nextRoleta = normalizeRoletaStatus(data);
             setRoleta(nextRoleta);
             if (nextRoleta.urlConvite) {
@@ -926,6 +957,7 @@ export function RoletaVipScreen() {
             setError(getRoletaErrorMessage(roletaError));
             setRoleta(emptyRoletaState);
         } finally {
+            fetchRoletaInFlightRef.current = false;
             setIsLoading(false);
         }
     }, []);
@@ -946,7 +978,9 @@ export function RoletaVipScreen() {
         setInviteError('');
 
         try {
-            const { data } = await api.get<RoletaConvitesResponse>(apiRoutes.roleta.convites);
+            const { data } = await runWithRoletaParticipantRetry(() => (
+                api.get<RoletaConvitesResponse>(apiRoutes.roleta.convites)
+            ));
             const nextInviteUrl = normalizeInviteUrl(data);
 
             if (!nextInviteUrl) {
@@ -970,9 +1004,10 @@ export function RoletaVipScreen() {
         }
 
         if (roleta.urlConvite) return;
+        if (isLoading || fetchRoletaInFlightRef.current) return;
 
         void fetchInviteUrl();
-    }, [fetchInviteUrl, isAuthenticated, roleta.urlConvite]);
+    }, [fetchInviteUrl, isAuthenticated, isLoading, roleta.urlConvite]);
 
     useEffect(() => {
         const syncRoletaOnReturn = () => {
