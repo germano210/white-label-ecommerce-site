@@ -64,6 +64,7 @@ interface AdminRoletaNivelApi {
     descricao?: string | null;
     corHex?: string | null;
     cor_hex?: string | null;
+    cor?: string | null;
     ordem?: number | string | null;
     pesoRelativo?: number | string | null;
     peso_relativo?: number | string | null;
@@ -228,12 +229,35 @@ function toBoolean(value: boolean | number | string | null | undefined, fallback
 }
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
-    const normalizedValue = value?.trim();
-    if (normalizedValue && /^#[0-9a-fA-F]{6}$/.test(normalizedValue)) {
-        return normalizedValue;
+    const normalizedValue = value?.trim().replace(/^#/, '');
+
+    if (normalizedValue && /^[0-9a-fA-F]{3}$/.test(normalizedValue)) {
+        return `#${normalizedValue.split('').map((char) => `${char}${char}`).join('').toUpperCase()}`;
+    }
+
+    if (normalizedValue && /^[0-9a-fA-F]{6}$/.test(normalizedValue)) {
+        return `#${normalizedValue.toUpperCase()}`;
     }
 
     return fallback;
+}
+
+function pickHexColor(values: Array<string | null | undefined>, fallback: string) {
+    for (const value of values) {
+        const normalizedValue = normalizeHexColor(value, '');
+        if (normalizedValue) return normalizedValue;
+    }
+
+    return fallback;
+}
+
+function isHexColorDraft(value: string) {
+    return /^#?[0-9a-fA-F]{0,6}$/.test(value.trim());
+}
+
+function isCompleteHexColor(value: string) {
+    const normalizedValue = value.trim().replace(/^#/, '');
+    return /^[0-9a-fA-F]{3}$/.test(normalizedValue) || /^[0-9a-fA-F]{6}$/.test(normalizedValue);
 }
 
 function normalizeTipoPremio(value: string | null | undefined): RoletaTipoPremio {
@@ -394,7 +418,7 @@ function normalizeLevelsFromNestedApi(niveis: AdminRoletaNivelApi[]) {
                 id: nivel.id,
                 nome: nivel.nome ?? nivel.titulo ?? '',
                 descricao: nivel.descricao ?? '',
-                corHex: normalizeHexColor(nivel.corHex ?? nivel.cor_hex, preset.corHex),
+                corHex: pickHexColor([nivel.corHex, nivel.cor_hex, nivel.cor], preset.corHex),
                 ordem: String(ordem),
                 pesoRelativo: decimalInputValue(nivel.pesoRelativo ?? nivel.peso_relativo, '1'),
                 chanceCalculada: parseOptionalNumber(nivel.chanceCalculada ?? nivel.chance_calculada),
@@ -526,6 +550,12 @@ function getValidationError(form: RoletaFormState) {
     const hasActivePrize = activeLevels.some((level) => (
         level.premios.some((prize) => prize.ativo)
     ));
+
+    const hasInvalidLevelColor = form.niveis.some((level) => !isCompleteHexColor(level.corHex));
+
+    if (hasInvalidLevelColor) {
+        return 'Informe a cor do nivel em hexadecimal. Ex: #E83E8C.';
+    }
 
     if (!hasActivePrize) {
         return 'Cadastre pelo menos um nivel ativo com premio ativo antes de salvar.';
@@ -887,7 +917,10 @@ export function RoletaAdminPanel() {
                                         return (
                                             <article key={level.localId} style={levelCardStyle}>
                                                 <div style={levelHeaderStyle}>
-                                                    <span style={{ ...colorSwatchStyle, background: level.corHex }} aria-hidden="true" />
+                                                    <span
+                                                        style={{ ...colorSwatchStyle, background: normalizeHexColor(level.corHex, '#687152') }}
+                                                        aria-hidden="true"
+                                                    />
                                                     <div style={{ minWidth: 0 }}>
                                                         <strong style={levelNameStyle}>
                                                             {level.nome.trim() || `Nivel ${level.ordem}`}
@@ -915,7 +948,7 @@ export function RoletaAdminPanel() {
                                                 </div>
 
                                                 <div style={levelGridStyle}>
-                                                    <label style={fieldLabelStyle}>
+                                                    <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
                                                         Nome do nivel
                                                         <input
                                                             value={level.nome}
@@ -924,14 +957,38 @@ export function RoletaAdminPanel() {
                                                             style={inputStyle}
                                                         />
                                                     </label>
-                                                    <label style={fieldLabelStyle}>
-                                                        Cor
-                                                        <input
-                                                            type="color"
-                                                            value={level.corHex}
-                                                            onChange={(event) => updateLevel(level.localId, 'corHex', event.target.value)}
-                                                            style={colorInputStyle}
-                                                        />
+                                                    <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                                        Cor hexadecimal do nivel
+                                                        <div style={colorFieldStyle}>
+                                                            <input
+                                                                type="color"
+                                                                value={normalizeHexColor(level.corHex, '#687152')}
+                                                                onChange={(event) => updateLevel(level.localId, 'corHex', normalizeHexColor(event.target.value, '#687152'))}
+                                                                style={colorInputStyle}
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                inputMode="text"
+                                                                maxLength={7}
+                                                                value={level.corHex}
+                                                                onChange={(event) => {
+                                                                    const nextValue = event.target.value.toUpperCase();
+                                                                    if (isHexColorDraft(nextValue)) {
+                                                                        updateLevel(level.localId, 'corHex', nextValue);
+                                                                    }
+                                                                }}
+                                                                onBlur={() => {
+                                                                    if (isCompleteHexColor(level.corHex)) {
+                                                                        updateLevel(level.localId, 'corHex', normalizeHexColor(level.corHex, '#687152'));
+                                                                    }
+                                                                }}
+                                                                placeholder="#E83E8C"
+                                                                style={colorTextInputStyle}
+                                                            />
+                                                        </div>
+                                                        <span style={fieldHintStyle}>
+                                                            Digite o hexadecimal exato e depois use Salvar roleta para gravar no backend.
+                                                        </span>
                                                     </label>
                                                     <label style={fieldLabelStyle}>
                                                         Ordem
@@ -1182,14 +1239,29 @@ const textareaStyle: CSSProperties = {
     resize: 'vertical',
 };
 
+const colorFieldStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+};
+
 const colorInputStyle: CSSProperties = {
-    width: '100%',
+    flex: '0 0 48px',
+    width: '48px',
     height: '43px',
     border: '1px solid #EEE',
     borderRadius: '12px',
     background: '#F9F9F9',
     cursor: 'pointer',
     padding: '4px',
+};
+
+const colorTextInputStyle: CSSProperties = {
+    ...inputStyle,
+    flex: '1 1 auto',
+    minWidth: 0,
+    width: 'auto',
+    textTransform: 'uppercase',
 };
 
 const gridStyle: CSSProperties = {
@@ -1366,7 +1438,7 @@ const chanceStyle: CSSProperties = {
 
 const levelGridStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1.4fr) 72px 80px minmax(0, 1fr)',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
     gap: '10px',
 };
 

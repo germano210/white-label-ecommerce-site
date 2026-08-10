@@ -12,6 +12,7 @@ import './RoletaVipScreen.css';
 type NumericApiValue = number | string | null | undefined;
 type RoletaTab = 'spin' | 'daily';
 type RoletaTipoPremio = 'DESCONTO_VALOR' | 'DESCONTO_PERCENTUAL' | 'GIRO_EXTRA' | 'SEM_PREMIO';
+type WheelRarityKey = 'COMUM' | 'INCOMUM' | 'MAGICO' | 'RARO' | 'LENDARIO';
 
 type RoletaNotificacaoApi = string | {
     texto?: string | null;
@@ -48,11 +49,31 @@ interface RoletaPremioApi {
     valor_formatado?: string | null;
     girosExtras?: NumericApiValue;
     giros_extras?: NumericApiValue;
-    nivel?: number | string | null;
+    nivel?: number | string | RoletaPremioNivelApi | null;
+    nivelId?: number | string | null;
+    nivel_id?: number | string | null;
     nivelNome?: string | null;
     nivel_nome?: string | null;
+    nivelCor?: string | null;
+    nivel_cor?: string | null;
+    nivelCorHex?: string | null;
+    nivel_cor_hex?: string | null;
+    corNivel?: string | null;
+    cor_nivel?: string | null;
     corHex?: string | null;
     cor_hex?: string | null;
+    cor?: string | null;
+}
+
+interface RoletaPremioNivelApi {
+    id?: number | string | null;
+    nome?: string | null;
+    titulo?: string | null;
+    corHex?: string | null;
+    cor_hex?: string | null;
+    cor?: string | null;
+    ordem?: number | string | null;
+    nivel?: number | string | null;
 }
 
 interface RoletaNivelApi {
@@ -62,6 +83,7 @@ interface RoletaNivelApi {
     descricao?: string | null;
     corHex?: string | null;
     cor_hex?: string | null;
+    cor?: string | null;
     ordem?: number | string | null;
     nivel?: number | string | null;
     ativo?: boolean | number | string | null;
@@ -137,11 +159,13 @@ interface RoletaConvitesResponse {
 
 interface RoletaWheelSlice {
     id: string;
+    sourceLevelId: string;
     label: string;
     color: string;
+    levelColor: string;
     order: number;
     level: number;
-    prizeLabelLines: string[];
+    rarity: WheelRarityKey;
 }
 
 interface RoletaSpinResult {
@@ -234,7 +258,25 @@ const rarityPresets = [
     { nome: 'Extremamente Raro / Ouro', corHex: '#D4A017' },
 ];
 
+const wheelRarityOrder: WheelRarityKey[] = ['COMUM', 'INCOMUM', 'MAGICO', 'RARO', 'LENDARIO'];
+const wheelRaritySlots: WheelRarityKey[] = [
+    'COMUM',
+    'INCOMUM',
+    'COMUM',
+    'MAGICO',
+    'COMUM',
+    'RARO',
+    'INCOMUM',
+    'COMUM',
+    'MAGICO',
+    'COMUM',
+    'INCOMUM',
+    'LENDARIO',
+];
+
 const DAILY_CARD_TAP_THRESHOLD = 10;
+const WHEEL_FULL_TURNS = 7;
+const WHEEL_SPIN_DURATION_MS = 3800;
 const inviteGuestNames = [
     'BIRDMAN',
     '$quanchy',
@@ -275,13 +317,6 @@ function formatCurrencyBRL(value: number) {
         .replace(/\s/g, '');
 }
 
-function formatPrizeRangeValue(value: number) {
-    return value.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-}
-
 function toBoolean(value: boolean | number | string | null | undefined, fallback = true) {
     if (typeof value === 'boolean') return value;
     if (typeof value === 'number') return value === 1;
@@ -295,12 +330,30 @@ function toBoolean(value: boolean | number | string | null | undefined, fallback
 }
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
-    const normalizedValue = value?.trim();
-    if (normalizedValue && /^#[0-9a-fA-F]{6}$/.test(normalizedValue)) {
-        return normalizedValue;
+    const normalizedValue = value?.trim().replace(/^#/, '').replace(/^0x/i, '');
+
+    if (normalizedValue && /^[0-9a-fA-F]{3}$/.test(normalizedValue)) {
+        return `#${normalizedValue.split('').map((char) => `${char}${char}`).join('').toUpperCase()}`;
+    }
+
+    if (normalizedValue && /^[0-9a-fA-F]{6}$/.test(normalizedValue)) {
+        return `#${normalizedValue.toUpperCase()}`;
     }
 
     return fallback;
+}
+
+function pickHexColor(values: Array<string | null | undefined>, fallback: string) {
+    for (const value of values) {
+        const normalizedValue = normalizeHexColor(value, '');
+        if (normalizedValue) return normalizedValue;
+    }
+
+    return fallback;
+}
+
+function isPrizeLevelObject(value: RoletaPremioApi['nivel']): value is RoletaPremioNivelApi {
+    return Boolean(value && typeof value === 'object');
 }
 
 function normalizeWheelLevelName(value: string) {
@@ -308,59 +361,33 @@ function normalizeWheelLevelName(value: string) {
     return normalizedValue === 'NICO' ? 'UNICO' : normalizedValue;
 }
 
-function getPrizeType(prize?: RoletaPremioApi | null) {
-    return (prize?.tipoPremio ?? prize?.tipo_premio ?? '').trim().toUpperCase();
+function normalizeRarityText(value: string) {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
 }
 
-function getPrizeValue(prize?: RoletaPremioApi | null) {
-    return parseApiNumber(
-        prize?.valor
-        ?? prize?.valorPremio
-        ?? prize?.valor_premio
-        ?? prize?.valorMaximo
-        ?? prize?.valor_maximo
-        ?? prize?.valorMinimo
-        ?? prize?.valor_minimo,
-    );
-}
+function getWheelRarityKey(level: RoletaNivelApi, fallbackIndex: number): WheelRarityKey {
+    const normalizedName = normalizeRarityText(level.nome ?? level.titulo ?? '');
 
-function createWheelPrizeLabelLines(levelName: string, prizes?: RoletaPremioApi[] | null) {
-    const activePrizes = (prizes ?? [])
-        .map((prize) => ({
-            type: getPrizeType(prize),
-            value: getPrizeValue(prize),
-        }))
-        .filter((prize) => prize.value > 0);
-
-    if (activePrizes.length === 0) return [levelName];
-
-    const percentPrizes = activePrizes.filter((prize) => prize.type === 'DESCONTO_PERCENTUAL');
-    const hasFullDiscount = percentPrizes.some((prize) => prize.value >= 100);
-
-    if (hasFullDiscount) {
-        return [levelName, '100%', 'OFF'];
+    if (
+        normalizedName.includes('LENDARIO')
+        || normalizedName.includes('LEGENDARIO')
+        || normalizedName.includes('EXTREMAMENTE')
+        || normalizedName.includes('OURO')
+        || normalizedName.includes('EPICO')
+    ) {
+        return 'LENDARIO';
     }
 
-    if (percentPrizes.length > 0 && percentPrizes.length === activePrizes.length) {
-        const values = percentPrizes.map((prize) => prize.value);
-        const minValue = Math.min(...values);
-        const maxValue = Math.max(...values);
-        const valueLabel = minValue === maxValue
-            ? `${formatPrizeRangeValue(minValue)}%`
-            : `${formatPrizeRangeValue(minValue)}-${formatPrizeRangeValue(maxValue)}%`;
+    if (normalizedName.includes('RARO')) return 'RARO';
+    if (normalizedName.includes('MAGICO') || normalizedName.includes('MAGICA')) return 'MAGICO';
+    if (normalizedName.includes('INCOMUM') || normalizedName.includes('RESTRITO')) return 'INCOMUM';
+    if (normalizedName.includes('COMUM') || normalizedName.includes('GRAU MILITAR')) return 'COMUM';
 
-        return [levelName, valueLabel, 'OFF'];
-    }
-
-    const valuePrizes = activePrizes.filter((prize) => prize.type === 'DESCONTO_VALOR');
-    const values = (valuePrizes.length > 0 ? valuePrizes : activePrizes).map((prize) => prize.value);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    const valueLabel = minValue === maxValue
-        ? formatPrizeRangeValue(minValue)
-        : `${formatPrizeRangeValue(minValue)}-${formatPrizeRangeValue(maxValue)}`;
-
-    return [levelName, 'R$', valueLabel, 'OFF'];
+    return wheelRarityOrder[Math.min(fallbackIndex, wheelRarityOrder.length - 1)];
 }
 
 function normalizeNotification(notification: RoletaNotificacaoApi) {
@@ -387,23 +414,49 @@ function normalizeNotification(notification: RoletaNotificacaoApi) {
 }
 
 function normalizeWheelSlicesFromLevels(levels: RoletaNivelApi[]) {
-    return levels
+    const activeLevels = levels
         .filter((level) => toBoolean(level.ativo ?? level.ativa, true))
         .map((level, index) => {
             const preset = rarityPresets[index % rarityPresets.length];
             const order = Math.max(1, Math.floor(parseApiNumber(level.ordem ?? level.nivel ?? index + 1)));
             const label = normalizeWheelLevelName((level.nome ?? level.titulo ?? preset.nome).trim());
+            const levelColor = pickHexColor([level.corHex, level.cor_hex, level.cor], preset.corHex);
+            const levelId = String(level.id ?? `nivel-${order}`);
+            const rarity = getWheelRarityKey(level, index);
 
             return {
-                id: String(level.id ?? `nivel-${order}`),
+                id: levelId,
+                sourceLevelId: levelId,
                 label,
-                color: '#46553A',
+                color: levelColor,
+                levelColor,
                 order,
                 level: Math.max(1, Math.floor(parseApiNumber(level.nivel ?? order))),
-                prizeLabelLines: createWheelPrizeLabelLines(label, level.premios),
+                rarity,
             };
         })
         .sort((a, b) => a.order - b.order);
+
+    if (activeLevels.length === 0) return [];
+
+    const levelsByRarity = new Map<WheelRarityKey, RoletaWheelSlice>();
+    activeLevels.forEach((level) => {
+        if (!levelsByRarity.has(level.rarity)) {
+            levelsByRarity.set(level.rarity, level);
+        }
+    });
+
+    return wheelRaritySlots.map((rarity, slotIndex) => {
+        const fallbackLevelIndex = Math.min(wheelRarityOrder.indexOf(rarity), activeLevels.length - 1);
+        const level = levelsByRarity.get(rarity) ?? activeLevels[fallbackLevelIndex] ?? activeLevels[0];
+
+        return {
+            ...level,
+            id: `${level.sourceLevelId}-slot-${slotIndex + 1}`,
+            order: slotIndex + 1,
+            rarity,
+        };
+    });
 }
 
 function normalizeWheelSlices(data?: RoletaStatusApi | null) {
@@ -515,30 +568,69 @@ function getRoletaCheckoutErrorMessage(error: unknown) {
 function createWheelGradient(slices: RoletaWheelSlice[]) {
     if (slices.length === 0) return '#E6D9D4';
 
-    const sliceCount = Math.max(slices.length * 2, 2);
+    const sliceCount = Math.max(slices.length, 1);
     const sliceAngle = 360 / sliceCount;
-    const segments = Array.from({ length: sliceCount }, (_, index) => {
-        const color = index % 2 === 0 ? '#FEF2ED' : '#46553A';
+    const segments = slices.map((slice, index) => {
         const start = index * sliceAngle;
         const end = (index + 1) * sliceAngle;
-        return `${color} ${start}deg ${end}deg`;
+        return `${slice.color} ${start}deg ${end}deg`;
     });
 
-    return `conic-gradient(from -90deg, ${segments.join(', ')})`;
+    return `conic-gradient(from ${-sliceAngle / 2}deg, ${segments.join(', ')})`;
 }
 
-function getWheelLabelAngle(index: number, totalLevels: number) {
-    const sliceCount = Math.max(totalLevels * 2, 2);
-    const sliceAngle = 360 / sliceCount;
-    return ((index * 2) + 1.5) * sliceAngle;
+function normalizeDegrees(value: number) {
+    return ((value % 360) + 360) % 360;
 }
 
-function getWheelLabelTransform(index: number, totalLevels: number) {
-    const angle = getWheelLabelAngle(index, totalLevels);
-    const normalizedAngle = ((angle % 360) + 360) % 360;
-    const keepReadableRotation = normalizedAngle > 90 && normalizedAngle < 270 ? 180 : 0;
+function getMatchedPrizeSlice(premio: RoletaPremioApi | null | undefined, slices: RoletaWheelSlice[]) {
+    if (!premio || slices.length === 0) return null;
 
-    return `translate(-50%, -50%) rotate(${angle}deg) translateY(calc(-1 * var(--roleta-wheel-label-radius))) rotate(${keepReadableRotation}deg)`;
+    const rawPrizeLevel = premio.nivel;
+    const prizeLevel = isPrizeLevelObject(rawPrizeLevel) ? rawPrizeLevel : null;
+    const flatLevelValue: NumericApiValue = isPrizeLevelObject(rawPrizeLevel) ? null : rawPrizeLevel;
+    const levelId = prizeLevel?.id ?? premio.nivelId ?? premio.nivel_id ?? flatLevelValue;
+    const levelNumber = Math.max(1, Math.floor(parseApiNumber(
+        prizeLevel?.nivel
+        ?? prizeLevel?.ordem
+        ?? premio?.nivelId
+        ?? premio?.nivel_id
+        ?? flatLevelValue
+        ?? 1,
+    )));
+    const levelNameFromPrize = (
+        premio?.nivelNome
+        ?? premio?.nivel_nome
+        ?? prizeLevel?.nome
+        ?? prizeLevel?.titulo
+        ?? ''
+    ).trim();
+
+    return slices.find((slice) => prizeLevel?.id && slice.sourceLevelId === String(prizeLevel.id))
+        ?? slices.find((slice) => levelId !== null && levelId !== undefined && slice.sourceLevelId === String(levelId))
+        ?? slices.find((slice) => prizeLevel?.id && slice.id === String(prizeLevel.id))
+        ?? slices.find((slice) => levelId !== null && levelId !== undefined && slice.id === String(levelId))
+        ?? slices.find((slice) => slice.level === levelNumber || slice.order === levelNumber)
+        ?? slices.find((slice) => levelNameFromPrize && slice.label === normalizeWheelLevelName(levelNameFromPrize))
+        ?? null;
+}
+
+function getPrizeSliceIndex(premio: RoletaPremioApi | null | undefined, slices: RoletaWheelSlice[]) {
+    const matchedSlice = getMatchedPrizeSlice(premio, slices);
+    if (!matchedSlice) return 0;
+
+    return Math.max(0, slices.findIndex((slice) => slice.id === matchedSlice.id));
+}
+
+function createTargetWheelRotation(currentRotation: number, targetSliceIndex: number, totalSlices: number) {
+    if (totalSlices <= 0) return currentRotation + (WHEEL_FULL_TURNS * 360);
+
+    const sliceAngle = 360 / totalSlices;
+    const targetRotation = normalizeDegrees(-targetSliceIndex * sliceAngle);
+    const currentRotationPosition = normalizeDegrees(currentRotation);
+    const remainingRotation = normalizeDegrees(targetRotation - currentRotationPosition);
+
+    return currentRotation + (WHEEL_FULL_TURNS * 360) + remainingRotation;
 }
 
 function waitForAnimation(durationMs: number) {
@@ -547,12 +639,19 @@ function waitForAnimation(durationMs: number) {
     });
 }
 
+function removePrizeNegativeSign(label: string) {
+    return label
+        .trim()
+        .replace(/^-\s*(R\$)/, '$1')
+        .replace(/^(R\$)\s*-\s*/, '$1');
+}
+
 function getPrizeValueLabel(prize?: RoletaPremioApi | null) {
     if (!prize) return '';
-    if (prize.valorFormatado) return prize.valorFormatado;
-    if (prize.valor_formatado) return prize.valor_formatado;
+    if (prize.valorFormatado) return removePrizeNegativeSign(prize.valorFormatado);
+    if (prize.valor_formatado) return removePrizeNegativeSign(prize.valor_formatado);
 
-    const prizeValue = parseApiNumber(
+    const prizeValue = Math.abs(parseApiNumber(
         prize.valor
         ?? prize.valorPremio
         ?? prize.valor_premio
@@ -560,7 +659,7 @@ function getPrizeValueLabel(prize?: RoletaPremioApi | null) {
         ?? prize.valor_maximo
         ?? prize.valorMinimo
         ?? prize.valor_minimo,
-    );
+    ));
 
     const tipoPremio = prize.tipoPremio ?? prize.tipo_premio;
     if (tipoPremio === 'DESCONTO_PERCENTUAL' && prizeValue > 0) return `${prizeValue}%`;
@@ -574,7 +673,7 @@ function getPrizeValueLabel(prize?: RoletaPremioApi | null) {
 }
 
 function getPrizeNumericValue(prize?: RoletaPremioApi | null) {
-    return parseApiNumber(
+    return Math.abs(parseApiNumber(
         prize?.valor
         ?? prize?.valorPremio
         ?? prize?.valor_premio
@@ -582,7 +681,7 @@ function getPrizeNumericValue(prize?: RoletaPremioApi | null) {
         ?? prize?.valor_maximo
         ?? prize?.valorMinimo
         ?? prize?.valor_minimo,
-    );
+    ));
 }
 
 function createPrizeView(
@@ -591,17 +690,37 @@ function createPrizeView(
 ): RoletaSpinResult | null {
     if (!premio) return null;
 
+    const rawPrizeLevel = premio.nivel;
+    const prizeLevel = isPrizeLevelObject(rawPrizeLevel) ? rawPrizeLevel : null;
+    const flatLevelValue: NumericApiValue = isPrizeLevelObject(rawPrizeLevel) ? null : rawPrizeLevel;
+    const levelId = prizeLevel?.id ?? premio.nivelId ?? premio.nivel_id ?? flatLevelValue;
     const levelNumber = Math.max(1, Math.floor(parseApiNumber(
-        premio?.nivel
+        prizeLevel?.nivel
+        ?? prizeLevel?.ordem
+        ?? premio?.nivelId
+        ?? premio?.nivel_id
+        ?? flatLevelValue
         ?? 1,
     )));
-    const matchedSlice = slices.find((slice) => slice.level === levelNumber) ?? slices[0];
-    const preset = rarityPresets[(levelNumber - 1) % rarityPresets.length];
-    const nivelNome = (
+    const levelNameFromPrize = (
         premio?.nivelNome
         ?? premio?.nivel_nome
-        ?? matchedSlice?.label
-        ?? preset.nome
+        ?? prizeLevel?.nome
+        ?? prizeLevel?.titulo
+        ?? ''
+    ).trim();
+    const matchedSlice = slices.find((slice) => prizeLevel?.id && slice.sourceLevelId === String(prizeLevel.id))
+        ?? slices.find((slice) => levelId !== null && levelId !== undefined && slice.sourceLevelId === String(levelId))
+        ?? slices.find((slice) => prizeLevel?.id && slice.id === String(prizeLevel.id))
+        ?? slices.find((slice) => levelId !== null && levelId !== undefined && slice.id === String(levelId))
+        ?? slices.find((slice) => slice.level === levelNumber || slice.order === levelNumber)
+        ?? slices.find((slice) => levelNameFromPrize && slice.label === normalizeWheelLevelName(levelNameFromPrize))
+        ?? slices[0];
+    const preset = rarityPresets[(levelNumber - 1) % rarityPresets.length];
+    const nivelNome = (
+        levelNameFromPrize
+        || matchedSlice?.label
+        || preset.nome
     ).trim();
     const premioTitulo = (
         premio?.titulo
@@ -618,11 +737,22 @@ function createPrizeView(
 
     return {
         nivelNome: nivelNome || 'Nivel sorteado',
-        nivelCor: normalizeHexColor(
-            premio?.corHex
-            ?? premio?.cor_hex
-            ?? matchedSlice?.color
-            ?? null,
+        nivelCor: pickHexColor(
+            [
+                premio?.corHex,
+                premio?.cor_hex,
+                premio?.nivelCorHex,
+                premio?.nivel_cor_hex,
+                premio?.nivelCor,
+                premio?.nivel_cor,
+                premio?.corNivel,
+                premio?.cor_nivel,
+                premio?.cor,
+                prizeLevel?.corHex,
+                prizeLevel?.cor_hex,
+                prizeLevel?.cor,
+                matchedSlice?.levelColor,
+            ],
             preset.corHex,
         ),
         premioTitulo: premioTitulo || 'Premio sorteado',
@@ -631,13 +761,6 @@ function createPrizeView(
         valor: getPrizeNumericValue(premio),
         valorLabel,
     };
-}
-
-function createSpinResult(data: RoletaGiroResponse, slices: RoletaWheelSlice[]): RoletaSpinResult | null {
-    return createPrizeView(
-        getPremioAtualFromSpin(data),
-        slices,
-    );
 }
 
 function getDiscountedPricePreview(product: DailyProduct, premioAtual: RoletaSpinResult | null) {
@@ -898,13 +1021,21 @@ export function RoletaVipScreen() {
 
         try {
             const { data } = await api.post<RoletaGiroResponse>(apiRoutes.roleta.girar);
-            setWheelRotation((currentRotation) => currentRotation + 1800 + 72);
-            await waitForAnimation(1250);
+            const rawPrize = getPremioAtualFromSpin(data) ?? getPremioAtualFromStatus(data.roleta);
+            const responseRoleta = data.roleta ? normalizeRoletaStatus(data.roleta) : null;
+            const slicesForSpin = responseRoleta?.opcoes.length ? responseRoleta.opcoes : roleta.opcoes;
+            const nextPrize = createPrizeView(rawPrize, slicesForSpin);
+            const targetSliceIndex = getPrizeSliceIndex(rawPrize, slicesForSpin);
 
-            const nextPrize = createSpinResult(data, roleta.opcoes);
+            setWheelRotation((currentRotation) => createTargetWheelRotation(
+                currentRotation,
+                targetSliceIndex,
+                slicesForSpin.length,
+            ));
+            await waitForAnimation(WHEEL_SPIN_DURATION_MS);
 
             if (data.roleta) {
-                const nextRoleta = normalizeRoletaStatus(data.roleta);
+                const nextRoleta = responseRoleta ?? normalizeRoletaStatus(data.roleta);
                 setRoleta(nextPrize ? { ...nextRoleta, premioAtual: nextPrize } : nextRoleta);
             } else if (
                 nextPrize
@@ -1222,28 +1353,9 @@ export function RoletaVipScreen() {
                                             <motion.div
                                                 className="roleta-vip-wheel-face"
                                                 animate={{ rotate: wheelRotation }}
-                                                transition={{ duration: 1.25, ease: [0.16, 1, 0.3, 1] }}
+                                                transition={{ duration: WHEEL_SPIN_DURATION_MS / 1000, ease: [0.08, 0.82, 0.18, 1] }}
                                                 style={{ background: wheelGradient }}
-                                            >
-                                                {roleta.opcoes.map((slice, sliceIndex) => (
-                                                    <span
-                                                        className="roleta-vip-wheel-slice-label"
-                                                        key={slice.id}
-                                                        style={{
-                                                            transform: getWheelLabelTransform(sliceIndex, roleta.opcoes.length),
-                                                        }}
-                                                    >
-                                                        {slice.prizeLabelLines.map((line, lineIndex) => (
-                                                            <span
-                                                                className={lineIndex === 0 ? 'is-level' : ''}
-                                                                key={`${slice.id}-${line}-${lineIndex}`}
-                                                            >
-                                                                {line}
-                                                            </span>
-                                                        ))}
-                                                    </span>
-                                                ))}
-                                            </motion.div>
+                                            />
                                         </div>
                                         <button
                                             type="button"
@@ -1251,7 +1363,7 @@ export function RoletaVipScreen() {
                                             onClick={() => void handleSpin()}
                                             disabled={!canSpin}
                                         >
-                                            {isSpinning ? 'girando' : 'girar'}
+                                            {isSpinning ? '' : 'girar'}
                                         </button>
                                     </div>
                                 </div>
@@ -1283,10 +1395,13 @@ export function RoletaVipScreen() {
                                             style={{
                                                 backgroundColor: currentPrize.nivelCor,
                                                 color: '#000000',
+                                                fontWeight: 900,
+                                                WebkitTextStroke: '0.25px #000000',
+                                                boxShadow: '1px 1px 10px #fff6f1'
                                             }}
                                             onClick={() => setActiveTab('daily')}
                                         >
-                                            Usar -{currentPrize.valorLabel || formatCurrencyBRL(currentPrize.valor)}
+                                            Usar {removePrizeNegativeSign(currentPrize.valorLabel || formatCurrencyBRL(Math.abs(currentPrize.valor)))}
                                         </button>
                                     )}
                                 </div>
