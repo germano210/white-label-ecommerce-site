@@ -30,6 +30,9 @@ public class RoletaConfig {
     @Column(name = "progresso_grupo", nullable = false)
     private Integer progressoGrupo = 0;
 
+    @Column(name = "ciclo_meta_grupo", nullable = false, columnDefinition = "integer default 0")
+    private Integer cicloMetaGrupo = 0;
+
     @Column(name = "giros_bonus_grupo", nullable = false)
     private Integer girosBonusGrupo = 5;
 
@@ -113,6 +116,15 @@ public class RoletaConfig {
 
     public void setProgressoGrupo(Integer progressoGrupo) {
         this.progressoGrupo = Math.max(0, progressoGrupo == null ? 0 : progressoGrupo);
+    }
+
+    public Integer getCicloMetaGrupo() {
+        return Math.max(0, cicloMetaGrupo == null ? 0 : cicloMetaGrupo);
+    }
+
+    public Integer avancarCicloMetaGrupo() {
+        cicloMetaGrupo = getCicloMetaGrupo() + 1;
+        return cicloMetaGrupo;
     }
 
     public Integer getGirosBonusGrupo() {
@@ -235,6 +247,9 @@ public class RoletaConfig {
         }
         if (girosPorConviteMax == null || girosPorConviteMax < girosPorConviteMin) {
             girosPorConviteMax = girosPorConviteMin;
+        }
+        if (cicloMetaGrupo == null) {
+            cicloMetaGrupo = 0;
         }
         girosGanhosPorConvite = girosPorConviteMin;
         if (percentualComissaoIndicacao == null) {

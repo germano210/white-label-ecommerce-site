@@ -1347,7 +1347,7 @@ export function RoletaVipScreen() {
                         {activeTab === 'spin' && (
                             <section className="roleta-vip-wheel-section" aria-label="Girar a roleta">
                                 <div className="roleta-vip-wheel-stage">
-                                    <div className="roleta-vip-wheel-pointer" aria-hidden="true" />
+                                    <div className="roleta-vip-wheel-needle" aria-hidden="true" />
                                     <div className="roleta-vip-wheel-frame">
                                         <div className="roleta-vip-wheel-inner-border">
                                             <motion.div

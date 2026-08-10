@@ -7,6 +7,7 @@ import com.whiteLabel.backend.domain.MissaoCiclo;
 import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.RoletaConfig;
+import com.whiteLabel.backend.domain.RoletaGiroCredito;
 import com.whiteLabel.backend.domain.RoletaNivel;
 import com.whiteLabel.backend.domain.RoletaOpcao;
 import com.whiteLabel.backend.domain.RoletaGiroStatus;
@@ -24,6 +25,7 @@ import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
+import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
 import com.whiteLabel.backend.repository.RoletaOpcaoRepository;
@@ -52,6 +54,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
@@ -89,6 +92,9 @@ class RoletaControllerTest {
 
     @Autowired
     private RoletaGiroRepository roletaGiroRepository;
+
+    @Autowired
+    private RoletaGiroCreditoRepository roletaGiroCreditoRepository;
 
     @Autowired
     private PagamentoRepository pagamentoRepository;
@@ -259,6 +265,69 @@ class RoletaControllerTest {
     }
 
     @Test
+    void shouldNotIncreaseInitialSpinsWhenOpeningRoletaRepeatedly() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Reload Roleta", "551199992032");
+
+        for (int tentativa = 0; tentativa < 10; tentativa++) {
+            mockMvc.perform(get("/api/roleta")
+                            .header("Authorization", bearer(usuario))
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.girosTotaisObtidos").value(8))
+                    .andExpect(jsonPath("$.girosDisponiveis").value(8));
+        }
+
+        var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
+        assertEquals(8, participante.getGirosTotaisObtidos());
+        assertEquals(8, participante.getGirosDisponiveis());
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
+    }
+
+    @Test
+    void shouldKeepSpinsStableOnRepeatedFocusAndReloadCalls() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Foco Roleta", "551199992033");
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.girosDisponiveis").value(8));
+
+        for (int tentativa = 0; tentativa < 5; tentativa++) {
+            mockMvc.perform(get("/api/roleta/convites")
+                            .header("Authorization", bearer(usuario))
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(get("/api/roleta")
+                            .header("Authorization", bearer(usuario))
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.girosTotaisObtidos").value(8))
+                    .andExpect(jsonPath("$.girosDisponiveis").value(8));
+        }
+
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
+    }
+
+    @Test
+    void shouldCreditExtraSpinPrizeThroughUniqueCreditEvent() throws Exception {
+        RoletaNivel nivel = criarNivel("Premio Giro", 1, "#4b69ff", "1.00000000", true);
+        criarPremio("Giro Extra", nivel, 0, RoletaTipoPremio.GIRO_EXTRA, "2.00", "1.00000000", true);
+        Usuario usuario = criarUsuario("Cliente Premio Giro", "551199992037");
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.girosDisponiveis").value(9))
+                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(10));
+
+        var giro = roletaGiroRepository.findAll().get(0);
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("PREMIO_GIRO:" + giro.getId()));
+    }
+
+    @Test
     void shouldRegisterInviteConversionOnlyOnce() throws Exception {
         Usuario indicador = criarUsuario("Indicador Roleta", "551199992002");
         Usuario indicado = criarUsuario("Indicado Roleta", "551199992003");
@@ -322,6 +391,8 @@ class RoletaControllerTest {
         assertTrue(convite.getGirosConcedidos() >= 2);
         assertTrue(convite.getGirosConcedidos() <= 5);
         assertTrue(convite.getConvertidoEm() != null);
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("CONVITE:" + convite.getId()));
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEventoStartingWith("CONVITE:"));
         var participanteIndicador = roletaParticipanteRepository.findByUsuarioId(indicador.getId())
                 .orElseThrow();
         assertEquals(8 + convite.getGirosConcedidos(), participanteIndicador.getGirosDisponiveis());
@@ -1088,6 +1159,100 @@ class RoletaControllerTest {
     }
 
     @Test
+    void shouldCreditGroupGoalOnlyOnceForSameCycleAndParticipant() throws Exception {
+        criarPremioPadrao();
+        RoletaConfig config = new RoletaConfig();
+        config.setId(1L);
+        config.setMetaGrupo(1);
+        config.setGirosBonusGrupo(5);
+        config.setGiroDiarioQuantidade(0);
+        roletaConfigRepository.save(config);
+        Usuario usuarioQueGira = criarUsuario("Cliente Meta Grupo", "551199992034");
+        Usuario usuarioJaCreditado = criarUsuario("Cliente Meta Ja Creditado", "551199992035");
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuarioQueGira))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuarioJaCreditado))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        var participanteJaCreditado = roletaParticipanteRepository
+                .findByUsuarioId(usuarioJaCreditado.getId())
+                .orElseThrow();
+        roletaGiroCreditoRepository.save(new RoletaGiroCredito(
+                participanteJaCreditado,
+                "META_GRUPO:1:" + usuarioJaCreditado.getId(),
+                5
+        ));
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuarioQueGira))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roleta.progressoGrupo").value(0));
+
+        var participanteQueGirou = roletaParticipanteRepository
+                .findByUsuarioId(usuarioQueGira.getId())
+                .orElseThrow();
+        participanteJaCreditado = roletaParticipanteRepository
+                .findByUsuarioId(usuarioJaCreditado.getId())
+                .orElseThrow();
+
+        assertEquals(12, participanteQueGirou.getGirosDisponiveis());
+        assertEquals(13, participanteQueGirou.getGirosTotaisObtidos());
+        assertEquals(8, participanteJaCreditado.getGirosDisponiveis());
+        assertEquals(8, participanteJaCreditado.getGirosTotaisObtidos());
+        assertEquals(2, roletaGiroCreditoRepository.countByChaveEventoStartingWith("META_GRUPO:1:"));
+    }
+
+    @Test
+    void shouldCreditDailySpinOnlyOncePerDayAndOnlyWhenSpinning() throws Exception {
+        criarPremioPadrao();
+        RoletaConfig config = new RoletaConfig();
+        config.setId(1L);
+        config.setGirosIniciais(0);
+        config.setGiroDiarioQuantidade(1);
+        config.setGiroDiarioSomenteQuandoZerar(true);
+        roletaConfigRepository.save(config);
+        Usuario usuario = criarUsuario("Cliente Giro Diario", "551199992036");
+
+        for (int tentativa = 0; tentativa < 3; tentativa++) {
+            mockMvc.perform(get("/api/roleta")
+                            .header("Authorization", bearer(usuario))
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.girosTotaisObtidos").value(0))
+                    .andExpect(jsonPath("$.girosDisponiveis").value(0))
+                    .andExpect(jsonPath("$.giroDiarioDisponivel").value(true));
+        }
+
+        String chaveDiaria = "GIRO_DIARIO:" + usuario.getId() + ":" + LocalDate.now();
+        assertEquals(0, roletaGiroCreditoRepository.countByChaveEvento(chaveDiaria));
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.girosDisponiveis").value(0))
+                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(1))
+                .andExpect(jsonPath("$.roleta.giroDiarioDisponivel").value(false));
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Usuario sem giros disponiveis"));
+
+        var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
+        assertEquals(1, participante.getGirosTotaisObtidos());
+        assertEquals(0, participante.getGirosDisponiveis());
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento(chaveDiaria));
+    }
+
+    @Test
     void shouldAllowAdminToConfigureRoletaPrizesByLevel() throws Exception {
         Usuario admin = criarAdmin("551199992013");
         RoletaNivel nivel = criarNivel("Grau Militar", 1, "#4b69ff", "1.00000000", true);
@@ -1643,6 +1808,7 @@ class RoletaControllerTest {
         pedidoRepository.deleteAll();
         roletaConviteRepository.deleteAll();
         roletaGiroRepository.deleteAll();
+        roletaGiroCreditoRepository.deleteAll();
         roletaPremioRepository.deleteAll();
         roletaOpcaoRepository.deleteAll();
         roletaNivelRepository.deleteAll();

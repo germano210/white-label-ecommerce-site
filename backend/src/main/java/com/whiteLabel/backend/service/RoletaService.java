@@ -7,6 +7,7 @@ import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaConvite;
 import com.whiteLabel.backend.domain.RoletaConviteStatus;
 import com.whiteLabel.backend.domain.RoletaGiro;
+import com.whiteLabel.backend.domain.RoletaGiroCredito;
 import com.whiteLabel.backend.domain.RoletaGiroStatus;
 import com.whiteLabel.backend.domain.RoletaNivel;
 import com.whiteLabel.backend.domain.RoletaOpcao;
@@ -38,6 +39,7 @@ import com.whiteLabel.backend.dto.RoletaStatusResponse;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
+import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
 import com.whiteLabel.backend.repository.RoletaOpcaoRepository;
@@ -46,6 +48,7 @@ import com.whiteLabel.backend.repository.RoletaPremioRepository;
 import com.whiteLabel.backend.repository.RoletaProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -99,6 +102,7 @@ public class RoletaService {
     private final RoletaProdutoRepository roletaProdutoRepository;
     private final RoletaParticipanteRepository roletaParticipanteRepository;
     private final RoletaGiroRepository roletaGiroRepository;
+    private final RoletaGiroCreditoRepository roletaGiroCreditoRepository;
     private final RoletaConviteRepository roletaConviteRepository;
     private final RoletaNivelRepository roletaNivelRepository;
     private final RoletaOpcaoRepository roletaOpcaoRepository;
@@ -117,6 +121,7 @@ public class RoletaService {
             RoletaProdutoRepository roletaProdutoRepository,
             RoletaParticipanteRepository roletaParticipanteRepository,
             RoletaGiroRepository roletaGiroRepository,
+            RoletaGiroCreditoRepository roletaGiroCreditoRepository,
             RoletaConviteRepository roletaConviteRepository,
             RoletaNivelRepository roletaNivelRepository,
             RoletaOpcaoRepository roletaOpcaoRepository,
@@ -132,6 +137,7 @@ public class RoletaService {
         this.roletaProdutoRepository = roletaProdutoRepository;
         this.roletaParticipanteRepository = roletaParticipanteRepository;
         this.roletaGiroRepository = roletaGiroRepository;
+        this.roletaGiroCreditoRepository = roletaGiroCreditoRepository;
         this.roletaConviteRepository = roletaConviteRepository;
         this.roletaNivelRepository = roletaNivelRepository;
         this.roletaOpcaoRepository = roletaOpcaoRepository;
@@ -171,9 +177,16 @@ public class RoletaService {
         if (participante.getGirosDisponiveis() > 0) {
             participante.consumirGiro();
         } else if (isGiroDiarioDisponivel(participante, config, now)) {
+            creditarGiros(
+                    participante,
+                    config.getGiroDiarioQuantidade(),
+                    chaveGiroDiario(usuario, now.toLocalDate())
+            );
             participante.setUltimoGiroDiarioEm(now);
-            participante.adicionarGirosAoHistorico(config.getGiroDiarioQuantidade());
-            participante.adicionarGirosDisponiveis(config.getGiroDiarioQuantidade() - 1);
+            if (participante.getGirosDisponiveis() <= 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Usuario sem giros disponiveis");
+            }
+            participante.consumirGiro();
         } else {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Usuario sem giros disponiveis");
         }
@@ -193,7 +206,11 @@ public class RoletaService {
         ));
 
         if (premioSorteado.getTipoPremio() == RoletaTipoPremio.GIRO_EXTRA) {
-            participante.adicionarGiros(premioCalculado.girosExtras());
+            creditarGiros(
+                    participante,
+                    premioCalculado.girosExtras(),
+                    "PREMIO_GIRO:" + giro.getId()
+            );
         }
 
         incrementarProgressoGrupo(config);
@@ -262,7 +279,7 @@ public class RoletaService {
     public RoletaConvitesResponse registrarConvite(RoletaConvitesRequest request) {
         Usuario usuarioIndicado = obterUsuarioAutenticado();
         RoletaConfig config = obterConfig();
-        RoletaParticipante participanteIndicado = garantirParticipante(usuarioIndicado, config);
+        RoletaParticipante participanteIndicado = garantirParticipanteForUpdate(usuarioIndicado, config);
         String codigo = normalizarCodigo(request.codigoConvite());
 
         RoletaParticipante participanteIndicador = roletaParticipanteRepository.findByCodigoConviteForUpdate(codigo)
@@ -281,7 +298,7 @@ public class RoletaService {
 
         if (!roletaConviteRepository.existsByUsuarioIndicadoId(usuarioIndicado.getId())) {
             int girosConcedidos = sortearGirosPorConvite(config);
-            roletaConviteRepository.save(new RoletaConvite(
+            RoletaConvite convite = roletaConviteRepository.saveAndFlush(new RoletaConvite(
                     codigo,
                     usuarioIndicador,
                     usuarioIndicado,
@@ -289,7 +306,7 @@ public class RoletaService {
                     girosConcedidos
             ));
             participanteIndicador.incrementarConvitesConvertidos();
-            participanteIndicador.adicionarGiros(girosConcedidos);
+            creditarGiros(participanteIndicador, girosConcedidos, "CONVITE:" + convite.getId());
             roletaParticipanteRepository.save(participanteIndicador);
             missaoSemanalService.registrarAcao(
                     usuarioIndicador,
@@ -451,20 +468,22 @@ public class RoletaService {
 
     private RoletaParticipante garantirParticipante(Usuario usuario, RoletaConfig config) {
         return roletaParticipanteRepository.findByUsuarioId(usuario.getId())
-                .orElseGet(() -> roletaParticipanteRepository.save(new RoletaParticipante(
-                        usuario,
-                        gerarCodigoUnico(),
-                        config.getGirosIniciais()
-                )));
+                .orElseGet(() -> criarParticipanteComCreditoInicial(usuario, config));
     }
 
     private RoletaParticipante garantirParticipanteForUpdate(Usuario usuario, RoletaConfig config) {
         return roletaParticipanteRepository.findByUsuarioIdForUpdate(usuario.getId())
-                .orElseGet(() -> roletaParticipanteRepository.save(new RoletaParticipante(
-                        usuario,
-                        gerarCodigoUnico(),
-                        config.getGirosIniciais()
-                )));
+                .orElseGet(() -> criarParticipanteComCreditoInicial(usuario, config));
+    }
+
+    private RoletaParticipante criarParticipanteComCreditoInicial(Usuario usuario, RoletaConfig config) {
+        RoletaParticipante participante = roletaParticipanteRepository.saveAndFlush(new RoletaParticipante(
+                usuario,
+                gerarCodigoUnico(),
+                0
+        ));
+        creditarGiros(participante, config.getGirosIniciais(), "INICIAL:" + usuario.getId());
+        return participante;
     }
 
     private void incrementarProgressoGrupo(RoletaConfig config) {
@@ -473,16 +492,48 @@ public class RoletaService {
 
         if (progresso >= meta) {
             config.setProgressoGrupo(progresso % meta);
+            int ciclo = config.avancarCicloMetaGrupo();
             int bonus = config.getGirosBonusGrupo();
             if (bonus > 0) {
                 List<RoletaParticipante> participantes = roletaParticipanteRepository.findAll();
-                participantes.forEach(participante -> participante.adicionarGiros(bonus));
+                participantes.forEach(participante -> creditarGiros(
+                        participante,
+                        bonus,
+                        "META_GRUPO:" + ciclo + ":" + participante.getUsuario().getId()
+                ));
                 roletaParticipanteRepository.saveAll(participantes);
             }
             return;
         }
 
         config.setProgressoGrupo(progresso);
+    }
+
+    private boolean creditarGiros(
+            RoletaParticipante participante,
+            Integer quantidade,
+            String chaveEvento
+    ) {
+        int giros = Math.max(0, quantidade == null ? 0 : quantidade);
+        if (giros <= 0 || chaveEvento == null || chaveEvento.isBlank()) {
+            return false;
+        }
+        if (roletaGiroCreditoRepository.existsByChaveEvento(chaveEvento)) {
+            return false;
+        }
+
+        try {
+            roletaGiroCreditoRepository.saveAndFlush(new RoletaGiroCredito(
+                    participante,
+                    chaveEvento,
+                    giros
+            ));
+        } catch (DataIntegrityViolationException exception) {
+            return false;
+        }
+
+        participante.adicionarGiros(giros);
+        return true;
     }
 
     private void descartarPremiosPendentes(UUID usuarioId) {
@@ -776,10 +827,10 @@ public class RoletaService {
         if (premio.getTipoPremio() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Premio da roleta sem tipo");
         }
-        if (!isTipoPremioPermitidoNoAdmin(premio.getTipoPremio())) {
+        if (!isTipoPremioPermitidoNoSorteio(premio.getTipoPremio())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Premio ativo da roleta deve ser desconto em valor ou percentual"
+                    "Premio ativo da roleta tem tipo invalido"
             );
         }
         if (premio.getValor().compareTo(BigDecimal.ZERO) < 0) {
@@ -800,6 +851,13 @@ public class RoletaService {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Premio de desconto percentual deve ter valor positivo"
+            );
+        }
+        if (premio.getTipoPremio() == RoletaTipoPremio.GIRO_EXTRA
+                && premio.getValor().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Premio de giro extra deve ter valor positivo"
             );
         }
     }
@@ -879,6 +937,10 @@ public class RoletaService {
 
         LocalDate hoje = now.toLocalDate();
         return ultimoGiro.toLocalDate().isBefore(hoje);
+    }
+
+    private String chaveGiroDiario(Usuario usuario, LocalDate data) {
+        return "GIRO_DIARIO:" + usuario.getId() + ":" + data;
     }
 
     private LocalDateTime calcularProximoGiroDiarioEm(
@@ -1403,6 +1465,12 @@ public class RoletaService {
     private boolean isTipoPremioPermitidoNoAdmin(RoletaTipoPremio tipoPremio) {
         return tipoPremio == RoletaTipoPremio.DESCONTO_VALOR
                 || tipoPremio == RoletaTipoPremio.DESCONTO_PERCENTUAL;
+    }
+
+    private boolean isTipoPremioPermitidoNoSorteio(RoletaTipoPremio tipoPremio) {
+        return isTipoPremioPermitidoNoAdmin(tipoPremio)
+                || tipoPremio == RoletaTipoPremio.GIRO_EXTRA
+                || tipoPremio == RoletaTipoPremio.SEM_PREMIO;
     }
 
     private String gerarTituloPremio(RoletaTipoPremio tipoPremio, BigDecimal valor) {
