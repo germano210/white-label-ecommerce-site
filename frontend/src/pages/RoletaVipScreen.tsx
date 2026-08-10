@@ -617,16 +617,39 @@ function getMatchedPrizeSlice(premio: RoletaPremioApi | null | undefined, slices
 
 function getPrizeSliceIndex(premio: RoletaPremioApi | null | undefined, slices: RoletaWheelSlice[]) {
     const matchedSlice = getMatchedPrizeSlice(premio, slices);
-    if (!matchedSlice) return 0;
+    if (!matchedSlice) return Math.floor(Math.random() * Math.max(slices.length, 1));
 
-    return Math.max(0, slices.findIndex((slice) => slice.id === matchedSlice.id));
+    const matchingSliceIndexes = slices
+        .map((slice, index) => ({ slice, index }))
+        .filter(({ slice }) => slice.sourceLevelId === matchedSlice.sourceLevelId)
+        .map(({ index }) => index);
+
+    if (matchingSliceIndexes.length === 0) {
+        return Math.max(0, slices.findIndex((slice) => slice.id === matchedSlice.id));
+    }
+
+    return matchingSliceIndexes[Math.floor(Math.random() * matchingSliceIndexes.length)];
 }
 
-function createTargetWheelRotation(currentRotation: number, targetSliceIndex: number, totalSlices: number) {
+function getRandomSliceOffsetDegrees(totalSlices: number) {
+    if (totalSlices <= 0) return 0;
+
+    const sliceAngle = 360 / totalSlices;
+    const safeOffsetRange = sliceAngle * 0.64;
+
+    return (Math.random() - 0.5) * safeOffsetRange;
+}
+
+function createTargetWheelRotation(
+    currentRotation: number,
+    targetSliceIndex: number,
+    totalSlices: number,
+    targetSliceOffsetDegrees: number,
+) {
     if (totalSlices <= 0) return currentRotation + (WHEEL_FULL_TURNS * 360);
 
     const sliceAngle = 360 / totalSlices;
-    const targetRotation = normalizeDegrees(-targetSliceIndex * sliceAngle);
+    const targetRotation = normalizeDegrees(-((targetSliceIndex * sliceAngle) + targetSliceOffsetDegrees));
     const currentRotationPosition = normalizeDegrees(currentRotation);
     const remainingRotation = normalizeDegrees(targetRotation - currentRotationPosition);
 
@@ -1061,11 +1084,13 @@ export function RoletaVipScreen() {
             const slicesForSpin = responseRoleta?.opcoes.length ? responseRoleta.opcoes : roleta.opcoes;
             const nextPrize = createPrizeView(rawPrize, slicesForSpin);
             const targetSliceIndex = getPrizeSliceIndex(rawPrize, slicesForSpin);
+            const targetSliceOffsetDegrees = getRandomSliceOffsetDegrees(slicesForSpin.length);
 
             setWheelRotation((currentRotation) => createTargetWheelRotation(
                 currentRotation,
                 targetSliceIndex,
                 slicesForSpin.length,
+                targetSliceOffsetDegrees,
             ));
             await waitForAnimation(WHEEL_SPIN_DURATION_MS);
 
