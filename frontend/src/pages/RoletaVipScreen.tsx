@@ -1360,6 +1360,19 @@ export function RoletaVipScreen() {
         }
     };
 
+    const roletaInfoFooter = (
+        <footer className={`roleta-vip-info-footer roleta-vip-info-footer--${activeTab}`}>
+            <p>
+                Benefícios resgatados na roleta valem somente para os itens diários,<br />
+                todos os itens atualizam em 24 horas.
+            </p>
+
+            <p>
+                Local — Cidade alta, Borges de Medeiros n°539/03
+            </p>
+        </footer>
+    );
+
     return (
         <div className="roleta-vip-page">
             <main className="roleta-vip-shell" aria-busy={isLoading}>
@@ -1711,6 +1724,8 @@ export function RoletaVipScreen() {
                             )}
                         </section>
                         )}
+
+                        {activeTab === 'daily' && roletaInfoFooter}
                     </div>
 
                     {activeTab === 'spin' && (
@@ -1752,17 +1767,10 @@ export function RoletaVipScreen() {
                                     </p>
                                 )}
                             </div>
-
-                            <p className="roleta-vip-invite-note">
-                                Benefícios resgatados na roleta valem somente para os itens diários,<br />
-                                todos os itens atualizam em 24 horas.
-                            </p>
-
-                            <p className="roleta-vip-invite-address">
-                                Local — Cidade alta, Borges de Medeiros n°539/03
-                            </p>
                         </section>
                     )}
+
+                    {activeTab === 'spin' && roletaInfoFooter}
                 </section>
             </main>
         </div>
