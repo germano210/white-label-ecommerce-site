@@ -57,8 +57,13 @@
 .justify-around{justify-content:space-around}
 .gap-4{gap:1rem}
 
-html,body{height:100%;overflow:hidden}
-body{font-family:var(--font-body);font-weight:300;background:var(--cream);color:var(--dark);font-size:15px;line-height:1.6;max-width:430px;margin:0 auto;position:relative}
+html,
+body,
+#root{min-height:100%}
+#root{min-height:100vh;min-height:100dvh}
+html,
+body{width:100%;overflow-x:hidden}
+body{font-family:var(--font-body);font-weight:300;background:var(--cream);color:var(--dark);font-size:15px;line-height:1.6;margin:0;position:relative}
 body,
 button,
 input,
