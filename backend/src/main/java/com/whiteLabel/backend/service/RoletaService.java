@@ -351,11 +351,7 @@ public class RoletaService {
                 return;
             }
 
-            RoletaParticipante participanteIndicador = roletaParticipanteRepository
-                    .findByUsuarioIdForUpdate(indicador.getId())
-                    .orElseGet(() -> roletaParticipanteRepository.save(
-                            new RoletaParticipante(indicador, gerarCodigoUnico(), 0)
-                    ));
+            RoletaParticipante participanteIndicador = garantirParticipanteForUpdate(indicador, config);
             participanteIndicador.adicionarValorDisponivel(comissao);
             roletaParticipanteRepository.save(participanteIndicador);
         });
@@ -477,13 +473,30 @@ public class RoletaService {
     }
 
     private RoletaParticipante criarParticipanteComCreditoInicial(Usuario usuario, RoletaConfig config) {
-        RoletaParticipante participante = roletaParticipanteRepository.saveAndFlush(new RoletaParticipante(
-                usuario,
-                gerarCodigoUnico(),
-                0
-        ));
+        Usuario usuarioBloqueado = usuarioRepository.findByIdForUpdate(usuario.getId())
+                .orElse(usuario);
+        Optional<RoletaParticipante> participanteExistente =
+                roletaParticipanteRepository.findByUsuarioId(usuario.getId());
+        if (participanteExistente.isPresent()) {
+            return participanteExistente.get();
+        }
+
+        RoletaParticipante participante = salvarNovoParticipante(usuarioBloqueado);
         creditarGiros(participante, config.getGirosIniciais(), "INICIAL:" + usuario.getId());
         return participante;
+    }
+
+    private RoletaParticipante salvarNovoParticipante(Usuario usuario) {
+        try {
+            return roletaParticipanteRepository.saveAndFlush(new RoletaParticipante(
+                    usuario,
+                    gerarCodigoUnico(),
+                    0
+            ));
+        } catch (DataIntegrityViolationException exception) {
+            return roletaParticipanteRepository.findByUsuarioId(usuario.getId())
+                    .orElseThrow(() -> exception);
+        }
     }
 
     private void incrementarProgressoGrupo(RoletaConfig config) {

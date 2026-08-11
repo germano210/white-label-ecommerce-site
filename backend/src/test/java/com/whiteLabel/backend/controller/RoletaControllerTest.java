@@ -59,6 +59,11 @@ import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -308,6 +313,51 @@ class RoletaControllerTest {
         }
 
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
+    }
+
+    @Test
+    void shouldCreateOnlyOneParticipantWhenRoletaRequestsArriveTogether() throws Exception {
+        RoletaConfig config = new RoletaConfig();
+        config.setId(1L);
+        roletaConfigRepository.save(config);
+        Usuario usuario = criarUsuario("Cliente Concorrente Roleta", "551199992038");
+        String token = bearer(usuario);
+        CountDownLatch largada = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Integer> statusFuture = executor.submit(() -> {
+                largada.await();
+                return mockMvc.perform(get("/api/roleta")
+                                .header("Authorization", token)
+                                .accept(MediaType.APPLICATION_JSON))
+                        .andReturn()
+                        .getResponse()
+                        .getStatus();
+            });
+            Future<Integer> convitesFuture = executor.submit(() -> {
+                largada.await();
+                return mockMvc.perform(get("/api/roleta/convites")
+                                .header("Authorization", token)
+                                .accept(MediaType.APPLICATION_JSON))
+                        .andReturn()
+                        .getResponse()
+                        .getStatus();
+            });
+
+            largada.countDown();
+
+            assertEquals(200, statusFuture.get(5, TimeUnit.SECONDS));
+            assertEquals(200, convitesFuture.get(5, TimeUnit.SECONDS));
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(1, roletaParticipanteRepository.count());
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
+        var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
+        assertEquals(8, participante.getGirosTotaisObtidos());
+        assertEquals(8, participante.getGirosDisponiveis());
     }
 
     @Test
