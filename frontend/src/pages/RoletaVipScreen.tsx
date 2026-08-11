@@ -935,6 +935,11 @@ export function RoletaVipScreen() {
         startX: 0,
         startY: 0,
     });
+    const dailyProductBarGestureRef = useRef({
+        hasMoved: false,
+        startX: 0,
+        suppressNextClick: false,
+    });
     const guestInviteUrl = useMemo(() => {
         const randomName = inviteGuestNames[Math.floor(Math.random() * inviteGuestNames.length)];
         return `https://brechodacami.com.br/${randomName}`;
@@ -1259,7 +1264,18 @@ export function RoletaVipScreen() {
         if (dailyProducts.length === 0) return;
 
         if (event.type === 'pointerdown') {
+            dailyProductBarGestureRef.current = {
+                hasMoved: false,
+                startX: event.clientX,
+                suppressNextClick: false,
+            };
             event.currentTarget.setPointerCapture(event.pointerId);
+        }
+
+        if (event.type === 'pointermove') {
+            dailyProductBarGestureRef.current.hasMoved = Math.abs(
+                event.clientX - dailyProductBarGestureRef.current.startX,
+            ) > 4;
         }
 
         const rect = event.currentTarget.getBoundingClientRect();
@@ -1276,10 +1292,12 @@ export function RoletaVipScreen() {
             event.currentTarget.releasePointerCapture(event.pointerId);
         }
 
-        const rect = event.currentTarget.getBoundingClientRect();
-        const position = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
-        const productIndex = getDailyProductIndexFromProgress(position / Math.max(rect.width, 1));
-        scrollToDailyProduct(productIndex);
+        if (dailyProductBarGestureRef.current.hasMoved) {
+            dailyProductBarGestureRef.current.suppressNextClick = true;
+            window.setTimeout(() => {
+                dailyProductBarGestureRef.current.suppressNextClick = false;
+            }, 120);
+        }
     };
 
     const handleDailyCardPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -1679,6 +1697,10 @@ export function RoletaVipScreen() {
                                                 className={productIndex === activeProductIndex ? 'is-active' : ''}
                                                 onClick={(event) => {
                                                     event.stopPropagation();
+                                                    if (dailyProductBarGestureRef.current.suppressNextClick) {
+                                                        event.preventDefault();
+                                                        return;
+                                                    }
                                                     scrollToDailyProduct(productIndex);
                                                 }}
                                                 aria-label={`Ir para produto ${productIndex + 1}`}
