@@ -318,6 +318,19 @@ function formatCurrencyBRL(value: number) {
         .replace(/\s/g, '');
 }
 
+function renderPriceLabel(label: string) {
+    const match = label.match(/^(R\$)(.*)$/);
+
+    if (!match) return label;
+
+    return (
+        <>
+            <span className="roleta-vip-price-currency">{match[1]}</span>
+            {match[2]}
+        </>
+    );
+}
+
 function toBoolean(value: boolean | number | string | null | undefined, fallback = true) {
     if (typeof value === 'boolean') return value;
     if (typeof value === 'number') return value === 1;
@@ -1626,15 +1639,15 @@ export function RoletaVipScreen() {
                                                                     discountedPricePreview ? (
                                                                         <span className="roleta-vip-daily-price roleta-vip-daily-price--discount">
                                                                             <span className="roleta-vip-daily-price-original">
-                                                                                {discountedPricePreview.originalLabel}
+                                                                                {renderPriceLabel(discountedPricePreview.originalLabel)}
                                                                             </span>
                                                                             <span className="roleta-vip-daily-price-final">
-                                                                                {discountedPricePreview.discountedLabel}
+                                                                                {renderPriceLabel(discountedPricePreview.discountedLabel)}
                                                                             </span>
                                                                         </span>
                                                                     ) : (
                                                                         <span className="roleta-vip-daily-price">
-                                                                            {product.priceLabel}
+                                                                            {renderPriceLabel(product.priceLabel)}
                                                                         </span>
                                                                     )
                                                                 )}
