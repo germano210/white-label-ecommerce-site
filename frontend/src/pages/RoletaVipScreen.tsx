@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { api, isCookieAuthMode } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
+import arrowImageIcon from '../assets/icons/arrowImage.svg';
 import './RoletaVipScreen.css';
 
 type NumericApiValue = number | string | null | undefined;
@@ -916,7 +917,7 @@ export function RoletaVipScreen() {
     const [activeImageByProductId, setActiveImageByProductId] = useState<Record<string, number>>({});
     const [activeProductIndex, setActiveProductIndex] = useState(0);
     const [dailyCarouselProgress, setDailyCarouselProgress] = useState(0);
-    const [expandedDailyProductId, setExpandedDailyProductId] = useState<string | null>(null);
+    const [expandedDailyProductIds, setExpandedDailyProductIds] = useState<Record<string, boolean>>({});
     const [isDailyLoading, setIsDailyLoading] = useState(false);
     const [dailyError, setDailyError] = useState('');
     const [dailyCheckoutProductId, setDailyCheckoutProductId] = useState<string | null>(null);
@@ -1309,10 +1310,17 @@ export function RoletaVipScreen() {
     const handleDailyCardMediaClick = (event: MouseEvent<HTMLDivElement>, product: DailyProduct) => {
         const target = event.target;
         if (target instanceof HTMLElement && target.closest('button')) return;
-        if (expandedDailyProductId !== product.id) return;
 
         if (dailyCardGestureRef.current.hasDragged) {
             dailyCardGestureRef.current.hasDragged = false;
+            return;
+        }
+
+        if (!expandedDailyProductIds[product.id]) {
+            setExpandedDailyProductIds((currentExpandedIds) => ({
+                ...currentExpandedIds,
+                [product.id]: true,
+            }));
             return;
         }
 
@@ -1507,7 +1515,7 @@ export function RoletaVipScreen() {
                                             activeImageByProductId[product.id],
                                         );
                                         const mainImage = product.images[0];
-                                        const isExpanded = expandedDailyProductId === product.id;
+                                        const isExpanded = Boolean(expandedDailyProductIds[product.id]);
                                         const detailImageIndex = isExpanded && activeImageIndex === 0 && product.images.length > 1
                                             ? 1
                                             : activeImageIndex;
@@ -1528,10 +1536,10 @@ export function RoletaVipScreen() {
                                                 <div
                                                     className={`roleta-vip-daily-card${isExpanded ? ' is-expanded' : ''}`}
                                                     style={{ backgroundImage: `url("${mainImage}")` }}
-                                                    onPointerDown={isExpanded ? handleDailyCardPointerDown : undefined}
-                                                    onPointerMove={isExpanded ? handleDailyCardPointerMove : undefined}
-                                                    onPointerCancel={isExpanded ? handleDailyCardPointerCancel : undefined}
-                                                    onClick={isExpanded ? (event) => handleDailyCardMediaClick(event, product) : undefined}
+                                                    onPointerDown={handleDailyCardPointerDown}
+                                                    onPointerMove={handleDailyCardPointerMove}
+                                                    onPointerCancel={handleDailyCardPointerCancel}
+                                                    onClick={(event) => handleDailyCardMediaClick(event, product)}
                                                 >
                                                         <div className="roleta-vip-daily-story-bars" aria-label="Fotos do item">
                                                             {product.images.map((image, imageIndex) => (
@@ -1565,6 +1573,24 @@ export function RoletaVipScreen() {
                                                                     <strong>{product.nome}</strong>
                                                                     <span>Tam. {product.tamanho}.</span>
                                                                 </div>
+                                                                {product.images.length > 1 && (
+                                                                    <>
+                                                                        <img
+                                                                            className="roleta-vip-daily-image-arrow roleta-vip-daily-image-arrow--left"
+                                                                            src={arrowImageIcon}
+                                                                            alt=""
+                                                                            aria-hidden="true"
+                                                                            draggable={false}
+                                                                        />
+                                                                        <img
+                                                                            className="roleta-vip-daily-image-arrow roleta-vip-daily-image-arrow--right"
+                                                                            src={arrowImageIcon}
+                                                                            alt=""
+                                                                            aria-hidden="true"
+                                                                            draggable={false}
+                                                                        />
+                                                                    </>
+                                                                )}
                                                                 {product.priceLabel && (
                                                                     discountedPricePreview ? (
                                                                         <span className="roleta-vip-daily-price roleta-vip-daily-price--discount">
@@ -1595,9 +1621,14 @@ export function RoletaVipScreen() {
                                                             type="button"
                                                             className="roleta-vip-daily-action"
                                                             disabled={isCreatingCheckout}
-                                                            onClick={() => {
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+
                                                                 if (!isExpanded) {
-                                                                    setExpandedDailyProductId(product.id);
+                                                                    setExpandedDailyProductIds((currentExpandedIds) => ({
+                                                                        ...currentExpandedIds,
+                                                                        [product.id]: true,
+                                                                    }));
                                                                     return;
                                                                 }
 

@@ -433,10 +433,11 @@
     overflow-y: hidden;
     margin: 0 -15px;
     padding: 0 6px 8px;
-    scroll-padding-left: 6px;
-    scroll-snap-type: x mandatory;
+    scroll-behavior: auto;
     scrollbar-width: none;
     touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .roleta-vip-daily-carousel::-webkit-scrollbar {
@@ -445,7 +446,6 @@
 
 .roleta-vip-daily-item {
     flex: 0 0 calc(100% - 10px);
-    scroll-snap-align: start;
 }
 
 .roleta-vip-daily-card {
@@ -562,7 +562,7 @@
     max-width: 100%;
     overflow: hidden;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 20px;
     font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -573,11 +573,33 @@
     max-width: 100%;
     overflow: hidden;
     color: rgba(255, 255, 255, 0.84);
-    font-size: 10px;
+    font-size: 16px;
     line-height: 1.2;
     margin-top: 3px;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.roleta-vip-daily-image-arrow {
+    position: absolute;
+    top: 50%;
+    z-index: 6;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+    object-fit: contain;
+    pointer-events: none;
+    transform: translateY(-50%);
+}
+
+.roleta-vip-daily-image-arrow--left {
+    left: 25px;
+    transform: translateY(-50%) rotate(180deg);
+}
+
+.roleta-vip-daily-image-arrow--right {
+    right: 25px;
 }
 
 .roleta-vip-daily-price--discount {
@@ -589,7 +611,7 @@
 
 .roleta-vip-daily-price-original {
     color: rgba(255, 255, 255, 0.72);
-    font-size: 9px;
+    font-size: 18px;
     line-height: 1;
     text-decoration: line-through;
     text-decoration-thickness: 1px;
@@ -597,7 +619,7 @@
 
 .roleta-vip-daily-price-final {
     color: #ffffff;
-    font-size: 13px;
+    font-size: 22px;
     font-weight: 700;
     line-height: 1;
 }
