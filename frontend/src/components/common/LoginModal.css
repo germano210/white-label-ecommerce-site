@@ -84,7 +84,7 @@
 }
 
 .login-modal__secondary {
-    border: 1px solid #d1d5db;
+    border: none;
     background: transparent;
     color: #374151;
     font-size: 14px;
@@ -138,6 +138,7 @@
     color: #374151;
     font-size: 12px;
     font-weight: 700;
+    text-align: center;
 }
 
 .login-modal__input {

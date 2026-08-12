@@ -113,6 +113,9 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
     const [isLoading, setIsLoading] = useState(false);
 
     const phoneDigits = onlyDigits(phone);
+    const phoneStepTitle = accessMode === 'first'
+        ? 'Digite seu Whatsapp'
+        : 'Bem-vindo(a) de volta';
 
     const startAuthFlow = (mode: AccessMode) => {
         setAccessMode(mode);
@@ -236,7 +239,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                                 type="button"
                                 onClick={() => startAuthFlow('login')}
                             >
-                                Entrar na Minha Conta
+                                Acessar perfil
                             </button>
                         </div>
                     </>
@@ -248,7 +251,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                             <BrechoDaCamiLogo className="login-modal__brand-logo" />
                         </h1>
                         <label className="login-modal__label" htmlFor="login-phone">
-                            WhatsApp
+                            {phoneStepTitle}
                         </label>
                         <input
                             id="login-phone"
