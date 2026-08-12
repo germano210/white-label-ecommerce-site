@@ -14,6 +14,7 @@ type NumericApiValue = number | string | null | undefined;
 type RoletaTab = 'spin' | 'daily';
 type RoletaTipoPremio = 'DESCONTO_VALOR' | 'DESCONTO_PERCENTUAL' | 'GIRO_EXTRA' | 'SEM_PREMIO';
 type WheelRarityKey = 'COMUM' | 'INCOMUM' | 'MAGICO' | 'RARO' | 'LENDARIO';
+type DailyProductStatus = 'DISPONIVEL' | 'RESERVADO' | 'VENDIDO';
 
 type RoletaNotificacaoApi = string | {
     texto?: string | null;
@@ -145,6 +146,16 @@ interface ProdutoCheckoutResponse {
     checkoutUrl?: string;
     gatewayUrl?: string;
     url?: string;
+    status?: string | null;
+    reservado?: boolean | number | string | null;
+    reservadoPorMim?: boolean | number | string | null;
+    reservado_por_mim?: boolean | number | string | null;
+    reservadoAte?: string | null;
+    reservado_ate?: string | null;
+    vendido?: boolean | number | string | null;
+    produto?: RoletaProdutoApi | null;
+    product?: RoletaProdutoApi | null;
+    item?: RoletaProdutoApi | null;
 }
 
 interface RoletaConvitesResponse {
@@ -205,6 +216,18 @@ interface RoletaProdutoApi {
     imagem_url?: string | null;
     imagens?: ProdutoImagemApi[] | null;
     fotos?: ProdutoImagemApi[] | null;
+    status?: string | null;
+    reservado?: boolean | number | string | null;
+    reservadoPorMim?: boolean | number | string | null;
+    reservado_por_mim?: boolean | number | string | null;
+    reservadoAte?: string | null;
+    reservado_ate?: string | null;
+    vendido?: boolean | number | string | null;
+    checkoutUrl?: string | null;
+    checkout_url?: string | null;
+    gatewayUrl?: string | null;
+    gateway_url?: string | null;
+    url?: string | null;
 }
 
 interface RoletaProdutosResponse {
@@ -216,11 +239,16 @@ interface RoletaProdutosResponse {
 
 interface DailyProduct {
     id: string;
+    clientKey: string;
     nome: string;
     tamanho: string;
     priceValue: number;
     priceLabel: string;
     images: string[];
+    status: DailyProductStatus;
+    reservadoPorMim: boolean;
+    reservadoAte: string;
+    checkoutUrl: string;
 }
 
 interface RoletaViewState {
@@ -579,6 +607,28 @@ function getRoletaCheckoutErrorMessage(error: unknown) {
     return responseData?.message ?? responseData?.error ?? 'Nao foi possivel iniciar o resgate agora. Tente novamente.';
 }
 
+function isCheckoutInProgressError(error: unknown) {
+    if (!axios.isAxiosError(error)) return false;
+
+    const responseData = error.response?.data as {
+        message?: string;
+        error?: string;
+    } | string | undefined;
+    const responseText = typeof responseData === 'string'
+        ? responseData
+        : `${responseData?.message ?? ''} ${responseData?.error ?? ''}`;
+    const normalizedText = responseText
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+    return error.response?.status === 409 && (
+        normalizedText.includes('checkout')
+        || normalizedText.includes('pagamento')
+        || normalizedText.includes('andamento')
+    );
+}
+
 function createWheelGradient(slices: RoletaWheelSlice[]) {
     if (slices.length === 0) return '#E6D9D4';
 
@@ -861,6 +911,14 @@ function isPrincipalImage(value: unknown) {
     return false;
 }
 
+function normalizeApiStatus(value: string | null | undefined) {
+    return (value ?? '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+}
+
 function normalizeDailyProductImages(product: RoletaProdutoApi) {
     const rawImages = product.imagens ?? product.fotos ?? [];
     const orderedImages = rawImages
@@ -884,35 +942,169 @@ function normalizeDailyProductImages(product: RoletaProdutoApi) {
     return orderedImages.length > 0 ? orderedImages : [fallbackImage];
 }
 
+function normalizeDailyProductStatus(product: RoletaProdutoApi): DailyProductStatus {
+    const rawStatus = normalizeApiStatus(product.status);
+    const isSold = rawStatus === 'VENDIDO' || toBoolean(product.vendido, false);
+    const isReserved = rawStatus === 'RESERVADO' || toBoolean(product.reservado, false);
+
+    if (isSold) return 'VENDIDO';
+    if (isReserved) return 'RESERVADO';
+
+    return 'DISPONIVEL';
+}
+
+function normalizeDailyProductCheckoutUrl(product: RoletaProdutoApi) {
+    return (
+        product.checkoutUrl
+        ?? product.checkout_url
+        ?? product.gatewayUrl
+        ?? product.gateway_url
+        ?? product.url
+        ?? ''
+    ).trim();
+}
+
+function normalizeDailyProduct(
+    product: RoletaProdutoApi,
+    index: number,
+    currentProduct?: DailyProduct,
+): DailyProduct {
+    const id = String(
+        product.id
+        ?? product.produtoId
+        ?? product.produto_id
+        ?? currentProduct?.id
+        ?? `daily-${index}`,
+    );
+    const priceValue = parseApiNumber(
+        product.precoVenda
+        ?? product.preco_venda
+        ?? product.preco
+        ?? product.valor
+        ?? currentProduct?.priceValue,
+    );
+
+    return {
+        id,
+        clientKey: currentProduct?.clientKey ?? `${id || 'daily'}-${index}`,
+        nome: (product.nome ?? product.titulo ?? currentProduct?.nome ?? 'Item diario').trim(),
+        tamanho: (product.tamanho ?? currentProduct?.tamanho ?? 'Unico').trim(),
+        priceValue,
+        priceLabel: priceValue > 0 ? formatCurrencyBRL(priceValue) : currentProduct?.priceLabel ?? '',
+        images: (product.imagens?.length || product.fotos?.length || product.imagemUrl || product.imagem_url)
+            ? normalizeDailyProductImages(product)
+            : currentProduct?.images ?? normalizeDailyProductImages(product),
+        status: normalizeDailyProductStatus(product),
+        reservadoPorMim: toBoolean(product.reservadoPorMim ?? product.reservado_por_mim, false),
+        reservadoAte: (product.reservadoAte ?? product.reservado_ate ?? '').trim(),
+        checkoutUrl: normalizeDailyProductCheckoutUrl(product),
+    };
+}
+
 function normalizeDailyProductsResponse(data: RoletaProdutoApi[] | RoletaProdutosResponse) {
     const rawProducts = Array.isArray(data)
         ? data
         : data.content ?? data.produtos ?? data.items ?? data.data ?? [];
 
     return rawProducts
-        .map((product, index): DailyProduct => {
-            const id = String(product.id ?? product.produtoId ?? product.produto_id ?? `daily-${index}`);
-            const priceValue = parseApiNumber(
-                product.precoVenda
-                ?? product.preco_venda
-                ?? product.preco
-                ?? product.valor,
-            );
-
-            return {
-                id,
-                nome: (product.nome ?? product.titulo ?? 'Item diario').trim(),
-                tamanho: (product.tamanho ?? 'Unico').trim(),
-                priceValue,
-                priceLabel: priceValue > 0 ? formatCurrencyBRL(priceValue) : '',
-                images: normalizeDailyProductImages(product),
-            };
-        })
+        .map((product, index) => normalizeDailyProduct(product, index))
         .filter((product) => product.id.trim());
+}
+
+function getCheckoutUrlFromResponse(data: ProdutoCheckoutResponse) {
+    return data.checkoutUrl ?? data.gatewayUrl ?? data.url ?? '';
+}
+
+function getDailyProductFromCheckoutResponse(
+    data: ProdutoCheckoutResponse,
+    fallbackProdutoId: string,
+): RoletaProdutoApi | null {
+    if (data.produto) return data.produto;
+    if (data.product) return data.product;
+    if (data.item) return data.item;
+
+    if (
+        data.status !== undefined
+        || data.reservado !== undefined
+        || data.reservadoPorMim !== undefined
+        || data.reservado_por_mim !== undefined
+        || data.vendido !== undefined
+    ) {
+        return {
+            id: fallbackProdutoId,
+            status: data.status,
+            reservado: data.reservado,
+            reservadoPorMim: data.reservadoPorMim,
+            reservado_por_mim: data.reservado_por_mim,
+            reservadoAte: data.reservadoAte,
+            reservado_ate: data.reservado_ate,
+            vendido: data.vendido,
+            checkoutUrl: data.checkoutUrl,
+            gatewayUrl: data.gatewayUrl,
+            url: data.url,
+        };
+    }
+
+    return null;
 }
 
 function getClampedImageIndex(product: DailyProduct, imageIndex?: number) {
     return Math.min(Math.max(imageIndex ?? 0, 0), Math.max(product.images.length - 1, 0));
+}
+
+function getDailyProductActionState(
+    product: DailyProduct,
+    isExpanded: boolean,
+    isCreatingCheckout: boolean,
+) {
+    if (isCreatingCheckout) {
+        return {
+            label: 'Criando...',
+            disabled: true,
+            unavailable: false,
+            shouldRedeem: false,
+        };
+    }
+
+    if (product.status === 'VENDIDO') {
+        return {
+            label: 'Item vendido',
+            disabled: true,
+            unavailable: true,
+            shouldRedeem: false,
+        };
+    }
+
+    if (product.status === 'RESERVADO' && !product.reservadoPorMim) {
+        return {
+            label: 'Alguém resgatando Item',
+            disabled: true,
+            unavailable: true,
+            shouldRedeem: false,
+        };
+    }
+
+    if (product.status === 'RESERVADO' && product.reservadoPorMim) {
+        return {
+            label: 'Continuar pagamento',
+            disabled: false,
+            unavailable: false,
+            shouldRedeem: true,
+        };
+    }
+
+    return {
+        label: isExpanded ? 'Resgatar Item' : 'Ver item',
+        disabled: false,
+        unavailable: false,
+        shouldRedeem: isExpanded,
+    };
+}
+
+function findUpdatedDailyProduct(products: DailyProduct[], product: DailyProduct) {
+    return products.find((currentProduct) => currentProduct.clientKey === product.clientKey)
+        ?? products.find((currentProduct) => currentProduct.id === product.id)
+        ?? null;
 }
 
 export function RoletaVipScreen() {
@@ -1051,34 +1243,21 @@ export function RoletaVipScreen() {
         void fetchInviteUrl();
     }, [fetchInviteUrl, isAuthenticated, isLoading, roleta.urlConvite]);
 
-    useEffect(() => {
-        const syncRoletaOnReturn = () => {
-            if (document.visibilityState === 'visible') {
-                void fetchRoleta();
-            }
-        };
-
-        window.addEventListener('focus', syncRoletaOnReturn);
-        document.addEventListener('visibilitychange', syncRoletaOnReturn);
-
-        return () => {
-            window.removeEventListener('focus', syncRoletaOnReturn);
-            document.removeEventListener('visibilitychange', syncRoletaOnReturn);
-        };
-    }, [fetchRoleta]);
-
     const fetchDailyProducts = useCallback(async () => {
         setIsDailyLoading(true);
         setDailyError('');
 
         try {
             const { data } = await api.get<RoletaProdutoApi[] | RoletaProdutosResponse>(apiRoutes.roleta.produtos);
-            setDailyProducts(normalizeDailyProductsResponse(data));
+            const nextProducts = normalizeDailyProductsResponse(data);
+            setDailyProducts(nextProducts);
             setActiveProductIndex(0);
             setDailyCarouselProgress(0);
             setHasLoadedDailyProducts(true);
+            return nextProducts;
         } catch (dailyProductsError) {
             setDailyError(getRoletaErrorMessage(dailyProductsError));
+            return [];
         } finally {
             setIsDailyLoading(false);
         }
@@ -1089,6 +1268,36 @@ export function RoletaVipScreen() {
             void fetchDailyProducts();
         }
     }, [activeTab, fetchDailyProducts, hasLoadedDailyProducts, isDailyLoading]);
+
+    const syncDailyProductFromApi = useCallback((clientKey: string, apiProduct: RoletaProdutoApi) => {
+        setDailyProducts((currentProducts) => (
+            currentProducts.map((currentProduct, productIndex) => (
+                currentProduct.clientKey === clientKey
+                    ? normalizeDailyProduct(apiProduct, productIndex, currentProduct)
+                    : currentProduct
+            ))
+        ));
+    }, []);
+
+    useEffect(() => {
+        const syncRoletaOnReturn = () => {
+            if (document.visibilityState !== 'visible') return;
+
+            void fetchRoleta();
+
+            if (activeTab === 'daily' || hasLoadedDailyProducts) {
+                void fetchDailyProducts();
+            }
+        };
+
+        window.addEventListener('focus', syncRoletaOnReturn);
+        document.addEventListener('visibilitychange', syncRoletaOnReturn);
+
+        return () => {
+            window.removeEventListener('focus', syncRoletaOnReturn);
+            document.removeEventListener('visibilitychange', syncRoletaOnReturn);
+        };
+    }, [activeTab, fetchDailyProducts, fetchRoleta, hasLoadedDailyProducts]);
 
     const handleSpin = async () => {
         if (!canSpin) return;
@@ -1144,37 +1353,130 @@ export function RoletaVipScreen() {
         if (!isAuthenticated) {
             setDailyCheckoutErrorByProductId((currentErrors) => ({
                 ...currentErrors,
-                [product.id]: 'Entre para continuar o resgate.',
+                [product.clientKey]: 'Entre para continuar o resgate.',
             }));
+            return;
+        }
+
+        if (product.status === 'VENDIDO' || (product.status === 'RESERVADO' && !product.reservadoPorMim)) {
+            return;
+        }
+
+        if (product.status === 'RESERVADO' && product.reservadoPorMim) {
+            if (product.checkoutUrl) {
+                window.location.href = product.checkoutUrl;
+                return;
+            }
+
+            if (dailyCheckoutInFlightRef.current) return;
+
+            dailyCheckoutInFlightRef.current = true;
+            setDailyCheckoutProductId(product.clientKey);
+            setDailyCheckoutErrorByProductId((currentErrors) => {
+                const { [product.clientKey]: _removedError, ...nextErrors } = currentErrors;
+                return nextErrors;
+            });
+
+            try {
+                const refreshedProducts = await fetchDailyProducts();
+                const refreshedProduct = findUpdatedDailyProduct(refreshedProducts, product);
+
+                if (refreshedProduct?.status === 'RESERVADO' && refreshedProduct.reservadoPorMim && refreshedProduct.checkoutUrl) {
+                    window.location.href = refreshedProduct.checkoutUrl;
+                    return;
+                }
+
+                setDailyCheckoutErrorByProductId((currentErrors) => ({
+                    ...currentErrors,
+                    [product.clientKey]: 'Pagamento em andamento. Aguarde ou tente atualizar.',
+                }));
+            } finally {
+                dailyCheckoutInFlightRef.current = false;
+                setDailyCheckoutProductId(null);
+            }
+
             return;
         }
 
         if (dailyCheckoutInFlightRef.current) return;
 
         dailyCheckoutInFlightRef.current = true;
-        setDailyCheckoutProductId(product.id);
+        setDailyCheckoutProductId(product.clientKey);
         setDailyCheckoutErrorByProductId((currentErrors) => {
-            const { [product.id]: _removedError, ...nextErrors } = currentErrors;
+            const { [product.clientKey]: _removedError, ...nextErrors } = currentErrors;
             return nextErrors;
         });
 
         try {
-            const { data } = await api.post<ProdutoCheckoutResponse>(apiRoutes.roleta.resgatarProduto(product.id));
-            const checkoutUrl = data.checkoutUrl ?? data.gatewayUrl ?? data.url;
+            const { data } = await api.post<ProdutoCheckoutResponse>(
+                apiRoutes.roleta.resgatarProduto(product.id),
+                { produtoId: product.id },
+            );
+            const updatedProduct = getDailyProductFromCheckoutResponse(data, product.id);
+
+            if (updatedProduct) {
+                syncDailyProductFromApi(product.clientKey, updatedProduct);
+            }
+
+            const checkoutUrl = getCheckoutUrlFromResponse(data)
+                || (updatedProduct ? normalizeDailyProductCheckoutUrl(updatedProduct) : '');
 
             if (!checkoutUrl) {
+                await fetchDailyProducts();
                 throw new Error('Checkout sem URL de redirecionamento.');
             }
 
+            await fetchDailyProducts();
             window.location.href = checkoutUrl;
         } catch (checkoutError) {
             if (axios.isAxiosError(checkoutError) && [401, 403].includes(checkoutError.response?.status ?? 0)) {
                 logout();
             }
 
+            if (axios.isAxiosError(checkoutError) && checkoutError.response?.data) {
+                const updatedProduct = getDailyProductFromCheckoutResponse(
+                    checkoutError.response.data as ProdutoCheckoutResponse,
+                    product.id,
+                );
+
+                if (updatedProduct) {
+                    syncDailyProductFromApi(product.clientKey, updatedProduct);
+                }
+            }
+
+            const refreshedProducts = await fetchDailyProducts();
+            const refreshedProduct = findUpdatedDailyProduct(refreshedProducts, product);
+
+            if (
+                refreshedProduct?.status === 'VENDIDO'
+                || (refreshedProduct?.status === 'RESERVADO' && !refreshedProduct.reservadoPorMim)
+            ) {
+                setDailyCheckoutErrorByProductId((currentErrors) => {
+                    const { [product.clientKey]: _removedError, ...nextErrors } = currentErrors;
+                    return nextErrors;
+                });
+                return;
+            }
+
+            if (refreshedProduct?.status === 'RESERVADO' && refreshedProduct.reservadoPorMim && refreshedProduct.checkoutUrl) {
+                setDailyCheckoutErrorByProductId((currentErrors) => {
+                    const { [product.clientKey]: _removedError, ...nextErrors } = currentErrors;
+                    return nextErrors;
+                });
+                return;
+            }
+
+            if (isCheckoutInProgressError(checkoutError)) {
+                setDailyCheckoutErrorByProductId((currentErrors) => ({
+                    ...currentErrors,
+                    [product.clientKey]: 'Pagamento em andamento. Aguarde ou tente atualizar.',
+                }));
+                return;
+            }
+
             setDailyCheckoutErrorByProductId((currentErrors) => ({
                 ...currentErrors,
-                [product.id]: getRoletaCheckoutErrorMessage(checkoutError),
+                [product.clientKey]: getRoletaCheckoutErrorMessage(checkoutError),
             }));
         } finally {
             dailyCheckoutInFlightRef.current = false;
@@ -1184,20 +1486,20 @@ export function RoletaVipScreen() {
 
     const setDailyProductImage = (product: DailyProduct, direction: -1 | 1) => {
         setActiveImageByProductId((currentImages) => {
-            const currentImageIndex = getClampedImageIndex(product, currentImages[product.id]);
+            const currentImageIndex = getClampedImageIndex(product, currentImages[product.clientKey]);
             const nextImageIndex = getClampedImageIndex(product, currentImageIndex + direction);
 
             return {
                 ...currentImages,
-                [product.id]: nextImageIndex,
+                [product.clientKey]: nextImageIndex,
             };
         });
     };
 
-    const selectDailyProductImage = (productId: string, imageIndex: number) => {
+    const selectDailyProductImage = (productKey: string, imageIndex: number) => {
         setActiveImageByProductId((currentImages) => ({
             ...currentImages,
-            [productId]: imageIndex,
+            [productKey]: imageIndex,
         }));
     };
 
@@ -1347,10 +1649,10 @@ export function RoletaVipScreen() {
             return;
         }
 
-        if (!expandedDailyProductIds[product.id]) {
+        if (!expandedDailyProductIds[product.clientKey]) {
             setExpandedDailyProductIds((currentExpandedIds) => ({
                 ...currentExpandedIds,
-                [product.id]: true,
+                [product.clientKey]: true,
             }));
             return;
         }
@@ -1556,23 +1858,24 @@ export function RoletaVipScreen() {
                                         {dailyProducts.map((product) => {
                                         const activeImageIndex = getClampedImageIndex(
                                             product,
-                                            activeImageByProductId[product.id],
+                                            activeImageByProductId[product.clientKey],
                                         );
                                         const mainImage = product.images[0];
-                                        const isExpanded = Boolean(expandedDailyProductIds[product.id]);
+                                        const isExpanded = Boolean(expandedDailyProductIds[product.clientKey]);
                                         const detailImageIndex = isExpanded && activeImageIndex === 0 && product.images.length > 1
                                             ? 1
                                             : activeImageIndex;
                                         const visibleImageIndex = isExpanded ? detailImageIndex : 0;
                                         const activeImage = product.images[getClampedImageIndex(product, detailImageIndex)];
-                                        const checkoutError = dailyCheckoutErrorByProductId[product.id];
-                                        const isCreatingCheckout = dailyCheckoutProductId === product.id;
+                                        const checkoutError = dailyCheckoutErrorByProductId[product.clientKey];
+                                        const isCreatingCheckout = dailyCheckoutProductId === product.clientKey;
+                                        const actionState = getDailyProductActionState(product, isExpanded, isCreatingCheckout);
                                         const discountedPricePreview = getDiscountedPricePreview(product, currentPrize);
 
                                         return (
                                             <motion.article
                                                     className="roleta-vip-daily-item"
-                                                    key={product.id}
+                                                    key={product.clientKey}
                                                     initial={{ opacity: 0, y: 10 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     transition={{ duration: 0.22 }}
@@ -1592,7 +1895,7 @@ export function RoletaVipScreen() {
                                                                         type="button"
                                                                         key={`${image}-${imageIndex}`}
                                                                         className={imageIndex === visibleImageIndex ? 'is-active' : ''}
-                                                                        onClick={() => selectDailyProductImage(product.id, imageIndex)}
+                                                                        onClick={() => selectDailyProductImage(product.clientKey, imageIndex)}
                                                                         aria-label={`Ver foto ${imageIndex + 1}`}
                                                                     />
                                                                 ) : (
@@ -1663,27 +1966,27 @@ export function RoletaVipScreen() {
 
                                                         <button
                                                             type="button"
-                                                            className="roleta-vip-daily-action"
-                                                            disabled={isCreatingCheckout}
+                                                            className={`roleta-vip-daily-action${actionState.unavailable ? ' is-unavailable' : ''}`}
+                                                            disabled={actionState.disabled}
                                                             onClick={(event) => {
                                                                 event.stopPropagation();
+
+                                                                if (actionState.disabled) return;
+
+                                                                if (actionState.shouldRedeem) {
+                                                                    void handleRedeemDailyProduct(product);
+                                                                    return;
+                                                                }
 
                                                                 if (!isExpanded) {
                                                                     setExpandedDailyProductIds((currentExpandedIds) => ({
                                                                         ...currentExpandedIds,
-                                                                        [product.id]: true,
+                                                                        [product.clientKey]: true,
                                                                     }));
-                                                                    return;
                                                                 }
-
-                                                                void handleRedeemDailyProduct(product);
                                                             }}
                                                         >
-                                                            {isCreatingCheckout
-                                                                ? 'Criando...'
-                                                                : isExpanded
-                                                                    ? 'Resgatar Item'
-                                                                    : 'Ver item'}
+                                                            {actionState.label}
                                                         </button>
 
                                                         {isExpanded && checkoutError && (
@@ -1719,7 +2022,7 @@ export function RoletaVipScreen() {
                                         {dailyProducts.map((dailyProduct, productIndex) => (
                                             <button
                                                 type="button"
-                                                key={dailyProduct.id}
+                                                key={dailyProduct.clientKey}
                                                 className={productIndex === activeProductIndex ? 'is-active' : ''}
                                                 onClick={(event) => {
                                                     event.stopPropagation();

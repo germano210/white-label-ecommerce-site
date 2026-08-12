@@ -30,6 +30,7 @@ public class PagamentoWebhookService {
     private final PagamentoRepository pagamentoRepository;
     private final PedidoRepository pedidoRepository;
     private final RoletaService roletaService;
+    private final ProdutoReservaService produtoReservaService;
     private final ObjectMapper objectMapper;
     private final String webhookSecret;
 
@@ -37,12 +38,14 @@ public class PagamentoWebhookService {
             PagamentoRepository pagamentoRepository,
             PedidoRepository pedidoRepository,
             RoletaService roletaService,
+            ProdutoReservaService produtoReservaService,
             ObjectMapper objectMapper,
             @Value("${payment.webhook-secret}") String webhookSecret
     ) {
         this.pagamentoRepository = pagamentoRepository;
         this.pedidoRepository = pedidoRepository;
         this.roletaService = roletaService;
+        this.produtoReservaService = produtoReservaService;
         this.objectMapper = objectMapper;
         this.webhookSecret = webhookSecret;
     }
@@ -100,6 +103,7 @@ public class PagamentoWebhookService {
             if (pedido.getRoletaGiro() != null) {
                 pedido.getRoletaGiro().marcarUsado();
             }
+            produtoReservaService.finalizarReservasDoPedido(pedido);
             if (!pedidoJaEstavaPago) {
                 roletaService.creditarComissaoIndicacao(pedido, pagamento.getValor());
             }
@@ -108,11 +112,19 @@ public class PagamentoWebhookService {
 
         if (status == PagamentoStatus.FALHOU) {
             pedido.marcarFalha();
+            produtoReservaService.liberarReservasDoPedido(pedido, false);
             return;
         }
 
         if (status == PagamentoStatus.CANCELADO) {
             pedido.cancelar();
+            produtoReservaService.liberarReservasDoPedido(pedido, false);
+            return;
+        }
+
+        if (status == PagamentoStatus.EXPIRADO) {
+            pedido.expirar();
+            produtoReservaService.liberarReservasDoPedido(pedido, true);
         }
     }
 

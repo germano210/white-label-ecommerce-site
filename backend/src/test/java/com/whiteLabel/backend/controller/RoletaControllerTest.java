@@ -5,7 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whiteLabel.backend.domain.Missao;
 import com.whiteLabel.backend.domain.MissaoCiclo;
 import com.whiteLabel.backend.domain.MissaoTipoAcao;
+import com.whiteLabel.backend.domain.PagamentoStatus;
+import com.whiteLabel.backend.domain.PedidoStatus;
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.domain.ProdutoReservaStatus;
+import com.whiteLabel.backend.domain.ProdutoStatus;
 import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaGiroCredito;
 import com.whiteLabel.backend.domain.RoletaNivel;
@@ -21,6 +25,7 @@ import com.whiteLabel.backend.dto.InfinitePayLinkResponse;
 import com.whiteLabel.backend.repository.PagamentoRepository;
 import com.whiteLabel.backend.repository.PedidoItemRepository;
 import com.whiteLabel.backend.repository.PedidoRepository;
+import com.whiteLabel.backend.repository.ProdutoReservaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.MissaoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
@@ -55,6 +60,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
@@ -130,6 +136,9 @@ class RoletaControllerTest {
 
     @Autowired
     private ProdutoRepository produtoRepository;
+
+    @Autowired
+    private ProdutoReservaRepository produtoReservaRepository;
 
     @Autowired
     private MissaoRepository missaoRepository;
@@ -711,9 +720,9 @@ class RoletaControllerTest {
     }
 
     @Test
-    void shouldPreventUsingSameCurrentPrizeInMultipleCheckouts() throws Exception {
+    void shouldReturnExistingRoletaCheckoutWhenProductIsAlreadyReservedBySameUser() throws Exception {
         criarPremioPadrao();
-        Usuario usuario = criarUsuario("Cliente Reuso Premio", "551199992031");
+        Usuario usuario = criarUsuario("Cliente Reuso Checkout", "551199992031");
         Produto produto = criarProduto("Saia Checkout");
         roletaProdutoRepository.save(new RoletaProduto(produto, 0));
 
@@ -722,19 +731,108 @@ class RoletaControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/roleta/produtos/{produtoId}/resgatar", produto.getId())
+        String primeiroCheckout = mockMvc.perform(post("/api/roleta/produtos/{produtoId}/resgatar", produto.getId())
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.checkoutUrl").value("https://checkout.infinitepay.com.br/teste-roleta"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode primeiroJson = objectMapper.readTree(primeiroCheckout);
 
         mockMvc.perform(post("/api/roleta/produtos/{produtoId}/resgatar", produto.getId())
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Premio atual ja esta vinculado a outro checkout"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pedidoId").value(primeiroJson.path("pedidoId").asLong()))
+                .andExpect(jsonPath("$.checkoutId").value(primeiroJson.path("checkoutId").asText()))
+                .andExpect(jsonPath("$.checkoutUrl").value("https://checkout.infinitepay.com.br/teste-roleta"));
 
         assertEquals(1, pagamentoRepository.count());
         assertEquals(1, pedidoRepository.count());
+        assertEquals(1, infinitePayClient.chamadas);
+    }
+
+    @Test
+    void shouldExposePendingCheckoutInRoletaProductsForCurrentUser() throws Exception {
+        criarPremioPadrao();
+        Usuario usuario = criarUsuario("Cliente Continuar Checkout", "551199992041");
+        Produto produto = criarProduto("Blazer Continuar");
+        roletaProdutoRepository.save(new RoletaProduto(produto, 0));
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        String checkout = mockMvc.perform(post("/api/roleta/produtos/{produtoId}/resgatar", produto.getId())
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode checkoutJson = objectMapper.readTree(checkout);
+
+        mockMvc.perform(get("/api/roleta/produtos")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(produto.getId()))
+                .andExpect(jsonPath("$[0].reservado").value(true))
+                .andExpect(jsonPath("$[0].reservadoPorMim").value(true))
+                .andExpect(jsonPath("$[0].pedidoId").value(checkoutJson.path("pedidoId").asLong()))
+                .andExpect(jsonPath("$[0].checkoutId").value(checkoutJson.path("checkoutId").asText()))
+                .andExpect(jsonPath("$[0].checkoutUrl").value("https://checkout.infinitepay.com.br/teste-roleta"));
+    }
+
+    @Test
+    void shouldExpirePendingCheckoutWhenReservationExpires() throws Exception {
+        criarPremioPadrao();
+        Usuario usuario = criarUsuario("Cliente Reserva Expirada Roleta", "551199992042");
+        Produto produto = criarProduto("Camisa Reserva Expirada");
+        roletaProdutoRepository.save(new RoletaProduto(produto, 0));
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        String checkout = mockMvc.perform(post("/api/roleta/produtos/{produtoId}/resgatar", produto.getId())
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long pedidoId = objectMapper.readTree(checkout).path("pedidoId").asLong();
+
+        jdbcTemplate.update(
+                "update produto_reservas set expira_em = ? where produto_id = ?",
+                LocalDateTime.now().minusMinutes(1),
+                produto.getId()
+        );
+
+        mockMvc.perform(get("/api/roleta/produtos")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("DISPONIVEL"))
+                .andExpect(jsonPath("$[0].reservado").value(false))
+                .andExpect(jsonPath("$[0].checkoutUrl").isEmpty());
+
+        assertEquals(PedidoStatus.EXPIRADO, pedidoRepository.findById(pedidoId)
+                .orElseThrow()
+                .getStatus());
+        assertEquals(PagamentoStatus.EXPIRADO, pagamentoRepository
+                .findTopByPedidoIdOrderByDataCriacaoDescIdDesc(pedidoId)
+                .orElseThrow()
+                .getStatus());
+        assertEquals(ProdutoReservaStatus.EXPIRADA, produtoReservaRepository.findAll().get(0).getStatus());
+        assertEquals(ProdutoStatus.DISPONIVEL, produtoRepository.findById(produto.getId())
+                .orElseThrow()
+                .getStatus());
     }
 
     @Test
@@ -1854,6 +1952,7 @@ class RoletaControllerTest {
 
     private void limparDados() {
         pagamentoRepository.deleteAll();
+        produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();
         pedidoRepository.deleteAll();
         roletaConviteRepository.deleteAll();
@@ -1884,16 +1983,19 @@ class RoletaControllerTest {
     static class CapturingInfinitePayClient implements InfinitePayClient {
 
         private InfinitePayLinkRequest ultimaRequest;
+        private int chamadas;
 
         @Override
         public InfinitePayLinkResponse criarLink(InfinitePayLinkRequest request) {
             this.ultimaRequest = request;
+            this.chamadas++;
 
             return new InfinitePayLinkResponse("https://checkout.infinitepay.com.br/teste-roleta");
         }
 
         private void reset() {
             ultimaRequest = null;
+            chamadas = 0;
         }
     }
 }

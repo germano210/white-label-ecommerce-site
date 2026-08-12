@@ -5,5 +5,6 @@ public enum PagamentoStatus {
     AGUARDANDO_PAGAMENTO,
     PAGO,
     FALHOU,
-    CANCELADO
+    CANCELADO,
+    EXPIRADO
 }

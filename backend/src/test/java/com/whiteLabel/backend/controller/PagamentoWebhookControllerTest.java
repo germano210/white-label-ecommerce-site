@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whiteLabel.backend.domain.PedidoStatus;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.dto.InfinitePayLinkRequest;
+import com.whiteLabel.backend.dto.InfinitePayLinkResponse;
 import com.whiteLabel.backend.repository.CompartilhamentoAberturaRepository;
 import com.whiteLabel.backend.repository.CompartilhamentoItemRepository;
 import com.whiteLabel.backend.repository.CurtidaRepository;
@@ -12,16 +14,22 @@ import com.whiteLabel.backend.repository.PagamentoRepository;
 import com.whiteLabel.backend.repository.PassoRepository;
 import com.whiteLabel.backend.repository.PedidoItemRepository;
 import com.whiteLabel.backend.repository.PedidoRepository;
+import com.whiteLabel.backend.repository.ProdutoReservaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
+import com.whiteLabel.backend.service.InfinitePayClient;
 import com.whiteLabel.backend.service.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -39,6 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(PagamentoWebhookControllerTest.InfinitePayTestConfig.class)
 class PagamentoWebhookControllerTest {
 
     private static final String WEBHOOK_SECRET = "test-payment-webhook-secret";
@@ -83,6 +92,9 @@ class PagamentoWebhookControllerTest {
     private ProdutoRepository produtoRepository;
 
     @Autowired
+    private ProdutoReservaRepository produtoReservaRepository;
+
+    @Autowired
     private MissaoRepository missaoRepository;
 
     @Autowired
@@ -91,6 +103,7 @@ class PagamentoWebhookControllerTest {
     @BeforeEach
     void setUp() {
         pagamentoRepository.deleteAll();
+        produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();
         pedidoRepository.deleteAll();
         compartilhamentoAberturaRepository.deleteAll();
@@ -225,5 +238,20 @@ class PagamentoWebhookControllerTest {
     }
 
     private record CheckoutCriado(Long pedidoId, String checkoutId) {
+    }
+
+    @TestConfiguration
+    static class InfinitePayTestConfig {
+
+        @Bean
+        @Primary
+        InfinitePayClient infinitePayClient() {
+            return new InfinitePayClient() {
+                @Override
+                public InfinitePayLinkResponse criarLink(InfinitePayLinkRequest request) {
+                    return new InfinitePayLinkResponse("https://checkout.infinitepay.com.br/teste-webhook");
+                }
+            };
+        }
     }
 }

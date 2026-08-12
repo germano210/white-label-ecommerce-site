@@ -19,7 +19,8 @@ public record AdminProdutoResponseDTO(
         Integer curtidasCount,
         Integer passosCount,
         List<String> nomesCurtidas,
-        List<ProdutoImagemResponse> imagens
+        List<ProdutoImagemResponse> imagens,
+        String status
 ) {
 
     public static AdminProdutoResponseDTO from(
@@ -40,7 +41,8 @@ public record AdminProdutoResponseDTO(
                 produto.getCurtidasCount() == null ? 0 : produto.getCurtidasCount(),
                 produto.getPassosCount() == null ? 0 : produto.getPassosCount(),
                 nomesCurtidas == null ? List.of() : nomesCurtidas,
-                imagens == null ? List.of() : imagens
+                imagens == null ? List.of() : imagens,
+                produto.getStatus().name()
         );
     }
 }

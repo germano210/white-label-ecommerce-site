@@ -3,6 +3,7 @@ package com.whiteLabel.backend.service;
 import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Pedido;
+import com.whiteLabel.backend.domain.ProdutoStatus;
 import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaConvite;
 import com.whiteLabel.backend.domain.RoletaConviteStatus;
@@ -242,11 +243,16 @@ public class RoletaService {
     public CheckoutResponse resgatarProduto(Long produtoId) {
         Usuario usuario = obterUsuarioAutenticado();
         Produto produto = produtoRepository.findById(produtoId)
-                .filter(produtoEncontrado -> Boolean.TRUE.equals(produtoEncontrado.getAtivo()))
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Produto nao encontrado"
                 ));
+        if (produto.getStatus() == ProdutoStatus.VENDIDO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Produto ja vendido");
+        }
+        if (!Boolean.TRUE.equals(produto.getAtivo()) || produto.getStatus() == ProdutoStatus.INATIVO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Produto indisponivel para checkout");
+        }
 
         if (!roletaProdutoRepository.existsByProdutoIdAndAtivoTrue(produtoId)) {
             throw new ResponseStatusException(
@@ -256,13 +262,11 @@ public class RoletaService {
         }
 
         RoletaGiro premioAtual = obterPremioAtualForUpdate(usuario).orElse(null);
-        BigDecimal descontoAplicado = calcularDescontoAplicavel(produto, premioAtual);
 
         return pedidoService.criarCheckoutProdutoRoleta(
                 usuario,
                 produto,
-                premioAtual,
-                descontoAplicado
+                premioAtual
         );
     }
 
@@ -578,32 +582,6 @@ public class RoletaService {
         }
 
         return Optional.of(premioAtual);
-    }
-
-    private BigDecimal calcularDescontoAplicavel(Produto produto, RoletaGiro premioAtual) {
-        if (premioAtual == null) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-
-        BigDecimal precoOriginal = produto.getPrecoVenda() == null
-                ? BigDecimal.ZERO
-                : produto.getPrecoVenda().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal desconto = BigDecimal.ZERO;
-
-        if (premioAtual.getTipoPremio() == RoletaTipoPremio.DESCONTO_VALOR) {
-            desconto = premioAtual.getValorPremio();
-        }
-        if (premioAtual.getTipoPremio() == RoletaTipoPremio.DESCONTO_PERCENTUAL) {
-            desconto = precoOriginal
-                    .multiply(premioAtual.getValorPremio())
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        }
-
-        if (desconto.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-
-        return desconto.min(precoOriginal).setScale(2, RoundingMode.HALF_UP);
     }
 
     private int sortearGirosPorConvite(RoletaConfig config) {

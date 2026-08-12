@@ -1,6 +1,7 @@
 package com.whiteLabel.backend.dto;
 
 import com.whiteLabel.backend.domain.Produto;
+import com.whiteLabel.backend.domain.ProdutoStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -18,7 +19,14 @@ public record ProdutoResponseDTO(
         Integer curtidasCount,
         Integer passosCount,
         List<String> nomesCurtidas,
-        List<ProdutoImagemResponse> imagens
+        List<ProdutoImagemResponse> imagens,
+        String status,
+        Boolean reservado,
+        Boolean reservadoPorMim,
+        LocalDateTime reservadoAte,
+        Long pedidoId,
+        String checkoutId,
+        String checkoutUrl
 ) {
 
     public static ProdutoResponseDTO from(Produto produto) {
@@ -29,11 +37,38 @@ public record ProdutoResponseDTO(
         return from(produto, nomesCurtidas, imagensLegadas(produto));
     }
 
+    public static ProdutoResponseDTO from(Produto produto, ProdutoReservaInfo reservaInfo) {
+        return from(produto, List.of(), imagensLegadas(produto), reservaInfo);
+    }
+
     public static ProdutoResponseDTO from(
             Produto produto,
             List<String> nomesCurtidas,
             List<ProdutoImagemResponse> imagens
     ) {
+        return from(produto, nomesCurtidas, imagens, null);
+    }
+
+    public static ProdutoResponseDTO from(
+            Produto produto,
+            List<String> nomesCurtidas,
+            List<ProdutoImagemResponse> imagens,
+            ProdutoReservaInfo reservaInfo
+    ) {
+        ProdutoReservaInfo info = reservaInfo == null
+                ? new ProdutoReservaInfo(
+                        produto.getStatus() == null
+                                ? ProdutoStatus.DISPONIVEL.name()
+                                : produto.getStatus().name(),
+                        false,
+                        false,
+                        null,
+                        null,
+                        null,
+                        null
+                )
+                : reservaInfo;
+
         return new ProdutoResponseDTO(
                 produto.getId(),
                 produto.getNome(),
@@ -46,7 +81,14 @@ public record ProdutoResponseDTO(
                 produto.getCurtidasCount() == null ? 0 : produto.getCurtidasCount(),
                 produto.getPassosCount() == null ? 0 : produto.getPassosCount(),
                 nomesCurtidas == null ? List.of() : nomesCurtidas,
-                imagens == null ? List.of() : imagens
+                imagens == null ? List.of() : imagens,
+                info.status(),
+                info.reservado(),
+                info.reservadoPorMim(),
+                info.reservadoAte(),
+                info.pedidoId(),
+                info.checkoutId(),
+                info.checkoutUrl()
         );
     }
 

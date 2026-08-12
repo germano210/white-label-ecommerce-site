@@ -14,6 +14,7 @@ import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
 import { formatCondicao, parseCondicao } from '../../utils/condicao';
 import { appRoutes } from '../../utils/appRoutes';
+import { brandPrimaryCssVar } from '../../constants/theme';
 import { MissoesAdminPanel } from '../../components/admin/MissoesAdminPanel';
 import { RoletaAdminPanel } from '../../components/admin/RoletaAdminPanel';
 import {
@@ -926,13 +927,13 @@ export function AdminDashboardScreen() {
                         <button onClick={() => setActiveAction('EQUIPE')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'EQUIPE' ? '#007AFF' : 'white', color: activeAction === 'EQUIPE' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                             <UserPlus size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Equipe</span>
                         </button>
-                        <button onClick={() => setActiveAction('MISSOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'MISSOES' ? '#687152' : 'white', color: activeAction === 'MISSOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                        <button onClick={() => setActiveAction('MISSOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'MISSOES' ? brandPrimaryCssVar : 'white', color: activeAction === 'MISSOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                             <Sparkles size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Missões</span>
                         </button>
-                        <button onClick={() => setActiveAction('ROLETA')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'ROLETA' ? '#687152' : 'white', color: activeAction === 'ROLETA' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                        <button onClick={() => setActiveAction('ROLETA')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'ROLETA' ? brandPrimaryCssVar : 'white', color: activeAction === 'ROLETA' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                             <Gift size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Roleta</span>
                         </button>
-                        <button onClick={() => setActiveAction('CONFIGURACOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'CONFIGURACOES' ? '#687152' : 'white', color: activeAction === 'CONFIGURACOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
+                        <button onClick={() => setActiveAction('CONFIGURACOES')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'CONFIGURACOES' ? brandPrimaryCssVar : 'white', color: activeAction === 'CONFIGURACOES' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
                             <Settings size={24} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Configurações</span>
                         </button>
                     </div>
@@ -956,7 +957,7 @@ export function AdminDashboardScreen() {
                         <PackagePlus size={24} color={activeAction === 'NOVO_ITEM' ? 'white' : '#4A90E2'} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Novo Item</span>
                     </button>
                     <button onClick={() => setActiveAction('PRODUTOS')} style={{ padding: '16px', borderRadius: '20px', border: 'none', background: activeAction === 'PRODUTOS' ? 'var(--dark)' : 'white', color: activeAction === 'PRODUTOS' ? 'white' : 'var(--dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s', cursor: 'pointer' }}>
-                        <Package size={24} color={activeAction === 'PRODUTOS' ? 'white' : '#687152'} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Produtos</span>
+                        <Package size={24} color={activeAction === 'PRODUTOS' ? 'white' : brandPrimaryCssVar} /> <span style={{ fontSize: '12px', fontWeight: 700 }}>Produtos</span>
                     </button>
                 </div>
             </div>
@@ -1360,7 +1361,7 @@ export function AdminDashboardScreen() {
                 <div style={{ margin: '0 20px', padding: '24px', background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '18px' }}>
                         <h3 style={{ fontSize: '18px', color: 'var(--dark)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Package size={20} color="#687152" /> Produtos
+                            <Package size={20} color={brandPrimaryCssVar} /> Produtos
                         </h3>
                         <span style={{ fontSize: '11px', color: '#999', fontWeight: 700 }}>{produtos.length} itens</span>
                     </div>
@@ -1410,7 +1411,7 @@ export function AdminDashboardScreen() {
                     </h3>
 
                     <form onSubmit={cadastrarProduto} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <label style={{ minHeight: '120px', padding: '18px', borderRadius: '16px', border: '2px dashed #DDD', background: '#F9F9F9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: imagens.length > 0 ? '#687152' : '#999', cursor: 'pointer', textAlign: 'center' }}>
+                        <label style={{ minHeight: '120px', padding: '18px', borderRadius: '16px', border: '2px dashed #DDD', background: '#F9F9F9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: imagens.length > 0 ? brandPrimaryCssVar : '#999', cursor: 'pointer', textAlign: 'center' }}>
                             <UploadCloud size={32} />
                             <span style={{ fontSize: '13px', fontWeight: 700 }}>
                                 {imagens.length > 0
@@ -1442,7 +1443,7 @@ export function AdminDashboardScreen() {
                                             key={imagemProduto.key}
                                             style={{
                                                 ...createImagePreviewCardStyle,
-                                                borderColor: isPrincipal ? '#687152' : '#E6E6E6',
+                                                borderColor: isPrincipal ? brandPrimaryCssVar : '#E6E6E6',
                                                 background: isPrincipal ? '#F4F7EF' : '#FFFFFF',
                                             }}
                                         >
@@ -1456,7 +1457,7 @@ export function AdminDashboardScreen() {
                                             <div style={createImagePreviewInfoStyle}>
                                                 <span style={{
                                                     ...createImageBadgeStyle,
-                                                    color: isPrincipal ? '#687152' : '#777',
+                                                    color: isPrincipal ? brandPrimaryCssVar : '#777',
                                                 }}>
                                                     {isPrincipal ? 'Principal' : `Foto ${index + 1}`}
                                                 </span>
@@ -1614,7 +1615,7 @@ function ConfiguracoesAdminPanel({
     return (
         <div style={{ margin: '0 20px', background: 'white', borderRadius: '24px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
             <h3 style={{ fontSize: '18px', color: 'var(--dark)', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={20} color="#687152" /> Configurações
+                <Settings size={20} color={brandPrimaryCssVar} /> Configurações
             </h3>
 
             <section style={{ padding: '16px', borderRadius: '16px', background: '#F9F9F9', border: '1px solid #EEE' }}>
@@ -1642,7 +1643,7 @@ function ConfiguracoesAdminPanel({
                                     minHeight: '42px',
                                     border: 0,
                                     borderRadius: '12px',
-                                    background: isActive ? '#687152' : '#FFFFFF',
+                                    background: isActive ? brandPrimaryCssVar : '#FFFFFF',
                                     color: isActive ? '#FFFFFF' : '#333',
                                     cursor: isSaving ? 'wait' : 'pointer',
                                     fontSize: '12px',
@@ -1744,7 +1745,7 @@ function ProdutoAdminListItem({
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                    <strong style={{ color: '#687152', fontSize: '14px' }}>{formatPrice(price)}</strong>
+                    <strong style={{ color: brandPrimaryCssVar, fontSize: '14px' }}>{formatPrice(price)}</strong>
                     {oldPrice > 0 && (
                         <span style={{ color: '#999', fontSize: '11px', textDecoration: 'line-through' }}>{formatPrice(oldPrice)}</span>
                     )}
@@ -1820,7 +1821,7 @@ function ProdutoEditModal({
                     <section style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                             <strong style={{ color: 'var(--dark)', fontSize: '13px' }}>Fotos</strong>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '34px', padding: '0 12px', borderRadius: '10px', background: '#EDF7F0', color: '#687152', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '34px', padding: '0 12px', borderRadius: '10px', background: '#EDF7F0', color: brandPrimaryCssVar, fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}>
                                 <ImagePlus size={15} />
                                 Adicionar
                                 <input
@@ -1851,7 +1852,7 @@ function ProdutoEditModal({
                                             style={{ width: '64px', height: '74px', objectFit: 'cover', borderRadius: '10px', background: '#EEE' }}
                                         />
                                         <div style={{ minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: foto.principal ? '#687152' : '#777', fontSize: '11px', fontWeight: 800 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: foto.principal ? brandPrimaryCssVar : '#777', fontSize: '11px', fontWeight: 800 }}>
                                                 {foto.principal && <Star size={13} fill="currentColor" />}
                                                 {foto.principal ? 'Foto principal' : `Foto ${index + 1}`}
                                             </div>
@@ -1877,7 +1878,7 @@ function ProdutoEditModal({
                     </section>
                 </div>
 
-                <button type="submit" disabled={isSaving} style={{ width: '100%', minHeight: '48px', marginTop: '18px', border: 0, borderRadius: '16px', background: '#687152', color: 'white', fontSize: '13px', fontWeight: 800, cursor: isSaving ? 'wait' : 'pointer', opacity: isSaving ? 0.66 : 1 }}>
+                <button type="submit" disabled={isSaving} style={{ width: '100%', minHeight: '48px', marginTop: '18px', border: 0, borderRadius: '16px', background: brandPrimaryCssVar, color: 'white', fontSize: '13px', fontWeight: 800, cursor: isSaving ? 'wait' : 'pointer', opacity: isSaving ? 0.66 : 1 }}>
                     {isSaving ? 'Salvando alterações...' : 'Salvar alterações'}
                 </button>
             </form>
@@ -2020,7 +2021,7 @@ const photoActionButtonStyle: React.CSSProperties = {
     border: 0,
     borderRadius: '8px',
     background: '#FFFFFF',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     cursor: 'pointer',
     padding: '0 9px',
     fontSize: '10px',

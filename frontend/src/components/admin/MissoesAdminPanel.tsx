@@ -9,6 +9,7 @@ import {
     tiposAcaoMissao,
     type TipoAcaoMissao,
 } from '../../utils/missaoTypes';
+import { brandPrimaryCssVar } from '../../constants/theme';
 
 interface AdminMissao {
     id: string;
@@ -239,7 +240,7 @@ export function MissoesAdminPanel() {
             <div style={panelHeaderStyle}>
                 <div>
                     <h3 style={panelTitleStyle}>
-                        <Sparkles size={20} color="#687152" />
+                        <Sparkles size={20} color={brandPrimaryCssVar} />
                         Missões
                     </h3>
                     <p style={panelDescriptionStyle}>
@@ -290,7 +291,7 @@ export function MissoesAdminPanel() {
                                     <td style={tableCellStyle}>{missao.metaProgresso}</td>
                                     <td style={tableCellStyle}>{missao.valorBase} XP</td>
                                     <td style={tableCellStyle}>{missao.peso}x</td>
-                                    <td style={{ ...tableCellStyle, fontWeight: 800, color: '#687152' }}>
+                                    <td style={{ ...tableCellStyle, fontWeight: 800, color: brandPrimaryCssVar }}>
                                         {missao.valorBase * missao.peso} XP
                                     </td>
                                     <td style={{ ...tableCellStyle, textAlign: 'right' }}>
@@ -526,7 +527,7 @@ const primaryButtonStyle: CSSProperties = {
     gap: '6px',
     border: 0,
     borderRadius: '14px',
-    background: '#687152',
+    background: brandPrimaryCssVar,
     color: 'white',
     padding: '12px 14px',
     fontSize: '12px',
@@ -577,7 +578,7 @@ const iconActionButtonStyle: CSSProperties = {
     placeItems: 'center',
     border: 0,
     borderRadius: '10px',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     background: '#F2F4EE',
     cursor: 'pointer',
 };
@@ -700,7 +701,7 @@ const rewardPreviewStyle: CSSProperties = {
     marginTop: '14px',
     borderRadius: '14px',
     background: '#F2F4EE',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     padding: '13px 14px',
     fontSize: '13px',
     fontWeight: 800,
@@ -715,7 +716,7 @@ const submitButtonStyle: CSSProperties = {
     marginTop: '16px',
     border: 0,
     borderRadius: '16px',
-    background: '#687152',
+    background: brandPrimaryCssVar,
     color: 'white',
     padding: '15px',
     fontSize: '14px',

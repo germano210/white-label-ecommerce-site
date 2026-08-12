@@ -4,6 +4,7 @@ import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.ProdutoImagem;
 import com.whiteLabel.backend.dto.AdminProdutoResponseDTO;
 import com.whiteLabel.backend.dto.ProdutoImagemResponse;
+import com.whiteLabel.backend.dto.ProdutoReservaInfo;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.ProdutoImagemRepository;
@@ -41,17 +42,20 @@ public class ProdutoService {
     private final ProdutoImagemRepository produtoImagemRepository;
     private final CurtidaRepository curtidaRepository;
     private final ImagemStorageService imagemStorageService;
+    private final ProdutoReservaService produtoReservaService;
 
     public ProdutoService(
             ProdutoRepository produtoRepository,
             ProdutoImagemRepository produtoImagemRepository,
             CurtidaRepository curtidaRepository,
-            ImagemStorageService imagemStorageService
+            ImagemStorageService imagemStorageService,
+            ProdutoReservaService produtoReservaService
     ) {
         this.produtoRepository = produtoRepository;
         this.produtoImagemRepository = produtoImagemRepository;
         this.curtidaRepository = curtidaRepository;
         this.imagemStorageService = imagemStorageService;
+        this.produtoReservaService = produtoReservaService;
     }
 
     @Transactional
@@ -232,18 +236,21 @@ public class ProdutoService {
         return montarAdminResponse(produtoSalvo, imagensOrdenadas, List.of());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<ProdutoResponseDTO> listarAtivos() {
+        produtoReservaService.expirarReservasVencidas();
         List<Produto> produtos = produtoRepository.findAllByAtivoTrueOrderByCriadoEmDescIdDesc();
         Map<Long, List<String>> nomesCurtidasPorProduto = buscarNomesCurtidas(produtos);
         Map<Long, List<ProdutoImagemResponse>> imagensPorProduto = buscarImagens(produtos);
+        Map<Long, ProdutoReservaInfo> reservasPorProduto = produtoReservaService.buscarInfosReserva(produtos);
 
         return produtos
                 .stream()
                 .map(produto -> ProdutoResponseDTO.from(
                         produto,
                         nomesCurtidasPorProduto.getOrDefault(produto.getId(), List.of()),
-                        imagensDoProduto(produto, imagensPorProduto)
+                        imagensDoProduto(produto, imagensPorProduto),
+                        reservasPorProduto.get(produto.getId())
                 ))
                 .toList();
     }

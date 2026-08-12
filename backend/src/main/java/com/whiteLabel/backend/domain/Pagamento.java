@@ -45,6 +45,9 @@ public class Pagamento {
     @Column(name = "checkout_id", nullable = false, length = 120)
     private String checkoutId;
 
+    @Column(name = "checkout_url", length = 500)
+    private String checkoutUrl;
+
     @Column(name = "payment_id", length = 120)
     private String paymentId;
 
@@ -91,6 +94,18 @@ public class Pagamento {
         this.status = Objects.requireNonNull(status);
     }
 
+    public void definirCheckoutUrl(String checkoutUrl) {
+        this.checkoutUrl = checkoutUrl == null || checkoutUrl.isBlank()
+                ? null
+                : checkoutUrl.trim();
+    }
+
+    public void expirar() {
+        if (status != PagamentoStatus.PAGO) {
+            status = PagamentoStatus.EXPIRADO;
+        }
+    }
+
     @PrePersist
     void preencherDatasCriacao() {
         LocalDateTime agora = LocalDateTime.now();
@@ -125,6 +140,10 @@ public class Pagamento {
 
     public String getCheckoutId() {
         return checkoutId;
+    }
+
+    public String getCheckoutUrl() {
+        return checkoutUrl;
     }
 
     public String getPaymentId() {

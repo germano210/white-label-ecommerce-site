@@ -23,4 +23,8 @@ public record CheckoutResponse(
                 pagamento.getPedido().getPrecoFinal()
         );
     }
+
+    public static CheckoutResponse from(Pagamento pagamento) {
+        return from(pagamento, pagamento.getCheckoutUrl());
+    }
 }

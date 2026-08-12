@@ -46,6 +46,10 @@ public class Pedido {
     @JoinColumn(name = "produto_id")
     private Produto produto;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "produto_desconto_id")
+    private Produto produtoDesconto;
+
     @Column(name = "preco_original", precision = 12, scale = 2)
     private BigDecimal precoOriginal;
 
@@ -87,6 +91,12 @@ public class Pedido {
         valorTotal = valorTotal.add(item.getSubtotal());
     }
 
+    public void adicionarItem(Produto produto, Integer quantidade, BigDecimal precoUnitario) {
+        PedidoItem item = new PedidoItem(this, produto, quantidade, precoUnitario);
+        itens.add(item);
+        valorTotal = valorTotal.add(item.getSubtotal());
+    }
+
     public void registrarCheckoutProduto(
             Produto produto,
             BigDecimal precoOriginal,
@@ -94,6 +104,24 @@ public class Pedido {
             BigDecimal precoFinal
     ) {
         this.produto = Objects.requireNonNull(produto);
+        this.precoOriginal = normalizarValor(precoOriginal);
+        this.descontoAplicado = normalizarValor(descontoAplicado);
+        this.precoFinal = normalizarValor(precoFinal);
+        this.valorTotal = this.precoFinal;
+    }
+
+    public void registrarCheckoutProdutos(
+            List<Produto> produtos,
+            Produto produtoDesconto,
+            BigDecimal precoOriginal,
+            BigDecimal descontoAplicado,
+            BigDecimal precoFinal
+    ) {
+        if (produtos == null || produtos.size() != 1) {
+            throw new IllegalArgumentException("Pedido precisa ter exatamente um produto");
+        }
+        this.produto = produtos.get(0);
+        this.produtoDesconto = produtoDesconto;
         this.precoOriginal = normalizarValor(precoOriginal);
         this.descontoAplicado = normalizarValor(descontoAplicado);
         this.precoFinal = normalizarValor(precoFinal);
@@ -122,6 +150,10 @@ public class Pedido {
 
     public void cancelar() {
         status = PedidoStatus.CANCELADO;
+    }
+
+    public void expirar() {
+        status = PedidoStatus.EXPIRADO;
     }
 
     @PrePersist
@@ -166,6 +198,10 @@ public class Pedido {
 
     public Produto getProduto() {
         return produto;
+    }
+
+    public Produto getProdutoDesconto() {
+        return produtoDesconto;
     }
 
     public BigDecimal getPrecoOriginal() {

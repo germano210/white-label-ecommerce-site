@@ -6,6 +6,7 @@ import com.whiteLabel.backend.domain.Produto;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.dto.CurtidaResponseDTO;
 import com.whiteLabel.backend.dto.MissaoResponse;
+import com.whiteLabel.backend.dto.ProdutoReservaInfo;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.repository.CurtidaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -27,26 +29,34 @@ public class CurtidaService {
     private final UsuarioRepository usuarioRepository;
     private final ProdutoRepository produtoRepository;
     private final MissaoProgressService missaoProgressService;
+    private final ProdutoReservaService produtoReservaService;
 
     public CurtidaService(
             CurtidaRepository curtidaRepository,
             UsuarioRepository usuarioRepository,
             ProdutoRepository produtoRepository,
-            MissaoProgressService missaoProgressService
+            MissaoProgressService missaoProgressService,
+            ProdutoReservaService produtoReservaService
     ) {
         this.curtidaRepository = curtidaRepository;
         this.usuarioRepository = usuarioRepository;
         this.produtoRepository = produtoRepository;
         this.missaoProgressService = missaoProgressService;
+        this.produtoReservaService = produtoReservaService;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<ProdutoResponseDTO> listarCurtidas() {
         UUID usuarioId = obterUsuarioAutenticadoId();
-
-        return curtidaRepository.findByUsuarioIdOrderByDataCurtidaDesc(usuarioId)
+        List<Produto> produtos = curtidaRepository.findByUsuarioIdOrderByDataCurtidaDesc(usuarioId)
                 .stream()
-                .map(curtida -> ProdutoResponseDTO.from(curtida.getProduto()))
+                .map(Curtida::getProduto)
+                .toList();
+        Map<Long, ProdutoReservaInfo> reservasPorProduto = produtoReservaService.buscarInfosReserva(produtos);
+
+        return produtos
+                .stream()
+                .map(produto -> ProdutoResponseDTO.from(produto, reservasPorProduto.get(produto.getId())))
                 .toList();
     }
 

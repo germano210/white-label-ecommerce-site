@@ -57,6 +57,10 @@ public class Produto {
     @Column(nullable = false)
     private Boolean ativo = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30, columnDefinition = "varchar(30) default 'DISPONIVEL'")
+    private ProdutoStatus status = ProdutoStatus.DISPONIVEL;
+
     @Column(
             name = "criado_em",
             nullable = false,
@@ -71,8 +75,51 @@ public class Produto {
             criadoEm = LocalDateTime.now();
         }
 
+        preencherPadroes();
+    }
+
+    @PreUpdate
+    void atualizarPadroes() {
+        preencherPadroes();
+    }
+
+    public ProdutoStatus getStatus() {
+        if (status == ProdutoStatus.VENDIDO) {
+            return ProdutoStatus.VENDIDO;
+        }
+        if (Boolean.FALSE.equals(ativo)) {
+            return ProdutoStatus.INATIVO;
+        }
+        return status == null ? ProdutoStatus.DISPONIVEL : status;
+    }
+
+    public boolean disponivelParaReserva() {
+        return Boolean.TRUE.equals(ativo) && getStatus() == ProdutoStatus.DISPONIVEL;
+    }
+
+    public void marcarReservado() {
+        if (Boolean.TRUE.equals(ativo) && getStatus() == ProdutoStatus.DISPONIVEL) {
+            status = ProdutoStatus.RESERVADO;
+        }
+    }
+
+    public void liberarReserva() {
+        if (Boolean.TRUE.equals(ativo) && getStatus() == ProdutoStatus.RESERVADO) {
+            status = ProdutoStatus.DISPONIVEL;
+        }
+    }
+
+    public void marcarVendido() {
+        status = ProdutoStatus.VENDIDO;
+        ativo = false;
+    }
+
+    private void preencherPadroes() {
         if (condicao == null) {
             condicao = BigDecimal.ZERO;
+        }
+        if (status == null) {
+            status = Boolean.FALSE.equals(ativo) ? ProdutoStatus.INATIVO : ProdutoStatus.DISPONIVEL;
         }
     }
 }

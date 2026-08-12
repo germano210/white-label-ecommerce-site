@@ -42,10 +42,19 @@ public class PedidoItem {
     }
 
     public PedidoItem(Pedido pedido, Produto produto, Integer quantidade) {
+        this(pedido, produto, quantidade, produto.getPrecoVenda());
+    }
+
+    public PedidoItem(
+            Pedido pedido,
+            Produto produto,
+            Integer quantidade,
+            BigDecimal precoUnitario
+    ) {
         this.pedido = Objects.requireNonNull(pedido);
         this.produto = Objects.requireNonNull(produto);
         this.quantidade = Math.max(1, quantidade == null ? 1 : quantidade);
-        this.precoUnitario = produto.getPrecoVenda();
+        this.precoUnitario = Objects.requireNonNull(precoUnitario);
         this.subtotal = precoUnitario.multiply(BigDecimal.valueOf(this.quantidade));
     }
 

@@ -71,7 +71,7 @@
 
 .login-modal__primary {
     border: 0;
-    background: #687152;
+    background: var(--brand-primary);
     color: #fff;
     font-size: 14px;
     font-weight: 700;

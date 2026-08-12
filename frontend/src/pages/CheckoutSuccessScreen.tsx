@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
+import { brandPrimaryCssVar } from '../constants/theme';
 
 interface CheckoutStatusResponse {
     id?: string | number;
@@ -123,7 +124,7 @@ const panelStyle: React.CSSProperties = {
 };
 
 const eyebrowStyle: React.CSSProperties = {
-    color: '#687152',
+    color: brandPrimaryCssVar,
     fontSize: '11px',
     fontWeight: 900,
     letterSpacing: '0.08em',

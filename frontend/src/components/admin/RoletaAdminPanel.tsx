@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Gift, Plus, Save, Trash2 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
+import { brandPrimaryCssVar, brandPrimaryHex } from '../../constants/theme';
 
 type RoletaTipoPremio = 'DESCONTO_VALOR' | 'DESCONTO_PERCENTUAL';
 
@@ -825,7 +826,7 @@ export function RoletaAdminPanel() {
     return (
         <div style={panelStyle}>
             <h3 style={panelTitleStyle}>
-                <Gift size={20} color="#687152" />
+                <Gift size={20} color={brandPrimaryCssVar} />
                 Roleta VIP
             </h3>
 
@@ -918,7 +919,7 @@ export function RoletaAdminPanel() {
                                             <article key={level.localId} style={levelCardStyle}>
                                                 <div style={levelHeaderStyle}>
                                                     <span
-                                                        style={{ ...colorSwatchStyle, background: normalizeHexColor(level.corHex, '#687152') }}
+                                                        style={{ ...colorSwatchStyle, background: normalizeHexColor(level.corHex, brandPrimaryHex) }}
                                                         aria-hidden="true"
                                                     />
                                                     <div style={{ minWidth: 0 }}>
@@ -962,8 +963,8 @@ export function RoletaAdminPanel() {
                                                         <div style={colorFieldStyle}>
                                                             <input
                                                                 type="color"
-                                                                value={normalizeHexColor(level.corHex, '#687152')}
-                                                                onChange={(event) => updateLevel(level.localId, 'corHex', normalizeHexColor(event.target.value, '#687152'))}
+                                                                value={normalizeHexColor(level.corHex, brandPrimaryHex)}
+                                                                onChange={(event) => updateLevel(level.localId, 'corHex', normalizeHexColor(event.target.value, brandPrimaryHex))}
                                                                 style={colorInputStyle}
                                                             />
                                                             <input
@@ -979,7 +980,7 @@ export function RoletaAdminPanel() {
                                                                 }}
                                                                 onBlur={() => {
                                                                     if (isCompleteHexColor(level.corHex)) {
-                                                                        updateLevel(level.localId, 'corHex', normalizeHexColor(level.corHex, '#687152'));
+                                                                        updateLevel(level.localId, 'corHex', normalizeHexColor(level.corHex, brandPrimaryHex));
                                                                     }
                                                                 }}
                                                                 placeholder="#E83E8C"
@@ -1024,7 +1025,7 @@ export function RoletaAdminPanel() {
                                                         <input
                                                             value={formatChance(levelChances[level.localId])}
                                                             readOnly
-                                                            style={{ ...inputStyle, background: '#F4F4F4', color: '#687152' }}
+                                                            style={{ ...inputStyle, background: '#F4F4F4', color: brandPrimaryCssVar }}
                                                         />
                                                     </label>
                                                 </div>
@@ -1334,7 +1335,7 @@ const noticeStyle: CSSProperties = {
     margin: 0,
     borderRadius: '12px',
     background: '#F5F7F1',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     fontSize: '12px',
     lineHeight: 1.35,
     padding: '11px 12px',
@@ -1368,7 +1369,7 @@ const secondaryButtonStyle: CSSProperties = {
     border: 0,
     borderRadius: '12px',
     background: '#EDF7F0',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: 900,
@@ -1384,7 +1385,7 @@ const miniButtonStyle: CSSProperties = {
     border: 0,
     borderRadius: '9px',
     background: '#EDF7F0',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     cursor: 'pointer',
     fontSize: '11px',
     padding: '0 10px',
@@ -1431,7 +1432,7 @@ const levelNameStyle: CSSProperties = {
 
 const chanceStyle: CSSProperties = {
     display: 'block',
-    color: '#687152',
+    color: brandPrimaryCssVar,
     fontSize: '11px',
     marginTop: '3px',
 };
@@ -1574,7 +1575,7 @@ const primaryButtonStyle: CSSProperties = {
     minHeight: '48px',
     border: 0,
     borderRadius: '16px',
-    background: '#687152',
+    background: brandPrimaryCssVar,
     color: 'white',
     cursor: 'pointer',
     fontSize: '13px',
