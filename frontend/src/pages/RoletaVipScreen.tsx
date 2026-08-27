@@ -1809,7 +1809,6 @@ export function RoletaVipScreen() {
                                             style={{
                                                 backgroundColor: currentPrize.nivelCor,
                                                 color: '#000000',
-                                                fontWeight: 900,
                                                 WebkitTextStroke: '0.25px #000000',
                                                 boxShadow: '1px 1px 10px #fff6f1'
                                             }}
