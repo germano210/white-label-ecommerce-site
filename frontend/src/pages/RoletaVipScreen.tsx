@@ -333,9 +333,9 @@ function parseApiNumber(value: NumericApiValue) {
     return Number(normalizedValue) || 0;
 }
 
-function formatTwoDigits(value: number) {
-    return Math.max(0, Math.floor(value)).toString().padStart(2, '0');
-}
+// function formatTwoDigits(value: number) {
+//     return Math.max(0, Math.floor(value)).toString().padStart(2, '0');
+// }
 
 function formatCurrencyBRL(value: number) {
     return value
@@ -1710,16 +1710,7 @@ export function RoletaVipScreen() {
                         </div>
                     )}
 
-                    <section className="roleta-vip-summary" aria-label="Resumo dos resgates">
-                        <div className="roleta-vip-summary-half roleta-vip-summary-half--spins">
-                            <strong>{formatTwoDigits(roleta.girosTotaisObtidos)}</strong>
-                            <span>(giros totais obtidos)</span>
-                        </div>
-                        <div className="roleta-vip-summary-half roleta-vip-summary-half--money">
-                            <strong>{formatCurrencyBRL(roleta.valorDisponivelResgate)}</strong>
-                            <span>(resgate minimo de R$5,00)</span>
-                        </div>
-                    </section>
+
 
                     <section className="roleta-vip-group-goal" aria-label="Meta atual do grupo">
                         <div className="roleta-vip-group-goal-row">
@@ -2055,7 +2046,7 @@ export function RoletaVipScreen() {
                                     <li>Copie seu link abaixo.</li>
                                     <li>Envie pra alguém que ainda não tem conta.</li>
                                     <li>Quando a pessoa criar a conta pelo seu link, você ganha de <strong>2 a 5</strong> giros extras na hora.</li>
-                                    <li>Caso a pessoa que você indicou resgate um item, parte do valor da compra vai pra você (os valores são acumulativos).</li>
+                                    <li>Caso a pessoa que você indicou resgate um item, parte do valor da compra vai pra você <strong>(os valores são acumulativos)</strong>.</li>
                                 </ol>
 
                                 <div className="roleta-vip-invite-link-row">

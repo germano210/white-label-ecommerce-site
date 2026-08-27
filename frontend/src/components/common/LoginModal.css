@@ -20,7 +20,7 @@
     max-height: calc(100dvh - 32px);
     overflow-y: auto;
     border-radius: 28px;
-    background: #fff7e6;
+    background: var(--background-app);
     box-shadow: 0 20px 42px rgba(25, 21, 16, 0.18);
     padding: 22px 24px 30px;
 }

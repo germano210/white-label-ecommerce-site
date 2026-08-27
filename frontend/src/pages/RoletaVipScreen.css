@@ -152,8 +152,9 @@
 
 .roleta-vip-group-goal {
     margin-bottom: clamp(14px, 4.8vw, 20px);
-    padding: 1px 2px 0;
+    padding: 25px 15px;
     background-color: #F7F7F7 ;
+    border-radius: 7px;
 }
 
 .roleta-vip-group-goal-row {
@@ -166,15 +167,17 @@
     line-height: 1;
 }
 
-.roleta-vip-group-goal-row span,
-.roleta-vip-group-goal-row strong {
-    font-weight: 600;
+.roleta-vip-group-goal-row span {
+    font-weight: 200;
+}
+.roleta-vip-group-goal-row strong{
+    font-weight: 300;
 }
 
 .roleta-vip-group-progress {
     height: 8px;
     overflow: hidden;
-    border-radius: 16%;
+    border-radius: 15px;
     background: #e6e6e6;
     margin-top: 8px;
 }
@@ -183,7 +186,6 @@
     display: block;
     height: 100%;
     min-width: 0;
-    border-radius: inherit;
     background: var(--brand-primary);
 }
 
@@ -191,7 +193,6 @@
     margin: 6px 0 0;
     color: #000000;
     font-size: 10px;
-    font-weight: 500;
     line-height: 1.2;
 }
 
@@ -224,7 +225,7 @@
     color: var(--brand-primary);
     cursor: pointer;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 400;
     line-height: 1;
     transition:
         background 180ms ease,
@@ -350,14 +351,14 @@
     margin: 6px 0 4px;
     color: #000000;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 200;
     line-height: 1;
     text-align: center;
 }
 
 #root .roleta-vip-spins-left strong {
     font-size: inherit;
-    font-weight: 900 ;
+    font-weight: 400 ;
 }
 
 .roleta-vip-spin-actions {
@@ -796,7 +797,7 @@
 
 
 .roleta-vip-invite-card li strong {
-    font-weight: 800;
+    font-weight: 400;
 }
 
 .roleta-vip-invite-link-row {
@@ -872,7 +873,7 @@
     gap: 17px;
     color: #000000;
     font-size: 12px;
-    font-weight: 400;
+    font-weight: 200;
     line-height: 1.35;
     margin: 0 auto;
     text-align: center;
