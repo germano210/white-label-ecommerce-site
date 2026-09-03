@@ -61,6 +61,27 @@ public class Usuario {
     @JoinColumn(name = "indicado_por_id")
     private Usuario indicadoPor;
 
+    @Column(name = "endereco_rua", length = 180)
+    private String enderecoRua;
+
+    @Column(name = "endereco_numero", length = 30)
+    private String enderecoNumero;
+
+    @Column(name = "endereco_complemento", length = 120)
+    private String enderecoComplemento;
+
+    @Column(name = "endereco_bairro", length = 100)
+    private String enderecoBairro;
+
+    @Column(name = "endereco_cidade", length = 100)
+    private String enderecoCidade;
+
+    @Column(name = "endereco_estado", length = 2)
+    private String enderecoEstado;
+
+    @Column(name = "endereco_cep", length = 8)
+    private String enderecoCep;
+
     @Column(name = "data_criacao", nullable = false, updatable = false)
     private LocalDateTime dataCriacao;
 
@@ -167,6 +188,62 @@ public class Usuario {
 
     public void setIndicadoPor(Usuario indicadoPor) {
         this.indicadoPor = indicadoPor;
+    }
+
+    public String getEnderecoRua() {
+        return enderecoRua;
+    }
+
+    public void setEnderecoRua(String enderecoRua) {
+        this.enderecoRua = enderecoRua;
+    }
+
+    public String getEnderecoNumero() {
+        return enderecoNumero;
+    }
+
+    public void setEnderecoNumero(String enderecoNumero) {
+        this.enderecoNumero = enderecoNumero;
+    }
+
+    public String getEnderecoComplemento() {
+        return enderecoComplemento;
+    }
+
+    public void setEnderecoComplemento(String enderecoComplemento) {
+        this.enderecoComplemento = enderecoComplemento;
+    }
+
+    public String getEnderecoBairro() {
+        return enderecoBairro;
+    }
+
+    public void setEnderecoBairro(String enderecoBairro) {
+        this.enderecoBairro = enderecoBairro;
+    }
+
+    public String getEnderecoCidade() {
+        return enderecoCidade;
+    }
+
+    public void setEnderecoCidade(String enderecoCidade) {
+        this.enderecoCidade = enderecoCidade;
+    }
+
+    public String getEnderecoEstado() {
+        return enderecoEstado;
+    }
+
+    public void setEnderecoEstado(String enderecoEstado) {
+        this.enderecoEstado = enderecoEstado;
+    }
+
+    public String getEnderecoCep() {
+        return enderecoCep;
+    }
+
+    public void setEnderecoCep(String enderecoCep) {
+        this.enderecoCep = enderecoCep;
     }
 
     public LocalDateTime getDataCriacao() {

@@ -161,4 +161,12 @@ public class Pagamento {
     public BigDecimal getValor() {
         return valor;
     }
+
+    public LocalDateTime getDataCriacao() {
+        return dataCriacao;
+    }
+
+    public LocalDateTime getDataAtualizacao() {
+        return dataAtualizacao;
+    }
 }

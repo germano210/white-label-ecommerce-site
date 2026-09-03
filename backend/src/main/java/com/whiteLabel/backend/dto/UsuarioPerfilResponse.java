@@ -10,7 +10,8 @@ public record UsuarioPerfilResponse(
         String telefone,
         Integer level,
         Integer xpAtual,
-        Integer xpParaProximoNivel
+        Integer xpParaProximoNivel,
+        EnderecoUsuarioResponse endereco
 ) {
 
     public static UsuarioPerfilResponse from(Usuario usuario, Integer xpParaProximoNivel) {
@@ -20,7 +21,8 @@ public record UsuarioPerfilResponse(
                 usuario.getTelefone(),
                 usuario.getNivel(),
                 usuario.getXp(),
-                xpParaProximoNivel
+                xpParaProximoNivel,
+                EnderecoUsuarioResponse.from(usuario)
         );
     }
 }

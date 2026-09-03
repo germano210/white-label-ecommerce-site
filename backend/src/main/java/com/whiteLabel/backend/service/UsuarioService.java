@@ -1,7 +1,11 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Usuario;
+import com.whiteLabel.backend.dto.EnderecoUsuarioRequest;
 import com.whiteLabel.backend.dto.UsuarioPerfilResponse;
+import com.whiteLabel.backend.dto.UsuarioResgateResponse;
+import com.whiteLabel.backend.repository.PagamentoRepository;
+import com.whiteLabel.backend.repository.PedidoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -12,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Objects;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -23,13 +29,19 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final MissaoSemanalService missaoSemanalService;
+    private final PedidoRepository pedidoRepository;
+    private final PagamentoRepository pagamentoRepository;
 
     public UsuarioService(
             UsuarioRepository usuarioRepository,
-            MissaoSemanalService missaoSemanalService
+            MissaoSemanalService missaoSemanalService,
+            PedidoRepository pedidoRepository,
+            PagamentoRepository pagamentoRepository
     ) {
         this.usuarioRepository = usuarioRepository;
         this.missaoSemanalService = missaoSemanalService;
+        this.pedidoRepository = pedidoRepository;
+        this.pagamentoRepository = pagamentoRepository;
     }
 
     @Transactional(readOnly = true)
@@ -45,6 +57,52 @@ public class UsuarioService {
                 usuario,
                 calcularXpParaProximoNivel(usuario.getNivel())
         );
+    }
+
+    @Transactional
+    public UsuarioPerfilResponse atualizarEnderecoAutenticado(EnderecoUsuarioRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Endereco e obrigatorio");
+        }
+
+        UUID usuarioId = obterUsuarioAutenticadoId();
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Usuario autenticado nao encontrado"
+                ));
+
+        usuario.setEnderecoRua(normalizarTexto(request.rua()));
+        usuario.setEnderecoNumero(normalizarTexto(request.numero()));
+        usuario.setEnderecoComplemento(normalizarTexto(request.complemento()));
+        usuario.setEnderecoBairro(normalizarTexto(request.bairro()));
+        usuario.setEnderecoCidade(normalizarTexto(request.cidade()));
+        usuario.setEnderecoEstado(normalizarEstado(request.estado()));
+        usuario.setEnderecoCep(normalizarCep(request.cep()));
+
+        Usuario usuarioAtualizado = usuarioRepository.save(usuario);
+        return UsuarioPerfilResponse.from(
+                usuarioAtualizado,
+                calcularXpParaProximoNivel(usuarioAtualizado.getNivel())
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<UsuarioResgateResponse> listarResgatesAutenticados() {
+        UUID usuarioId = obterUsuarioAutenticadoId();
+
+        return pedidoRepository.findDistinctByUsuarioIdOrderByDataCriacaoDescIdDesc(usuarioId)
+                .stream()
+                .flatMap(pedido -> {
+                    var pagamento = pagamentoRepository
+                            .findTopByPedidoIdOrderByDataCriacaoDescIdDesc(pedido.getId())
+                            .orElse(null);
+
+                    return pedido.getItens()
+                            .stream()
+                            .map(item -> UsuarioResgateResponse.from(pedido, item, pagamento));
+                })
+                .toList();
     }
 
     /**
@@ -88,6 +146,41 @@ public class UsuarioService {
 
     public Integer calcularXpParaProximoNivel(Integer nivelAtual) {
         return (int) Math.ceil(calcularXpNecessarioParaProximoNivel(nivelAtual));
+    }
+
+    private String normalizarTexto(String valor) {
+        if (valor == null) {
+            return null;
+        }
+
+        String normalizado = valor.trim();
+        return normalizado.isEmpty() ? null : normalizado;
+    }
+
+    private String normalizarEstado(String estado) {
+        String normalizado = normalizarTexto(estado);
+        if (normalizado == null) {
+            return null;
+        }
+        if (!normalizado.matches("[A-Za-z]{2}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Estado deve ter 2 letras");
+        }
+
+        return normalizado.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizarCep(String cep) {
+        String normalizado = normalizarTexto(cep);
+        if (normalizado == null) {
+            return null;
+        }
+
+        String apenasDigitos = normalizado.replaceAll("\\D", "");
+        if (apenasDigitos.length() > 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CEP deve ter ate 8 digitos");
+        }
+
+        return apenasDigitos.isEmpty() ? null : apenasDigitos;
     }
 
     private double calcularXpNecessarioParaProximoNivel(Integer nivelAtual) {
