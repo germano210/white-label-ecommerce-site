@@ -23,6 +23,11 @@ export const apiRoutes = {
     },
     usuarios: {
         me: '/api/usuarios/me',
+        endereco: '/api/usuarios/me/endereco',
+        resgates: '/api/usuarios/me/resgates',
+    },
+    indicacoes: {
+        meuLink: '/api/indicacoes/meu-link',
     },
     checkout: {
         create: '/api/checkout',

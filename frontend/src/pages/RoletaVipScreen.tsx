@@ -3,6 +3,8 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
 import { BrechoDaCamiLogo } from '../components/common/BrechoDaCamiLogo';
+import { AppIcon } from '../components/icons/AppIcon';
+import { RoletaProfileModal } from '../components/roleta/RoletaProfileModal';
 import { useAuthStore } from '../store/useAuthStore';
 import { api, isCookieAuthMode } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
@@ -1132,6 +1134,7 @@ export function RoletaVipScreen() {
     const [isInviteLoading, setIsInviteLoading] = useState(false);
     const [inviteError, setInviteError] = useState('');
     const [inviteCopyLabel, setInviteCopyLabel] = useState('Copiar link');
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const fetchRoletaInFlightRef = useRef(false);
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
     const dailyCheckoutInFlightRef = useRef(false);
@@ -1692,9 +1695,25 @@ export function RoletaVipScreen() {
         <div className="roleta-vip-page">
             <main className="roleta-vip-shell" aria-busy={isLoading}>
                 <section className="roleta-vip-top" aria-label="Resumo da roleta VIP">
-                    <h1 className="roleta-vip-title">
-                        <BrechoDaCamiLogo className="roleta-vip-logo" />
-                    </h1>
+                    <div className="roleta-vip-header">
+                        <h1 className="roleta-vip-title">
+                            <BrechoDaCamiLogo className="roleta-vip-logo" />
+                        </h1>
+                        <div className="roleta-vip-profile-cta">
+                            <button
+                                type="button"
+                                className="roleta-vip-profile-button"
+                                onClick={() => setIsProfileModalOpen(true)}
+                                aria-label="Abrir perfil"
+                            >
+                                <span>{formatCurrencyBRL(roleta.valorDisponivelResgate)}</span>
+                                <AppIcon name="perfil" size={16} />
+                            </button>
+                            <span className="roleta-vip-profile-minimum">
+                                (saque mínimo de R$5,00)
+                            </span>
+                        </div>
+                    </div>
 
                     {roleta.notificacoes.length > 0 && (
                         <div className="roleta-vip-notifications" aria-label="Notificacoes da roleta">
@@ -2079,6 +2098,12 @@ export function RoletaVipScreen() {
                     {activeTab === 'spin' && roletaInfoFooter}
                 </section>
             </main>
+            {isProfileModalOpen && (
+                <RoletaProfileModal
+                    valorDisponivelResgate={roleta.valorDisponivelResgate}
+                    onClose={() => setIsProfileModalOpen(false)}
+                />
+            )}
         </div>
     );
 }
