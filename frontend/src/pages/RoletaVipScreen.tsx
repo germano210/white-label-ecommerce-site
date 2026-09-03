@@ -11,6 +11,7 @@ import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
 import arrowImageIcon from '../assets/icons/arrowImage.svg';
 import './RoletaVipScreen.css';
+import './roleta.css';
 
 type NumericApiValue = number | string | null | undefined;
 type RoletaTab = 'spin' | 'daily';
