@@ -339,7 +339,6 @@
 .roleta-vip-wheel-frame {
     position: absolute;
     top: clamp(10px, 4vh, 16px);
-    top: clamp(10px, 4vw, 16px);
     left: 0;
     display: grid;
     width: 100%;
