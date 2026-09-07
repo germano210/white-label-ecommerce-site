@@ -323,6 +323,14 @@
     padding: 0 14px;
 }
 
+.roleta-vip-daily-inline-message {
+    margin: 0 0 8px;
+    color: rgba(0, 0, 0, 0.58);
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: center;
+}
+
 .roleta-vip-daily-carousel {
     --daily-product-width: calc(95% - 10px);
     --daily-product-side-padding: calc((100% - var(--daily-product-width)) / 2);
@@ -432,6 +440,47 @@
 .roleta-vip-daily-story-bars button.is-active,
 .roleta-vip-daily-story-bars span.is-active {
     background: #ffffff;
+}
+
+.roleta-vip-daily-share-button {
+    position: absolute;
+    top: 22px;
+    right: 12px;
+    z-index: 9;
+    display: grid;
+    width: 32px;
+    aspect-ratio: 1 / 1;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 5px 13px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    padding: 0;
+    place-items: center;
+}
+
+.roleta-vip-daily-share-button img {
+    display: block;
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+}
+
+.roleta-vip-daily-share-feedback {
+    position: absolute;
+    top: 60px;
+    right: 10px;
+    z-index: 9;
+    max-width: calc(100% - 20px);
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #ffffff;
+    font-size: 10px;
+    line-height: 1;
+    padding: 6px 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .roleta-vip-daily-price {

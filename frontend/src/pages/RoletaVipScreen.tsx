@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { BrechoDaCamiLogo } from '../components/common/BrechoDaCamiLogo';
 import { AppIcon } from '../components/icons/AppIcon';
 import { RoletaProfileModal } from '../components/roleta/RoletaProfileModal';
@@ -10,6 +11,7 @@ import { api, isCookieAuthMode } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
 import arrowImageIcon from '../assets/icons/arrowImage.svg';
+import compartilhamentoIcon from '../assets/icons/compartilhamento.svg';
 import './RoletaVipScreen.css';
 import './roleta.css';
 
@@ -309,17 +311,32 @@ const wheelRaritySlots: WheelRarityKey[] = [
 const DAILY_CARD_TAP_THRESHOLD = 10;
 const WHEEL_FULL_TURNS = 7;
 const WHEEL_SPIN_DURATION_MS = 3800;
+const DAILY_TAB_QUERY_VALUE = 'itens';
 const inviteGuestNames = [
     'BIRDMAN',
     '$quanchy',
     'g33neOgilligan',
-    'magnataCabelo3spinh00s',
+    'magnataCabelo3spinh0s0',
     'pr.andrecurtis',
     'summer.smith',
     'mortynt',
     'beth',
     'genrejerry',
 ];
+
+function getInitialRoletaTabFromUrl(): RoletaTab {
+    if (typeof window === 'undefined') return 'spin';
+
+    return new URLSearchParams(window.location.search).get('aba') === DAILY_TAB_QUERY_VALUE
+        ? 'daily'
+        : 'spin';
+}
+
+function getInitialSharedProductIdFromUrl() {
+    if (typeof window === 'undefined') return '';
+
+    return new URLSearchParams(window.location.search).get('produto')?.trim() ?? '';
+}
 
 function parseApiNumber(value: NumericApiValue) {
     if (typeof value === 'number') {
@@ -1122,12 +1139,13 @@ function findUpdatedDailyProduct(products: DailyProduct[], product: DailyProduct
 }
 
 export function RoletaVipScreen() {
+    const location = useLocation();
     const token = useAuthStore((state) => state.token);
     const user = useAuthStore((state) => state.user);
     const logout = useAuthStore((state) => state.logout);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const [roleta, setRoleta] = useState<RoletaViewState>(emptyRoletaState);
-    const [activeTab, setActiveTab] = useState<RoletaTab>('spin');
+    const [activeTab, setActiveTab] = useState<RoletaTab>(getInitialRoletaTabFromUrl);
     const [isLoading, setIsLoading] = useState(true);
     const [isSpinning, setIsSpinning] = useState(false);
     const [wheelRotation, setWheelRotation] = useState(0);
@@ -1142,6 +1160,9 @@ export function RoletaVipScreen() {
     const [dailyCheckoutProductId, setDailyCheckoutProductId] = useState<string | null>(null);
     const [dailyCheckoutErrorByProductId, setDailyCheckoutErrorByProductId] = useState<Record<string, string>>({});
     const [hasLoadedDailyProducts, setHasLoadedDailyProducts] = useState(false);
+    const [sharedProductId, setSharedProductId] = useState(getInitialSharedProductIdFromUrl);
+    const [sharedProductMessage, setSharedProductMessage] = useState('');
+    const [dailyShareFeedbackByProductId, setDailyShareFeedbackByProductId] = useState<Record<string, string>>({});
     const [inviteUrl, setInviteUrl] = useState('');
     const [isInviteLoading, setIsInviteLoading] = useState(false);
     const [inviteError, setInviteError] = useState('');
@@ -1151,6 +1172,7 @@ export function RoletaVipScreen() {
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
     const dailyCheckoutInFlightRef = useRef(false);
     const isAdjustingDailyCarouselLoopRef = useRef(false);
+    const dailyShareFeedbackTimeoutRef = useRef<number | null>(null);
     const dailyCardGestureRef = useRef({
         hasDragged: false,
         startX: 0,
@@ -1198,6 +1220,25 @@ export function RoletaVipScreen() {
             };
         });
     }, [dailyProducts]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const queryTab = params.get('aba');
+        const queryProductId = params.get('produto')?.trim() ?? '';
+
+        if (queryTab === DAILY_TAB_QUERY_VALUE) {
+            setActiveTab('daily');
+        }
+
+        setSharedProductId(queryProductId);
+        setSharedProductMessage('');
+    }, [location.search]);
+
+    useEffect(() => () => {
+        if (dailyShareFeedbackTimeoutRef.current) {
+            window.clearTimeout(dailyShareFeedbackTimeoutRef.current);
+        }
+    }, []);
 
     const fetchRoleta = useCallback(async () => {
         if (fetchRoletaInFlightRef.current) return;
@@ -1647,16 +1688,46 @@ export function RoletaVipScreen() {
         }
     };
 
-    const scrollToDailyProduct = (productIndex: number) => {
+    const scrollToDailyProduct = (productIndex: number, behavior: ScrollBehavior = 'smooth') => {
         const safeProductIndex = Math.min(Math.max(productIndex, 0), Math.max(dailyProducts.length - 1, 0));
 
         setActiveProductIndex(safeProductIndex);
         setDailyCarouselProgress(dailyProducts.length > 1 ? safeProductIndex / (dailyProducts.length - 1) : 0);
-        scrollDailyCarouselToRenderIndex(getMiddleDailyRenderIndex(safeProductIndex), 'smooth');
+        scrollDailyCarouselToRenderIndex(getMiddleDailyRenderIndex(safeProductIndex), behavior);
     };
 
     useEffect(() => {
-        if (activeTab !== 'daily' || dailyProducts.length <= 1) return undefined;
+        if (activeTab !== 'daily' || !hasLoadedDailyProducts || isDailyLoading || !sharedProductId) return;
+
+        const productIndex = dailyProducts.findIndex((product) => product.id === sharedProductId);
+
+        if (productIndex < 0) {
+            setSharedProductMessage('Item não está mais disponível.');
+            scrollToDailyProduct(0, 'auto');
+            return;
+        }
+
+        setSharedProductMessage('');
+        setExpandedDailyProductIds((currentExpandedIds) => {
+            const product = dailyProducts[productIndex];
+            if (!product || !currentExpandedIds[product.clientKey]) return currentExpandedIds;
+
+            const { [product.clientKey]: _removedExpandedProduct, ...nextExpandedIds } = currentExpandedIds;
+            return nextExpandedIds;
+        });
+        const frameId = window.requestAnimationFrame(() => {
+            isAdjustingDailyCarouselLoopRef.current = true;
+            scrollToDailyProduct(productIndex, 'auto');
+            window.setTimeout(() => {
+                isAdjustingDailyCarouselLoopRef.current = false;
+            }, 0);
+        });
+
+        return () => window.cancelAnimationFrame(frameId);
+    }, [activeTab, dailyProducts, hasLoadedDailyProducts, isDailyLoading, sharedProductId]);
+
+    useEffect(() => {
+        if (activeTab !== 'daily' || dailyProducts.length <= 1 || sharedProductId) return undefined;
 
         const frameId = window.requestAnimationFrame(() => {
             isAdjustingDailyCarouselLoopRef.current = true;
@@ -1667,7 +1738,7 @@ export function RoletaVipScreen() {
         });
 
         return () => window.cancelAnimationFrame(frameId);
-    }, [activeTab, dailyProducts.length]);
+    }, [activeTab, dailyProducts.length, sharedProductId]);
 
     const handleDailyProductBarPointer = (event: PointerEvent<HTMLDivElement>) => {
         if (event.type === 'pointermove' && event.buttons !== 1) return;
@@ -1755,6 +1826,65 @@ export function RoletaVipScreen() {
         const rect = event.currentTarget.getBoundingClientRect();
         const direction = event.clientX - rect.left < rect.width / 2 ? -1 : 1;
         setDailyProductImage(product, direction);
+    };
+
+    const showDailyShareFeedback = (productKey: string, message: string) => {
+        if (dailyShareFeedbackTimeoutRef.current) {
+            window.clearTimeout(dailyShareFeedbackTimeoutRef.current);
+        }
+
+        setDailyShareFeedbackByProductId({
+            [productKey]: message,
+        });
+        dailyShareFeedbackTimeoutRef.current = window.setTimeout(() => {
+            setDailyShareFeedbackByProductId({});
+        }, 1800);
+    };
+
+    const buildDailyProductShareUrl = (product: DailyProduct) => {
+        const shareUrl = new URL('/vip/roleta', window.location.origin);
+        const currentParams = new URLSearchParams(location.search);
+        const refCode = currentParams.get('ref')?.trim();
+
+        if (refCode) {
+            shareUrl.searchParams.set('ref', refCode);
+        }
+
+        shareUrl.searchParams.set('aba', DAILY_TAB_QUERY_VALUE);
+        shareUrl.searchParams.set('produto', product.id);
+
+        return shareUrl.toString();
+    };
+
+    const handleShareDailyProduct = async (
+        event: MouseEvent<HTMLButtonElement>,
+        product: DailyProduct,
+    ) => {
+        event.stopPropagation();
+
+        const shareUrl = buildDailyProductShareUrl(product);
+
+        try {
+            if (navigator.share) {
+                await navigator.share({
+                    title: product.nome,
+                    text: 'Olha esse item do Brechó da Cami',
+                    url: shareUrl,
+                });
+                return;
+            }
+
+            if (!navigator.clipboard) {
+                throw new Error('Clipboard indisponivel.');
+            }
+
+            await navigator.clipboard.writeText(shareUrl);
+            showDailyShareFeedback(product.clientKey, 'Link copiado');
+        } catch (shareError) {
+            if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
+
+            showDailyShareFeedback(product.clientKey, 'Não foi possível copiar');
+        }
     };
 
     const handleCopyInviteUrl = async () => {
@@ -1949,6 +2079,12 @@ export function RoletaVipScreen() {
                                     <div className="roleta-vip-daily-state">Nenhum item diario disponivel.</div>
                                 )}
 
+                                {!isDailyLoading && !dailyError && sharedProductMessage && (
+                                    <p className="roleta-vip-daily-inline-message" role="status">
+                                        {sharedProductMessage}
+                                    </p>
+                                )}
+
                                 {!isDailyLoading && !dailyError && dailyProducts.length > 0 && (
                                     <motion.div
                                         ref={dailyCarouselRef}
@@ -1983,6 +2119,7 @@ export function RoletaVipScreen() {
                                                 color: shouldUseDarkTextForPrizeLevel(currentPrize) ? '#000000' : '#ffffff',
                                             }
                                             : undefined;
+                                        const shareFeedback = dailyShareFeedbackByProductId[product.clientKey];
 
                                         return (
                                             <motion.article
@@ -2018,6 +2155,21 @@ export function RoletaVipScreen() {
                                                                 )
                                                             ))}
                                                         </div>
+
+                                                        <button
+                                                            type="button"
+                                                            className="roleta-vip-daily-share-button"
+                                                            onClick={(event) => void handleShareDailyProduct(event, product)}
+                                                            aria-label={`Compartilhar ${product.nome}`}
+                                                        >
+                                                            <img src={compartilhamentoIcon} alt="" aria-hidden="true" draggable={false} />
+                                                        </button>
+
+                                                        {shareFeedback && (
+                                                            <span className="roleta-vip-daily-share-feedback" role="status">
+                                                                {shareFeedback}
+                                                            </span>
+                                                        )}
 
                                                         {isExpanded ? (
                                                             <>
