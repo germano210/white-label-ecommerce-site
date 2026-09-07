@@ -12,6 +12,8 @@ import com.whiteLabel.backend.domain.ProdutoReservaStatus;
 import com.whiteLabel.backend.domain.ProdutoStatus;
 import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaGiroCredito;
+import com.whiteLabel.backend.domain.RoletaMeta;
+import com.whiteLabel.backend.domain.RoletaMetaStatus;
 import com.whiteLabel.backend.domain.RoletaNivel;
 import com.whiteLabel.backend.domain.RoletaOpcao;
 import com.whiteLabel.backend.domain.RoletaGiroStatus;
@@ -32,6 +34,7 @@ import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
 import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
+import com.whiteLabel.backend.repository.RoletaMetaRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
 import com.whiteLabel.backend.repository.RoletaOpcaoRepository;
 import com.whiteLabel.backend.repository.RoletaParticipanteRepository;
@@ -76,6 +79,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -106,6 +110,9 @@ class RoletaControllerTest {
 
     @Autowired
     private RoletaGiroCreditoRepository roletaGiroCreditoRepository;
+
+    @Autowired
+    private RoletaMetaRepository roletaMetaRepository;
 
     @Autowired
     private PagamentoRepository pagamentoRepository;
@@ -893,6 +900,167 @@ class RoletaControllerTest {
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldAllowAdminToCreateEditAndDisableRoletaMetas() throws Exception {
+        Usuario admin = criarAdmin("551199992043");
+
+        String response = mockMvc.perform(post("/api/admin/roleta/metas")
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "titulo": "Meta 1",
+                                  "descricao": "20 acoes -> +5 giros para todos",
+                                  "quantidadeAlvo": 20,
+                                  "girosRecompensa": 5,
+                                  "ordem": 1,
+                                  "ativa": true
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.titulo").value("Meta 1"))
+                .andExpect(jsonPath("$.quantidadeAlvo").value(20))
+                .andExpect(jsonPath("$.girosRecompensa").value(5))
+                .andExpect(jsonPath("$.status").value("NAO_INICIADA"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Long metaId = objectMapper.readTree(response).path("id").asLong();
+
+        mockMvc.perform(put("/api/admin/roleta/metas/{id}", metaId)
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "titulo": "Meta Editada",
+                                  "descricao": "30 acoes -> +7 giros",
+                                  "quantidadeAlvo": 30,
+                                  "girosRecompensa": 7,
+                                  "ordem": 2,
+                                  "ativa": true
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.titulo").value("Meta Editada"))
+                .andExpect(jsonPath("$.quantidadeAlvo").value(30))
+                .andExpect(jsonPath("$.girosRecompensa").value(7))
+                .andExpect(jsonPath("$.ordem").value(2));
+
+        mockMvc.perform(delete("/api/admin/roleta/metas/{id}", metaId)
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ativa").value(false))
+                .andExpect(jsonPath("$.status").value("PAUSADA"));
+
+        mockMvc.perform(get("/api/admin/roleta/metas")
+                        .header("Authorization", bearer(admin))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(metaId))
+                .andExpect(jsonPath("$[0].ativa").value(false));
+    }
+
+    @Test
+    void shouldRejectUserOnAdminRoletaMetas() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Sem Admin Metas", "551199992044");
+
+        mockMvc.perform(get("/api/admin/roleta/metas")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldExposeCurrentRoletaMetaInPublicStatus() throws Exception {
+        RoletaMeta segunda = criarMeta("Segunda Meta", 30, 4, 2, true);
+        RoletaMeta primeira = criarMeta("Primeira Meta", 20, 5, 1, true);
+
+        mockMvc.perform(get("/api/roleta").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.metaAtual.id").value(primeira.getId()))
+                .andExpect(jsonPath("$.metaAtual.titulo").value("Primeira Meta"))
+                .andExpect(jsonPath("$.metaAtual.quantidadeAlvo").value(20))
+                .andExpect(jsonPath("$.metaAtual.progressoAtual").value(0))
+                .andExpect(jsonPath("$.metaAtual.girosRecompensa").value(5))
+                .andExpect(jsonPath("$.metaGrupo").value(20))
+                .andExpect(jsonPath("$.progressoGrupo").value(0))
+                .andExpect(jsonPath("$.girosBonusGrupo").value(5));
+
+        assertEquals(segunda.getId(), roletaMetaRepository.findAllByOrderByOrdemAscIdAsc().get(1).getId());
+    }
+
+    @Test
+    void shouldCompleteCurrentMetaStartNextAndCreditParticipantsOnSpin() throws Exception {
+        criarPremioPadrao();
+        RoletaConfig config = new RoletaConfig();
+        config.setId(1L);
+        config.setGiroDiarioQuantidade(0);
+        roletaConfigRepository.save(config);
+        RoletaMeta metaAtual = criarMeta("Meta Atual", 1, 3, 1, true);
+        RoletaMeta proximaMeta = criarMeta("Proxima Meta", 10, 2, 2, true);
+        Usuario usuarioQueGira = criarUsuario("Cliente Completa Meta", "551199992045");
+        Usuario usuarioBeneficiado = criarUsuario("Cliente Beneficiado Meta", "551199992046");
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuarioQueGira))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuarioBeneficiado))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        int girosBeneficiadoAntes = roletaParticipanteRepository
+                .findByUsuarioId(usuarioBeneficiado.getId())
+                .orElseThrow()
+                .getGirosDisponiveis();
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuarioQueGira))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roleta.metaAtual.id").value(proximaMeta.getId()))
+                .andExpect(jsonPath("$.roleta.metaAtual.status").value("EM_ANDAMENTO"))
+                .andExpect(jsonPath("$.roleta.metaGrupo").value(10))
+                .andExpect(jsonPath("$.roleta.progressoGrupo").value(0))
+                .andExpect(jsonPath("$.roleta.girosBonusGrupo").value(2));
+
+        RoletaMeta metaConcluida = roletaMetaRepository.findById(metaAtual.getId()).orElseThrow();
+        RoletaMeta metaIniciada = roletaMetaRepository.findById(proximaMeta.getId()).orElseThrow();
+        assertEquals(RoletaMetaStatus.CONCLUIDA, metaConcluida.getStatus());
+        assertNotNull(metaConcluida.getConcluidaEm());
+        assertEquals(1, metaConcluida.getProgressoAtual());
+        assertEquals(RoletaMetaStatus.EM_ANDAMENTO, metaIniciada.getStatus());
+        assertNotNull(metaIniciada.getIniciadaEm());
+        assertEquals(
+                girosBeneficiadoAntes + 3,
+                roletaParticipanteRepository.findByUsuarioId(usuarioBeneficiado.getId())
+                        .orElseThrow()
+                        .getGirosDisponiveis()
+        );
+        assertEquals(
+                1,
+                roletaGiroCreditoRepository.countByChaveEvento(
+                        "META_GRUPO:" + metaAtual.getId() + ":" + usuarioBeneficiado.getId()
+                )
+        );
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuarioQueGira))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roleta.metaAtual.id").value(proximaMeta.getId()))
+                .andExpect(jsonPath("$.roleta.metaAtual.progressoAtual").value(1));
+
+        assertEquals(1, roletaMetaRepository.findById(metaAtual.getId())
+                .orElseThrow()
+                .getProgressoAtual());
     }
 
     @Test
@@ -1877,6 +2045,22 @@ class RoletaControllerTest {
         );
     }
 
+    private RoletaMeta criarMeta(
+            String titulo,
+            Integer quantidadeAlvo,
+            Integer girosRecompensa,
+            Integer ordem,
+            Boolean ativa
+    ) {
+        RoletaMeta meta = new RoletaMeta();
+        meta.setTitulo(titulo);
+        meta.setQuantidadeAlvo(quantidadeAlvo);
+        meta.setGirosRecompensa(girosRecompensa);
+        meta.setOrdem(ordem);
+        meta.setAtiva(ativa);
+        return roletaMetaRepository.save(meta);
+    }
+
     private RoletaNivel criarNivel(
             String nome,
             Integer ordem,
@@ -1958,6 +2142,7 @@ class RoletaControllerTest {
         roletaConviteRepository.deleteAll();
         roletaGiroRepository.deleteAll();
         roletaGiroCreditoRepository.deleteAll();
+        roletaMetaRepository.deleteAll();
         roletaPremioRepository.deleteAll();
         roletaOpcaoRepository.deleteAll();
         roletaNivelRepository.deleteAll();

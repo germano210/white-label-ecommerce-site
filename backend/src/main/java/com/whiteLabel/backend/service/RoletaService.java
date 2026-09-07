@@ -30,6 +30,7 @@ import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
 import com.whiteLabel.backend.dto.RoletaGiroResponse;
+import com.whiteLabel.backend.dto.RoletaMetaResponse;
 import com.whiteLabel.backend.dto.RoletaNotificacaoResponse;
 import com.whiteLabel.backend.dto.RoletaNivelResponse;
 import com.whiteLabel.backend.dto.RoletaOpcaoResponse;
@@ -112,6 +113,7 @@ public class RoletaService {
     private final ProdutoService produtoService;
     private final PedidoService pedidoService;
     private final MissaoSemanalService missaoSemanalService;
+    private final RoletaMetaService roletaMetaService;
     private final UsuarioRepository usuarioRepository;
     private final SecureRandom secureRandom;
     private final Clock clock;
@@ -131,6 +133,7 @@ public class RoletaService {
             ProdutoService produtoService,
             PedidoService pedidoService,
             MissaoSemanalService missaoSemanalService,
+            RoletaMetaService roletaMetaService,
             UsuarioRepository usuarioRepository,
             @Value("${app.frontend.public-base-url:https://brechodacami.com}") String frontendBaseUrl
     ) {
@@ -147,6 +150,7 @@ public class RoletaService {
         this.produtoService = produtoService;
         this.pedidoService = pedidoService;
         this.missaoSemanalService = missaoSemanalService;
+        this.roletaMetaService = roletaMetaService;
         this.usuarioRepository = usuarioRepository;
         this.secureRandom = new SecureRandom();
         this.clock = Clock.systemDefaultZone();
@@ -214,7 +218,11 @@ public class RoletaService {
             );
         }
 
-        incrementarProgressoGrupo(config);
+        if (roletaMetaService.possuiMetasConfiguradas()) {
+            roletaMetaService.registrarAcaoGrupo();
+        } else {
+            incrementarProgressoGrupo(config);
+        }
         roletaParticipanteRepository.save(participante);
         roletaConfigRepository.save(config);
 
@@ -608,6 +616,7 @@ public class RoletaService {
             RoletaParticipante participante
     ) {
         LocalDateTime now = LocalDateTime.now(clock);
+        RoletaMetaResponse metaAtual = roletaMetaService.obterMetaAtual().orElse(null);
         RoletaPremioResponse premioPendente = participante == null
                 ? null
                 : roletaGiroRepository
@@ -632,9 +641,10 @@ public class RoletaService {
                 participante == null ? 0 : participante.getGirosDisponiveis(),
                 participante == null ? BigDecimal.ZERO : participante.getValorDisponivelResgate(),
                 participante == null ? BigDecimal.ZERO : participante.getValorTotalResgatado(),
-                config.getMetaGrupo(),
-                config.getProgressoGrupo(),
-                config.getGirosBonusGrupo(),
+                metaAtual == null ? config.getMetaGrupo() : metaAtual.quantidadeAlvo(),
+                metaAtual == null ? config.getProgressoGrupo() : metaAtual.progressoAtual(),
+                metaAtual == null ? config.getGirosBonusGrupo() : metaAtual.girosRecompensa(),
+                metaAtual,
                 participante == null ? null : participante.getCodigoConvite(),
                 participante == null ? null : montarUrlConvite(participante.getCodigoConvite()),
                 convitesConvertidos,
@@ -1498,7 +1508,8 @@ public class RoletaService {
                 produtos,
                 montarNiveisAdmin(),
                 montarOpcoesAdmin(),
-                montarPremiosAdmin()
+                montarPremiosAdmin(),
+                roletaMetaService.listarAdmin()
         );
     }
 

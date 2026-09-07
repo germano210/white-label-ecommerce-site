@@ -24,6 +24,7 @@ public record AdminRoletaResponse(
         List<ProdutoResponseDTO> produtos,
         List<AdminRoletaNivelResponse> niveis,
         List<AdminRoletaOpcaoResponse> opcoes,
-        List<AdminRoletaPremioResponse> premios
+        List<AdminRoletaPremioResponse> premios,
+        List<RoletaMetaResponse> metas
 ) {
 }

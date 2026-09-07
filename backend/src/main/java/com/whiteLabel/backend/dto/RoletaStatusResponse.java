@@ -14,6 +14,7 @@ public record RoletaStatusResponse(
         Integer metaGrupo,
         Integer progressoGrupo,
         Integer girosBonusGrupo,
+        RoletaMetaResponse metaAtual,
         String codigoConvite,
         String urlConvite,
         Long convitesConvertidos,
