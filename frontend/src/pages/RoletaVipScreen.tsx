@@ -435,6 +435,17 @@ function getWheelRarityKey(level: RoletaNivelApi, fallbackIndex: number): WheelR
     return wheelRarityOrder[Math.min(fallbackIndex, wheelRarityOrder.length - 1)];
 }
 
+function shouldUseDarkTextForPrizeLevel(prize?: RoletaSpinResult | null) {
+    const normalizedName = normalizeRarityText(prize?.nivelNome ?? '');
+
+    return (
+        normalizedName.includes('COMUM')
+        || normalizedName.includes('GRAU MILITAR')
+        || normalizedName.includes('INCOMUM')
+        || normalizedName.includes('RESTRITO')
+    );
+}
+
 function normalizeNotification(notification: RoletaNotificacaoApi) {
     if (typeof notification === 'string') return notification.trim();
 
@@ -1961,12 +1972,16 @@ export function RoletaVipScreen() {
                                         const isCreatingCheckout = dailyCheckoutProductId === product.clientKey;
                                         const actionState = getDailyProductActionState(product, isExpanded, isCreatingCheckout);
                                         const discountedPricePreview = getDiscountedPricePreview(product, currentPrize);
-                                        const dailyActionStyle = isExpanded
-                                            && actionState.shouldRedeem
-                                            && !actionState.unavailable
-                                            && discountedPricePreview
-                                            && currentPrize?.nivelCor
-                                            ? { backgroundColor: currentPrize.nivelCor }
+                                        const hasActivePrizeAction = actionState.label === 'Resgatar Item'
+                                            && Boolean(discountedPricePreview && currentPrize);
+                                        const dailyActionLabel = hasActivePrizeAction && currentPrize
+                                            ? `Usar ${removePrizeNegativeSign(currentPrize.valorLabel || formatCurrencyBRL(Math.abs(currentPrize.valor)))}`
+                                            : actionState.label;
+                                        const dailyActionStyle = hasActivePrizeAction && currentPrize?.nivelCor
+                                            ? {
+                                                backgroundColor: currentPrize.nivelCor,
+                                                color: shouldUseDarkTextForPrizeLevel(currentPrize) ? '#000000' : '#ffffff',
+                                            }
                                             : undefined;
 
                                         return (
@@ -2084,7 +2099,7 @@ export function RoletaVipScreen() {
                                                                 }
                                                             }}
                                                         >
-                                                            {actionState.label}
+                                                            {dailyActionLabel}
                                                         </button>
 
                                                         {isExpanded && checkoutError && (
