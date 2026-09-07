@@ -1139,6 +1139,7 @@ export function RoletaVipScreen() {
     const fetchRoletaInFlightRef = useRef(false);
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
     const dailyCheckoutInFlightRef = useRef(false);
+    const isAdjustingDailyCarouselLoopRef = useRef(false);
     const dailyCardGestureRef = useRef({
         hasDragged: false,
         startX: 0,
@@ -1166,6 +1167,26 @@ export function RoletaVipScreen() {
     const canSpin = isAuthenticated && roleta.ativa && roleta.girosDisponiveis > 0 && hasWheelOptions && !isSpinning;
     const currentPrize = roleta.premioAtual;
     const visibleInviteUrl = isAuthenticated ? (inviteUrl || roleta.urlConvite) : guestInviteUrl;
+    const loopedDailyProducts = useMemo(() => {
+        if (dailyProducts.length <= 1) {
+            return dailyProducts.map((product, productIndex) => ({
+                product,
+                productIndex,
+                renderKey: product.clientKey,
+            }));
+        }
+
+        return Array.from({ length: dailyProducts.length * 3 }, (_, renderIndex) => {
+            const productIndex = renderIndex % dailyProducts.length;
+            const product = dailyProducts[productIndex];
+
+            return {
+                product,
+                productIndex,
+                renderKey: `${product.clientKey}-${renderIndex}`,
+            };
+        });
+    }, [dailyProducts]);
 
     const fetchRoleta = useCallback(async () => {
         if (fetchRoletaInFlightRef.current) return;
@@ -1509,6 +1530,16 @@ export function RoletaVipScreen() {
 
     const clampDailyCarouselProgress = (progress: number) => Math.min(Math.max(progress, 0), 1);
 
+    const getDailyProductIndexFromRenderIndex = (renderIndex: number) => {
+        if (dailyProducts.length === 0) return 0;
+
+        return ((renderIndex % dailyProducts.length) + dailyProducts.length) % dailyProducts.length;
+    };
+
+    const getMiddleDailyRenderIndex = (productIndex: number) => (
+        dailyProducts.length > 1 ? dailyProducts.length + productIndex : productIndex
+    );
+
     const getDailyProductIndexFromProgress = (progress: number) => {
         if (dailyProducts.length <= 1) return 0;
 
@@ -1518,65 +1549,114 @@ export function RoletaVipScreen() {
         );
     };
 
-    const scrollDailyCarouselToProgress = (progress: number, behavior: ScrollBehavior = 'auto') => {
-        const safeProgress = clampDailyCarouselProgress(progress);
+    const scrollDailyCarouselToRenderIndex = (renderIndex: number, behavior: ScrollBehavior = 'auto') => {
         const carousel = dailyCarouselRef.current;
-
-        setDailyCarouselProgress(safeProgress);
-        setActiveProductIndex(getDailyProductIndexFromProgress(safeProgress));
 
         if (!carousel) return;
 
-        const maxScrollLeft = Math.max(carousel.scrollWidth - carousel.clientWidth, 0);
-        carousel.scrollTo({
-            left: safeProgress * maxScrollLeft,
-            behavior,
-        });
+        const targetCard = carousel.children.item(renderIndex);
+        if (!(targetCard instanceof HTMLElement)) return;
+
+        const carouselRect = carousel.getBoundingClientRect();
+        const targetRect = targetCard.getBoundingClientRect();
+        const nextLeft = targetRect.left
+            + (targetRect.width / 2)
+            - carouselRect.left
+            - (carouselRect.width / 2)
+            + carousel.scrollLeft;
+
+        if (behavior === 'smooth') {
+            carousel.scrollTo({ left: nextLeft, behavior });
+            return;
+        }
+
+        carousel.scrollLeft = nextLeft;
+    };
+
+    const moveDailyCarouselLoopSilently = (
+        carousel: HTMLDivElement,
+        currentRenderIndex: number,
+        targetRenderIndex: number,
+    ) => {
+        const currentCard = carousel.children.item(currentRenderIndex);
+        const targetCard = carousel.children.item(targetRenderIndex);
+
+        if (!(currentCard instanceof HTMLElement) || !(targetCard instanceof HTMLElement)) return;
+
+        const offsetDelta = targetCard.getBoundingClientRect().left - currentCard.getBoundingClientRect().left;
+        carousel.scrollLeft += offsetDelta;
+    };
+
+    const scrollDailyCarouselToProgress = (progress: number, behavior: ScrollBehavior = 'auto') => {
+        const safeProgress = clampDailyCarouselProgress(progress);
+        const productIndex = getDailyProductIndexFromProgress(safeProgress);
+
+        setDailyCarouselProgress(safeProgress);
+        setActiveProductIndex(productIndex);
+        scrollDailyCarouselToRenderIndex(getMiddleDailyRenderIndex(productIndex), behavior);
     };
 
     const handleDailyCarouselScroll = (event: UIEvent<HTMLDivElement>) => {
-        const target = event.currentTarget;
-        const maxScrollLeft = Math.max(target.scrollWidth - target.clientWidth, 0);
-        setDailyCarouselProgress(maxScrollLeft > 0 ? clampDailyCarouselProgress(target.scrollLeft / maxScrollLeft) : 0);
+        if (isAdjustingDailyCarouselLoopRef.current) return;
 
-        const carouselLeft = target.getBoundingClientRect().left;
-        const nextIndex = Array.from(target.children).reduce((nearestIndex, child, childIndex) => {
+        const target = event.currentTarget;
+
+        const carouselRect = target.getBoundingClientRect();
+        const carouselCenter = carouselRect.left + (carouselRect.width / 2);
+        const nearestRenderIndex = Array.from(target.children).reduce((nearestIndex, child, childIndex) => {
             if (!(child instanceof HTMLElement)) return nearestIndex;
 
-            const childDistance = Math.abs(child.getBoundingClientRect().left - carouselLeft);
+            const childRect = child.getBoundingClientRect();
+            const childDistance = Math.abs(childRect.left + (childRect.width / 2) - carouselCenter);
             const currentNearest = target.children.item(nearestIndex);
-            const nearestDistance = currentNearest instanceof HTMLElement
-                ? Math.abs(currentNearest.getBoundingClientRect().left - carouselLeft)
+            const nearestRect = currentNearest instanceof HTMLElement
+                ? currentNearest.getBoundingClientRect()
+                : null;
+            const nearestDistance = nearestRect
+                ? Math.abs(nearestRect.left + (nearestRect.width / 2) - carouselCenter)
                 : Number.POSITIVE_INFINITY;
 
             return childDistance < nearestDistance ? childIndex : nearestIndex;
         }, 0);
+        const nextIndex = getDailyProductIndexFromRenderIndex(nearestRenderIndex);
 
-        setActiveProductIndex(Math.min(Math.max(nextIndex, 0), Math.max(dailyProducts.length - 1, 0)));
+        setActiveProductIndex(nextIndex);
+        setDailyCarouselProgress(dailyProducts.length > 1 ? nextIndex / (dailyProducts.length - 1) : 0);
+
+        if (
+            dailyProducts.length > 1
+            && !isAdjustingDailyCarouselLoopRef.current
+            && (nearestRenderIndex < dailyProducts.length || nearestRenderIndex >= dailyProducts.length * 2)
+        ) {
+            isAdjustingDailyCarouselLoopRef.current = true;
+            moveDailyCarouselLoopSilently(target, nearestRenderIndex, getMiddleDailyRenderIndex(nextIndex));
+            window.setTimeout(() => {
+                isAdjustingDailyCarouselLoopRef.current = false;
+            }, 0);
+        }
     };
 
     const scrollToDailyProduct = (productIndex: number) => {
-        const carousel = dailyCarouselRef.current;
         const safeProductIndex = Math.min(Math.max(productIndex, 0), Math.max(dailyProducts.length - 1, 0));
+
         setActiveProductIndex(safeProductIndex);
         setDailyCarouselProgress(dailyProducts.length > 1 ? safeProductIndex / (dailyProducts.length - 1) : 0);
-
-        if (!carousel) {
-            return;
-        }
-
-        const targetCard = carousel.children.item(safeProductIndex);
-        if (targetCard instanceof HTMLElement) {
-            const nextLeft = targetCard.getBoundingClientRect().left
-                - carousel.getBoundingClientRect().left
-                + carousel.scrollLeft;
-
-            carousel.scrollTo({
-                left: nextLeft,
-                behavior: 'smooth',
-            });
-        }
+        scrollDailyCarouselToRenderIndex(getMiddleDailyRenderIndex(safeProductIndex), 'smooth');
     };
+
+    useEffect(() => {
+        if (activeTab !== 'daily' || dailyProducts.length <= 1) return undefined;
+
+        const frameId = window.requestAnimationFrame(() => {
+            isAdjustingDailyCarouselLoopRef.current = true;
+            scrollDailyCarouselToRenderIndex(getMiddleDailyRenderIndex(activeProductIndex));
+            window.setTimeout(() => {
+                isAdjustingDailyCarouselLoopRef.current = false;
+            }, 0);
+        });
+
+        return () => window.cancelAnimationFrame(frameId);
+    }, [activeTab, dailyProducts.length]);
 
     const handleDailyProductBarPointer = (event: PointerEvent<HTMLDivElement>) => {
         if (event.type === 'pointermove' && event.buttons !== 1) return;
@@ -1865,7 +1945,7 @@ export function RoletaVipScreen() {
                                         aria-label={`Itens diarios, item ${activeProductIndex + 1} de ${dailyProducts.length}`}
                                         onScroll={handleDailyCarouselScroll}
                                     >
-                                        {dailyProducts.map((product) => {
+                                        {loopedDailyProducts.map(({ product, renderKey }) => {
                                         const activeImageIndex = getClampedImageIndex(
                                             product,
                                             activeImageByProductId[product.clientKey],
@@ -1885,7 +1965,7 @@ export function RoletaVipScreen() {
                                         return (
                                             <motion.article
                                                     className="roleta-vip-daily-item"
-                                                    key={product.clientKey}
+                                                    key={renderKey}
                                                     initial={{ opacity: 0, y: 10 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     transition={{ duration: 0.22 }}

@@ -324,13 +324,15 @@
 }
 
 .roleta-vip-daily-carousel {
+    --daily-product-width: calc(95% - 10px);
+    --daily-product-side-padding: calc((100% - var(--daily-product-width)) / 2);
     display: flex;
     width: calc(100% + (clamp(12px, 3.75vw, 15px) * 2));
-    gap: 6px;
+    gap: 16px;
     overflow-x: auto;
     overflow-y: hidden;
     margin: 0 calc(clamp(12px, 3.75vw, 15px) * -1);
-    padding: 0 6px 8px;
+    padding: 0 var(--daily-product-side-padding) 8px;
     scroll-behavior: auto;
     scrollbar-width: none;
     touch-action: pan-x pan-y;
@@ -343,7 +345,7 @@
 }
 
 .roleta-vip-daily-item {
-    flex: 0 0 calc(100% - 10px);
+    flex: 0 0 var(--daily-product-width);
 }
 
 .roleta-vip-daily-card {
