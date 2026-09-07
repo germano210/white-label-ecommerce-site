@@ -1961,6 +1961,13 @@ export function RoletaVipScreen() {
                                         const isCreatingCheckout = dailyCheckoutProductId === product.clientKey;
                                         const actionState = getDailyProductActionState(product, isExpanded, isCreatingCheckout);
                                         const discountedPricePreview = getDiscountedPricePreview(product, currentPrize);
+                                        const dailyActionStyle = isExpanded
+                                            && actionState.shouldRedeem
+                                            && !actionState.unavailable
+                                            && discountedPricePreview
+                                            && currentPrize?.nivelCor
+                                            ? { backgroundColor: currentPrize.nivelCor }
+                                            : undefined;
 
                                         return (
                                             <motion.article
@@ -2057,6 +2064,7 @@ export function RoletaVipScreen() {
                                                         <button
                                                             type="button"
                                                             className={`roleta-vip-daily-action${actionState.unavailable ? ' is-unavailable' : ''}`}
+                                                            style={dailyActionStyle}
                                                             disabled={actionState.disabled}
                                                             onClick={(event) => {
                                                                 event.stopPropagation();
