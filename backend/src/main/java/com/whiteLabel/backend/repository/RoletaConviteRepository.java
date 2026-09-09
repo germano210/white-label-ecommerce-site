@@ -13,6 +13,8 @@ public interface RoletaConviteRepository extends JpaRepository<RoletaConvite, Lo
 
     boolean existsByUsuarioIndicadoId(UUID usuarioIndicadoId);
 
+    Optional<RoletaConvite> findByUsuarioIndicadoId(UUID usuarioIndicadoId);
+
     long countByUsuarioIndicadorIdAndStatus(
             UUID usuarioIndicadorId,
             RoletaConviteStatus status

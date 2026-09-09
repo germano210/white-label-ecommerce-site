@@ -25,4 +25,11 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
     boolean existsByEmail(String email);
 
     boolean existsByCodigoIndicacao(String codigoIndicacao);
+
+    @Query("""
+            select count(usuario)
+            from Usuario usuario
+            where usuario.indicadoPor.id = :indicadorId
+            """)
+    long countByIndicadoPorId(@Param("indicadorId") UUID indicadorId);
 }

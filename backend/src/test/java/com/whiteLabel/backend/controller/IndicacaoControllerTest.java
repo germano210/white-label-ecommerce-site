@@ -4,6 +4,10 @@ import com.whiteLabel.backend.domain.Indicacao;
 import com.whiteLabel.backend.domain.IndicacaoStatus;
 import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.repository.IndicacaoRepository;
+import com.whiteLabel.backend.repository.RoletaConfigRepository;
+import com.whiteLabel.backend.repository.RoletaConviteRepository;
+import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
+import com.whiteLabel.backend.repository.RoletaParticipanteRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import com.whiteLabel.backend.service.JwtService;
 import org.junit.jupiter.api.AfterEach;
@@ -39,6 +43,18 @@ class IndicacaoControllerTest {
 
     @Autowired
     private IndicacaoRepository indicacaoRepository;
+
+    @Autowired
+    private RoletaConviteRepository roletaConviteRepository;
+
+    @Autowired
+    private RoletaGiroCreditoRepository roletaGiroCreditoRepository;
+
+    @Autowired
+    private RoletaParticipanteRepository roletaParticipanteRepository;
+
+    @Autowired
+    private RoletaConfigRepository roletaConfigRepository;
 
     @Autowired
     private UsuarioRepository usuarioRepository;
@@ -86,7 +102,32 @@ class IndicacaoControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.codigo").value(codigo))
-                .andExpect(jsonPath("$.url").value("http://localhost:5173/foryou?ref=" + codigo));
+                .andExpect(jsonPath("$.url").value("http://localhost:5173/vip/roleta?ref=" + codigo));
+    }
+
+    @Test
+    void shouldUseSameReferralCodeForProfileAndRoletaInviteLink() throws Exception {
+        Usuario usuario = criarUsuario("Indicador Unico", "551199990010");
+
+        mockMvc.perform(get("/api/indicacoes/meu-link")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        String codigo = usuarioRepository.findById(usuario.getId())
+                .orElseThrow()
+                .getCodigoIndicacao();
+
+        mockMvc.perform(get("/api/roleta/convites")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.codigoConvite").value(codigo))
+                .andExpect(jsonPath("$.urlConvite").value("http://localhost:5173/vip/roleta?ref=" + codigo));
+
+        assertEquals(codigo, roletaParticipanteRepository.findByUsuarioId(usuario.getId())
+                .orElseThrow()
+                .getCodigoConvite());
     }
 
     @Test
@@ -110,6 +151,7 @@ class IndicacaoControllerTest {
         assertEquals(1, indicacoes.size());
         assertEquals(indicador.getId(), indicacoes.get(0).getUsuarioIndicador().getId());
         assertEquals(IndicacaoStatus.ABERTA, indicacoes.get(0).getStatus());
+        assertEquals(0, roletaGiroCreditoRepository.countByChaveEventoStartingWith("CONVITE:"));
     }
 
     @Test
@@ -135,6 +177,32 @@ class IndicacaoControllerTest {
         assertEquals(1, indicacoes.size());
         assertEquals(IndicacaoStatus.CONVERTIDA, indicacoes.get(0).getStatus());
         assertEquals(indicada.getId(), indicacoes.get(0).getUsuarioIndicado().getId());
+        assertEquals(1, roletaConviteRepository.count());
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("CONVITE:" + indicada.getId()));
+        assertTrue(roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow()
+                .getGirosDisponiveis() >= 10);
+        int girosDepoisDaConversao = roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow()
+                .getGirosDisponiveis();
+
+        mockMvc.perform(post("/api/auth/request-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "telefone": "551199990005",
+                                  "nome": "Nova Cliente",
+                                  "codigoIndicacao": "conv123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXISTING_USER"));
+
+        assertEquals(1, roletaConviteRepository.count());
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("CONVITE:" + indicada.getId()));
+        assertEquals(girosDepoisDaConversao, roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow()
+                .getGirosDisponiveis());
     }
 
     @Test
@@ -214,6 +282,10 @@ class IndicacaoControllerTest {
 
     private void limparDados() {
         indicacaoRepository.deleteAll();
+        roletaConviteRepository.deleteAll();
+        roletaGiroCreditoRepository.deleteAll();
+        roletaParticipanteRepository.deleteAll();
+        roletaConfigRepository.deleteAll();
 
         List<Usuario> usuarios = usuarioRepository.findAll();
         usuarios.forEach(usuario -> usuario.setIndicadoPor(null));

@@ -4,6 +4,7 @@ import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
+import { normalizeIndicationLink, type IndicacaoLinkApiLike } from '../../utils/indicacaoReferral';
 import './RoletaProfileModal.css';
 
 type NumericApiValue = number | string | null | undefined;
@@ -79,7 +80,7 @@ type ResgatesResponse = ResgateApi[] | {
     resgates?: ResgateApi[];
 };
 
-interface IndicacaoLinkResponse {
+interface IndicacaoLinkResponse extends IndicacaoLinkApiLike {
     urlConvite?: string | null;
     url_convite?: string | null;
     linkConvite?: string | null;
@@ -249,21 +250,6 @@ function normalizeResgatesResponse(data: ResgatesResponse) {
     return resgates.map(normalizeResgate);
 }
 
-function normalizeIndicacaoLink(data: IndicacaoLinkResponse) {
-    return stringFromUnknown(
-        data.urlConvite,
-        data.url_convite,
-        data.linkConvite,
-        data.link_convite,
-        data.urlIndicacao,
-        data.url_indicacao,
-        data.linkIndicacao,
-        data.link_indicacao,
-        data.url,
-        data.link,
-    );
-}
-
 function addressToPayload(address: ProfileAddress): EnderecoApi {
     return {
         rua: address.rua.trim(),
@@ -311,11 +297,11 @@ export function RoletaProfileModal({ valorDisponivelResgate, onClose }: RoletaPr
 
         try {
             const { data } = await api.get<IndicacaoLinkResponse>(apiRoutes.indicacoes.meuLink);
-            let nextInviteUrl = normalizeIndicacaoLink(data);
+            let nextInviteUrl = normalizeIndicationLink(data);
 
             if (!nextInviteUrl) {
                 const createdInvite = await api.post<IndicacaoLinkResponse>(apiRoutes.indicacoes.meuLink);
-                nextInviteUrl = normalizeIndicacaoLink(createdInvite.data);
+                nextInviteUrl = normalizeIndicationLink(createdInvite.data);
             }
 
             if (!nextInviteUrl) {

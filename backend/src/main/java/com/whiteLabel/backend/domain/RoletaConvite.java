@@ -103,6 +103,15 @@ public class RoletaConvite {
         this.status = status == null ? RoletaConviteStatus.CONVERTIDO : status;
     }
 
+    public void sincronizarComIndicacaoCentral(String codigo, Usuario usuarioIndicador) {
+        this.codigo = Objects.requireNonNull(codigo);
+        this.usuarioIndicador = Objects.requireNonNull(usuarioIndicador);
+        this.status = RoletaConviteStatus.CONVERTIDO;
+        if (convertidoEm == null) {
+            convertidoEm = LocalDateTime.now();
+        }
+    }
+
     public LocalDateTime getCriadoEm() {
         return criadoEm;
     }

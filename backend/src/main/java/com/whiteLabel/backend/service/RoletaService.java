@@ -1,12 +1,9 @@
 package com.whiteLabel.backend.service;
 
 import com.whiteLabel.backend.domain.Produto;
-import com.whiteLabel.backend.domain.MissaoTipoAcao;
 import com.whiteLabel.backend.domain.Pedido;
 import com.whiteLabel.backend.domain.ProdutoStatus;
 import com.whiteLabel.backend.domain.RoletaConfig;
-import com.whiteLabel.backend.domain.RoletaConvite;
-import com.whiteLabel.backend.domain.RoletaConviteStatus;
 import com.whiteLabel.backend.domain.RoletaGiro;
 import com.whiteLabel.backend.domain.RoletaGiroCredito;
 import com.whiteLabel.backend.domain.RoletaGiroStatus;
@@ -26,6 +23,7 @@ import com.whiteLabel.backend.dto.AdminRoletaPremioResponse;
 import com.whiteLabel.backend.dto.AdminRoletaRequest;
 import com.whiteLabel.backend.dto.AdminRoletaResponse;
 import com.whiteLabel.backend.dto.CheckoutResponse;
+import com.whiteLabel.backend.dto.IndicacaoLinkResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
@@ -40,7 +38,6 @@ import com.whiteLabel.backend.dto.RoletaPremioResponse;
 import com.whiteLabel.backend.dto.RoletaStatusResponse;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
-import com.whiteLabel.backend.repository.RoletaConviteRepository;
 import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
@@ -49,7 +46,6 @@ import com.whiteLabel.backend.repository.RoletaParticipanteRepository;
 import com.whiteLabel.backend.repository.RoletaPremioRepository;
 import com.whiteLabel.backend.repository.RoletaProdutoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -57,7 +53,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -69,7 +64,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -82,9 +76,6 @@ import java.util.stream.Collectors;
 public class RoletaService {
 
     private static final Long CONFIG_ID = 1L;
-    private static final String ALFABETO = "abcdefghijklmnopqrstuvwxyz0123456789";
-    private static final int TAMANHO_CODIGO = 16;
-    private static final int MAX_TENTATIVAS_GERACAO = 20;
     private static final List<FaixaDesconto> FAIXAS_PADRAO = List.of(
             new FaixaDesconto("0.82", "1.60"),
             new FaixaDesconto("1.14", "3.36"),
@@ -105,19 +96,17 @@ public class RoletaService {
     private final RoletaParticipanteRepository roletaParticipanteRepository;
     private final RoletaGiroRepository roletaGiroRepository;
     private final RoletaGiroCreditoRepository roletaGiroCreditoRepository;
-    private final RoletaConviteRepository roletaConviteRepository;
     private final RoletaNivelRepository roletaNivelRepository;
     private final RoletaOpcaoRepository roletaOpcaoRepository;
     private final RoletaPremioRepository roletaPremioRepository;
     private final ProdutoRepository produtoRepository;
     private final ProdutoService produtoService;
     private final PedidoService pedidoService;
-    private final MissaoSemanalService missaoSemanalService;
     private final RoletaMetaService roletaMetaService;
+    private final IndicacaoService indicacaoService;
     private final UsuarioRepository usuarioRepository;
     private final SecureRandom secureRandom;
     private final Clock clock;
-    private final String frontendBaseUrl;
 
     public RoletaService(
             RoletaConfigRepository roletaConfigRepository,
@@ -125,36 +114,32 @@ public class RoletaService {
             RoletaParticipanteRepository roletaParticipanteRepository,
             RoletaGiroRepository roletaGiroRepository,
             RoletaGiroCreditoRepository roletaGiroCreditoRepository,
-            RoletaConviteRepository roletaConviteRepository,
             RoletaNivelRepository roletaNivelRepository,
             RoletaOpcaoRepository roletaOpcaoRepository,
             RoletaPremioRepository roletaPremioRepository,
             ProdutoRepository produtoRepository,
             ProdutoService produtoService,
             PedidoService pedidoService,
-            MissaoSemanalService missaoSemanalService,
             RoletaMetaService roletaMetaService,
-            UsuarioRepository usuarioRepository,
-            @Value("${app.frontend.public-base-url:https://brechodacami.com}") String frontendBaseUrl
+            IndicacaoService indicacaoService,
+            UsuarioRepository usuarioRepository
     ) {
         this.roletaConfigRepository = roletaConfigRepository;
         this.roletaProdutoRepository = roletaProdutoRepository;
         this.roletaParticipanteRepository = roletaParticipanteRepository;
         this.roletaGiroRepository = roletaGiroRepository;
         this.roletaGiroCreditoRepository = roletaGiroCreditoRepository;
-        this.roletaConviteRepository = roletaConviteRepository;
         this.roletaNivelRepository = roletaNivelRepository;
         this.roletaOpcaoRepository = roletaOpcaoRepository;
         this.roletaPremioRepository = roletaPremioRepository;
         this.produtoRepository = produtoRepository;
         this.produtoService = produtoService;
         this.pedidoService = pedidoService;
-        this.missaoSemanalService = missaoSemanalService;
         this.roletaMetaService = roletaMetaService;
+        this.indicacaoService = indicacaoService;
         this.usuarioRepository = usuarioRepository;
         this.secureRandom = new SecureRandom();
         this.clock = Clock.systemDefaultZone();
-        this.frontendBaseUrl = normalizarBaseUrl(frontendBaseUrl);
     }
 
     @Transactional
@@ -291,40 +276,8 @@ public class RoletaService {
     public RoletaConvitesResponse registrarConvite(RoletaConvitesRequest request) {
         Usuario usuarioIndicado = obterUsuarioAutenticado();
         RoletaConfig config = obterConfig();
+        indicacaoService.registrarConversaoObrigatoria(usuarioIndicado, request.codigoConvite());
         RoletaParticipante participanteIndicado = garantirParticipanteForUpdate(usuarioIndicado, config);
-        String codigo = normalizarCodigo(request.codigoConvite());
-
-        RoletaParticipante participanteIndicador = roletaParticipanteRepository.findByCodigoConviteForUpdate(codigo)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Codigo de convite da roleta nao encontrado"
-                ));
-
-        Usuario usuarioIndicador = participanteIndicador.getUsuario();
-        if (usuarioIndicador.getId().equals(usuarioIndicado.getId())) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Usuario nao pode usar o proprio convite"
-            );
-        }
-
-        if (!roletaConviteRepository.existsByUsuarioIndicadoId(usuarioIndicado.getId())) {
-            int girosConcedidos = sortearGirosPorConvite(config);
-            RoletaConvite convite = roletaConviteRepository.saveAndFlush(new RoletaConvite(
-                    codigo,
-                    usuarioIndicador,
-                    usuarioIndicado,
-                    RoletaConviteStatus.CONVERTIDO,
-                    girosConcedidos
-            ));
-            participanteIndicador.incrementarConvitesConvertidos();
-            creditarGiros(participanteIndicador, girosConcedidos, "CONVITE:" + convite.getId());
-            roletaParticipanteRepository.save(participanteIndicador);
-            missaoSemanalService.registrarAcao(
-                    usuarioIndicador,
-                    MissaoTipoAcao.CONVIDAR_PESSOAS.name()
-            );
-        }
 
         return montarConvitesResponse(config, participanteIndicado);
     }
@@ -335,12 +288,14 @@ public class RoletaService {
             return;
         }
 
-        Optional<RoletaConvite> conviteConvertido =
-                roletaConviteRepository.findByUsuarioIndicadoIdAndStatusFetchIndicador(
-                        pedido.getUsuario().getId(),
-                        RoletaConviteStatus.CONVERTIDO
-                );
-        if (conviteConvertido.isEmpty()) {
+        Usuario comprador = pedido.getUsuario();
+        Usuario indicador = comprador.getIndicadoPor();
+        if (indicador == null && comprador.getId() != null) {
+            indicador = usuarioRepository.findById(comprador.getId())
+                    .map(Usuario::getIndicadoPor)
+                    .orElse(null);
+        }
+        if (indicador == null || indicador.getId().equals(comprador.getId())) {
             return;
         }
 
@@ -350,23 +305,16 @@ public class RoletaService {
             return;
         }
 
-        conviteConvertido.ifPresent(convite -> {
-            Usuario indicador = convite.getUsuarioIndicador();
-            if (indicador == null || indicador.getId().equals(pedido.getUsuario().getId())) {
-                return;
-            }
+        BigDecimal comissao = normalizarValorPago(valorPago, pedido)
+                .multiply(percentual)
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+        if (comissao.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
 
-            BigDecimal comissao = normalizarValorPago(valorPago, pedido)
-                    .multiply(percentual)
-                    .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
-            if (comissao.compareTo(BigDecimal.ZERO) <= 0) {
-                return;
-            }
-
-            RoletaParticipante participanteIndicador = garantirParticipanteForUpdate(indicador, config);
-            participanteIndicador.adicionarValorDisponivel(comissao);
-            roletaParticipanteRepository.save(participanteIndicador);
-        });
+        RoletaParticipante participanteIndicador = garantirParticipanteForUpdate(indicador, config);
+        participanteIndicador.adicionarValorDisponivel(comissao);
+        roletaParticipanteRepository.save(participanteIndicador);
     }
 
     @Transactional(readOnly = true)
@@ -502,7 +450,7 @@ public class RoletaService {
         try {
             return roletaParticipanteRepository.saveAndFlush(new RoletaParticipante(
                     usuario,
-                    gerarCodigoUnico(),
+                    indicacaoService.garantirCodigoIndicacao(usuario),
                     0
             ));
         } catch (DataIntegrityViolationException exception) {
@@ -592,16 +540,6 @@ public class RoletaService {
         return Optional.of(premioAtual);
     }
 
-    private int sortearGirosPorConvite(RoletaConfig config) {
-        int minimo = config.getGirosPorConviteMin();
-        int maximo = config.getGirosPorConviteMax();
-        if (maximo <= minimo) {
-            return minimo;
-        }
-
-        return secureRandom.nextInt(maximo - minimo + 1) + minimo;
-    }
-
     private BigDecimal normalizarValorPago(BigDecimal valorPago, Pedido pedido) {
         BigDecimal valor = valorPago == null ? pedido.getValorTotal() : valorPago;
         if (valor == null || valor.compareTo(BigDecimal.ZERO) < 0) {
@@ -629,10 +567,10 @@ public class RoletaService {
 
         long convitesConvertidos = participante == null
                 ? 0L
-                : roletaConviteRepository.countByUsuarioIndicadorIdAndStatus(
-                        participante.getUsuario().getId(),
-                        RoletaConviteStatus.CONVERTIDO
-                );
+                : usuarioRepository.countByIndicadoPorId(participante.getUsuario().getId());
+        IndicacaoLinkResponse linkIndicacao = participante == null
+                ? null
+                : indicacaoService.obterLink(participante.getUsuario());
 
         return new RoletaStatusResponse(
                 null,
@@ -645,8 +583,8 @@ public class RoletaService {
                 metaAtual == null ? config.getProgressoGrupo() : metaAtual.progressoAtual(),
                 metaAtual == null ? config.getGirosBonusGrupo() : metaAtual.girosRecompensa(),
                 metaAtual,
-                participante == null ? null : participante.getCodigoConvite(),
-                participante == null ? null : montarUrlConvite(participante.getCodigoConvite()),
+                linkIndicacao == null ? null : linkIndicacao.codigo(),
+                linkIndicacao == null ? null : linkIndicacao.url(),
                 convitesConvertidos,
                 config.getGirosGanhosPorConvite(),
                 config.getGirosPorConviteMin(),
@@ -1517,14 +1455,12 @@ public class RoletaService {
             RoletaConfig config,
             RoletaParticipante participante
     ) {
-        long quantidadeConvertida = roletaConviteRepository.countByUsuarioIndicadorIdAndStatus(
-                participante.getUsuario().getId(),
-                RoletaConviteStatus.CONVERTIDO
-        );
+        long quantidadeConvertida = usuarioRepository.countByIndicadoPorId(participante.getUsuario().getId());
+        IndicacaoLinkResponse linkIndicacao = indicacaoService.obterLink(participante.getUsuario());
 
         return new RoletaConvitesResponse(
-                participante.getCodigoConvite(),
-                montarUrlConvite(participante.getCodigoConvite()),
+                linkIndicacao.codigo(),
+                linkIndicacao.url(),
                 quantidadeConvertida,
                 quantidadeConvertida,
                 config.getGirosGanhosPorConvite(),
@@ -1532,46 +1468,6 @@ public class RoletaService {
                 config.getGirosPorConviteMin(),
                 config.getGirosPorConviteMax()
         );
-    }
-
-    private String montarUrlConvite(String codigo) {
-        return UriComponentsBuilder.fromUriString(frontendBaseUrl)
-                .path("/vip/roleta")
-                .queryParam("ref", codigo)
-                .toUriString();
-    }
-
-    private String gerarCodigoUnico() {
-        for (int tentativa = 0; tentativa < MAX_TENTATIVAS_GERACAO; tentativa++) {
-            String codigo = gerarCodigo();
-            if (!roletaParticipanteRepository.existsByCodigoConvite(codigo)) {
-                return codigo;
-            }
-        }
-
-        throw new ResponseStatusException(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "Nao foi possivel gerar codigo da roleta"
-        );
-    }
-
-    private String gerarCodigo() {
-        StringBuilder codigo = new StringBuilder(TAMANHO_CODIGO);
-        for (int indice = 0; indice < TAMANHO_CODIGO; indice++) {
-            codigo.append(ALFABETO.charAt(secureRandom.nextInt(ALFABETO.length())));
-        }
-        return codigo.toString();
-    }
-
-    private String normalizarCodigo(String codigo) {
-        if (codigo == null || codigo.isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Codigo de convite e obrigatorio"
-            );
-        }
-
-        return codigo.trim().toLowerCase(Locale.ROOT);
     }
 
     private Optional<Usuario> obterUsuarioAutenticadoOptional() {
@@ -1607,18 +1503,6 @@ public class RoletaService {
         } catch (IllegalArgumentException exception) {
             return Optional.empty();
         }
-    }
-
-    private String normalizarBaseUrl(String baseUrl) {
-        String url = baseUrl == null || baseUrl.isBlank()
-                ? "https://brechodacami.com"
-                : baseUrl.trim();
-
-        while (url.endsWith("/")) {
-            url = url.substring(0, url.length() - 1);
-        }
-
-        return url;
     }
 
     private record PremioCalculado(BigDecimal valorPremio, Integer girosExtras) {

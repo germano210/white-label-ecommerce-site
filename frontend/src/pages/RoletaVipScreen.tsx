@@ -10,6 +10,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { api, isCookieAuthMode } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
+import { normalizeIndicationLink, type IndicacaoLinkApiLike } from '../utils/indicacaoReferral';
 import arrowImageIcon from '../assets/icons/arrowImage.svg';
 import compartilhamentoIcon from '../assets/icons/compartilhamento.svg';
 import './RoletaVipScreen.css';
@@ -98,6 +99,30 @@ interface RoletaNivelApi {
     premios?: RoletaPremioApi[] | null;
 }
 
+interface RoletaMetaApi {
+    id?: number | string | null;
+    titulo?: string | null;
+    descricao?: string | null;
+    quantidadeAlvo?: NumericApiValue;
+    quantidade_alvo?: NumericApiValue;
+    progressoAtual?: NumericApiValue;
+    progresso_atual?: NumericApiValue;
+    girosRecompensa?: NumericApiValue;
+    giros_recompensa?: NumericApiValue;
+    ordem?: NumericApiValue;
+    ativa?: boolean | number | string | null;
+    ativo?: boolean | number | string | null;
+    status?: string | null;
+    criadaEm?: string | null;
+    criada_em?: string | null;
+    atualizadaEm?: string | null;
+    atualizada_em?: string | null;
+    iniciadaEm?: string | null;
+    iniciada_em?: string | null;
+    concluidaEm?: string | null;
+    concluida_em?: string | null;
+}
+
 interface RoletaStatusApi {
     ativa?: boolean | null;
     titulo?: string | null;
@@ -121,6 +146,8 @@ interface RoletaStatusApi {
     giros_disponiveis?: NumericApiValue;
     valorDisponivelResgate?: NumericApiValue;
     valor_disponivel_resgate?: NumericApiValue;
+    metaAtual?: RoletaMetaApi | null;
+    meta_atual?: RoletaMetaApi | null;
     metaGrupo?: NumericApiValue;
     meta_grupo?: NumericApiValue;
     progressoGrupo?: NumericApiValue;
@@ -134,7 +161,7 @@ interface RoletaStatusApi {
     niveis_roleta?: RoletaNivelApi[] | null;
 }
 
-interface RoletaGiroResponse {
+interface RoletaGiroResponse extends Partial<RoletaStatusApi> {
     premioAtual?: RoletaPremioApi | null;
     premio_atual?: RoletaPremioApi | null;
     premioPendente?: RoletaPremioApi | null;
@@ -163,17 +190,6 @@ interface ProdutoCheckoutResponse {
     item?: RoletaProdutoApi | null;
 }
 
-interface RoletaConvitesResponse {
-    urlConvite?: string | null;
-    url_convite?: string | null;
-    conviteUrl?: string | null;
-    convite_url?: string | null;
-    linkConvite?: string | null;
-    link_convite?: string | null;
-    url?: string | null;
-    link?: string | null;
-}
-
 interface RoletaWheelSlice {
     id: string;
     sourceLevelId: string;
@@ -193,6 +209,22 @@ interface RoletaSpinResult {
     tipoPremio: string;
     valor: number;
     valorLabel: string;
+}
+
+interface RoletaMetaView {
+    id: string;
+    titulo: string;
+    descricao: string;
+    quantidadeAlvo: number;
+    progressoAtual: number;
+    girosRecompensa: number;
+    ordem: number;
+    ativa: boolean;
+    status: string;
+    criadaEm: string;
+    atualizadaEm: string;
+    iniciadaEm: string;
+    concluidaEm: string;
 }
 
 type ProdutoImagemApi = string | {
@@ -262,6 +294,8 @@ interface RoletaViewState {
     girosTotaisObtidos: number;
     girosDisponiveis: number;
     valorDisponivelResgate: number;
+    hasMeta: boolean;
+    metaAtual: RoletaMetaView | null;
     metaGrupo: number;
     progressoGrupo: number;
     girosBonusGrupo: number;
@@ -276,7 +310,9 @@ const emptyRoletaState: RoletaViewState = {
     girosTotaisObtidos: 0,
     girosDisponiveis: 0,
     valorDisponivelResgate: 0,
-    metaGrupo: 20,
+    hasMeta: false,
+    metaAtual: null,
+    metaGrupo: 0,
     progressoGrupo: 0,
     girosBonusGrupo: 0,
     notificacoes: [],
@@ -312,17 +348,6 @@ const DAILY_CARD_TAP_THRESHOLD = 10;
 const WHEEL_FULL_TURNS = 7;
 const WHEEL_SPIN_DURATION_MS = 3800;
 const DAILY_TAB_QUERY_VALUE = 'itens';
-const inviteGuestNames = [
-    'BIRDMAN',
-    '$quanchy',
-    'g33neOgilligan',
-    'magnataCabelo3spinh0s0',
-    'pr.andrecurtis',
-    'summer.smith',
-    'mortynt',
-    'beth',
-    'genrejerry',
-];
 
 function getInitialRoletaTabFromUrl(): RoletaTab {
     if (typeof window === 'undefined') return 'spin';
@@ -389,6 +414,43 @@ function toBoolean(value: boolean | number | string | null | undefined, fallback
     }
 
     return fallback;
+}
+
+function hasApiValue(value: NumericApiValue) {
+    return value !== null && value !== undefined && value !== '';
+}
+
+function normalizeRoletaMeta(meta?: RoletaMetaApi | null): RoletaMetaView | null {
+    if (!meta) return null;
+
+    const quantidadeAlvo = Math.max(0, Math.floor(parseApiNumber(
+        meta.quantidadeAlvo ?? meta.quantidade_alvo,
+    )));
+
+    if (quantidadeAlvo <= 0) return null;
+
+    const progressoAtual = Math.min(
+        Math.max(0, Math.floor(parseApiNumber(meta.progressoAtual ?? meta.progresso_atual))),
+        quantidadeAlvo,
+    );
+
+    return {
+        id: String(meta.id ?? ''),
+        titulo: meta.titulo?.trim() || 'Meta atual do grupo',
+        descricao: meta.descricao?.trim() ?? '',
+        quantidadeAlvo,
+        progressoAtual,
+        girosRecompensa: Math.max(0, Math.floor(parseApiNumber(
+            meta.girosRecompensa ?? meta.giros_recompensa,
+        ))),
+        ordem: Math.max(0, Math.floor(parseApiNumber(meta.ordem))),
+        ativa: toBoolean(meta.ativa ?? meta.ativo, true),
+        status: meta.status?.trim() ?? '',
+        criadaEm: meta.criadaEm ?? meta.criada_em ?? '',
+        atualizadaEm: meta.atualizadaEm ?? meta.atualizada_em ?? '',
+        iniciadaEm: meta.iniciadaEm ?? meta.iniciada_em ?? '',
+        concluidaEm: meta.concluidaEm ?? meta.concluida_em ?? '',
+    };
 }
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
@@ -537,18 +599,8 @@ function normalizeWheelSlices(data?: RoletaStatusApi | null) {
     return normalizeWheelSlicesFromLevels(rawLevels);
 }
 
-function normalizeInviteUrl(data?: RoletaStatusApi | RoletaConvitesResponse | null) {
-    return (
-        data?.urlConvite
-        ?? data?.url_convite
-        ?? data?.conviteUrl
-        ?? data?.convite_url
-        ?? data?.linkConvite
-        ?? data?.link_convite
-        ?? ('url' in (data ?? {}) ? (data as RoletaConvitesResponse).url : null)
-        ?? ('link' in (data ?? {}) ? (data as RoletaConvitesResponse).link : null)
-        ?? ''
-    ).trim();
+function normalizeInviteUrl(data?: RoletaStatusApi | IndicacaoLinkApiLike | null) {
+    return normalizeIndicationLink(data);
 }
 
 function getPremioAtualFromStatus(data?: RoletaStatusApi | null) {
@@ -579,10 +631,24 @@ function getPremioTipo(prize?: RoletaPremioApi | null) {
 }
 
 function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
-    const metaGrupo = Math.max(1, Math.floor(parseApiNumber(data?.metaGrupo ?? data?.meta_grupo) || 20));
-    const progressoGrupo = Math.min(
-        Math.max(0, Math.floor(parseApiNumber(data?.progressoGrupo ?? data?.progresso_grupo))),
-        metaGrupo,
+    const metaAtual = normalizeRoletaMeta(data?.metaAtual ?? data?.meta_atual);
+    const rawMetaGrupo = data?.metaGrupo ?? data?.meta_grupo;
+    const parsedLegacyMetaGrupo = Math.floor(parseApiNumber(rawMetaGrupo));
+    const hasLegacyMeta = !metaAtual && hasApiValue(rawMetaGrupo) && parsedLegacyMetaGrupo > 0;
+    const legacyMetaGrupo = Math.max(1, parsedLegacyMetaGrupo);
+    const metaGrupo = metaAtual?.quantidadeAlvo ?? (hasLegacyMeta ? legacyMetaGrupo : 0);
+    const progressoGrupo = metaAtual?.progressoAtual ?? (
+        hasLegacyMeta
+            ? Math.min(
+                Math.max(0, Math.floor(parseApiNumber(data?.progressoGrupo ?? data?.progresso_grupo))),
+                metaGrupo,
+            )
+            : 0
+    );
+    const girosBonusGrupo = metaAtual?.girosRecompensa ?? (
+        hasLegacyMeta
+            ? Math.max(0, Math.floor(parseApiNumber(data?.girosBonusGrupo ?? data?.giros_bonus_grupo)))
+            : 0
     );
     const rawNotifications = data?.notificacoes ?? data?.ultimosEventos ?? [];
     const opcoes = normalizeWheelSlices(data);
@@ -599,17 +665,39 @@ function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
         valorDisponivelResgate: Math.max(0, parseApiNumber(
             data?.valorDisponivelResgate ?? data?.valor_disponivel_resgate,
         )),
+        hasMeta: Boolean(metaAtual) || hasLegacyMeta,
+        metaAtual,
         metaGrupo,
         progressoGrupo,
-        girosBonusGrupo: Math.max(0, Math.floor(parseApiNumber(
-            data?.girosBonusGrupo ?? data?.giros_bonus_grupo,
-        ))),
+        girosBonusGrupo,
         notificacoes: rawNotifications
             .map(normalizeNotification)
             .filter(Boolean),
         opcoes,
         premioAtual: createPrizeView(getPremioAtualFromStatus(data), opcoes),
     };
+}
+
+function hasMetaPayloadFields(data?: RoletaGiroResponse | RoletaStatusApi | null) {
+    return Boolean(data && (
+        data.metaAtual !== undefined
+        || data.meta_atual !== undefined
+        || data.metaGrupo !== undefined
+        || data.meta_grupo !== undefined
+        || data.progressoGrupo !== undefined
+        || data.progresso_grupo !== undefined
+        || data.girosBonusGrupo !== undefined
+        || data.giros_bonus_grupo !== undefined
+    ));
+}
+
+function hasRoletaStatusPayload(data?: RoletaGiroResponse | null) {
+    return Boolean(data && (
+        hasMetaPayloadFields(data)
+        || data.niveis !== undefined
+        || data.niveisRoleta !== undefined
+        || data.niveis_roleta !== undefined
+    ));
 }
 
 function getRoletaErrorMessage(error: unknown) {
@@ -1183,14 +1271,13 @@ export function RoletaVipScreen() {
         startX: 0,
         suppressNextClick: false,
     });
-    const guestInviteUrl = useMemo(() => {
-        const randomName = inviteGuestNames[Math.floor(Math.random() * inviteGuestNames.length)];
-        return `https://brechodacami.com.br/${randomName}`;
-    }, []);
+    const hasGroupGoal = roleta.hasMeta && roleta.metaGrupo > 0;
+    const groupGoalTitle = roleta.metaAtual?.titulo || 'Meta atual do grupo';
+    const progressPercent = useMemo(() => {
+        if (!hasGroupGoal) return 0;
 
-    const progressPercent = useMemo(() => (
-        roleta.metaGrupo > 0 ? (roleta.progressoGrupo / roleta.metaGrupo) * 100 : 0
-    ), [roleta.metaGrupo, roleta.progressoGrupo]);
+        return Math.min(100, Math.max(0, (roleta.progressoGrupo / roleta.metaGrupo) * 100));
+    }, [hasGroupGoal, roleta.metaGrupo, roleta.progressoGrupo]);
 
     const authRefreshKey = isAuthenticated
         ? String(user?.id ?? user?.telefone ?? user?.phone ?? token ?? 'cookie-session')
@@ -1199,7 +1286,7 @@ export function RoletaVipScreen() {
     const hasWheelOptions = roleta.opcoes.length > 0;
     const canSpin = isAuthenticated && roleta.ativa && roleta.girosDisponiveis > 0 && hasWheelOptions && !isSpinning;
     const currentPrize = roleta.premioAtual;
-    const visibleInviteUrl = isAuthenticated ? (inviteUrl || roleta.urlConvite) : guestInviteUrl;
+    const visibleInviteUrl = isAuthenticated ? inviteUrl : '';
     const loopedDailyProducts = useMemo(() => {
         if (dailyProducts.length <= 1) {
             return dailyProducts.map((product, productIndex) => ({
@@ -1253,9 +1340,6 @@ export function RoletaVipScreen() {
             ));
             const nextRoleta = normalizeRoletaStatus(data);
             setRoleta(nextRoleta);
-            if (nextRoleta.urlConvite) {
-                setInviteUrl(nextRoleta.urlConvite);
-            }
         } catch (roletaError) {
             if (axios.isAxiosError(roletaError) && (
                 roletaError.response?.status === 401
@@ -1289,13 +1373,16 @@ export function RoletaVipScreen() {
         setInviteError('');
 
         try {
-            const { data } = await runWithRoletaParticipantRetry(() => (
-                api.get<RoletaConvitesResponse>(apiRoutes.roleta.convites)
-            ));
-            const nextInviteUrl = normalizeInviteUrl(data);
+            const { data } = await api.get<IndicacaoLinkApiLike>(apiRoutes.indicacoes.meuLink);
+            let nextInviteUrl = normalizeInviteUrl(data);
 
             if (!nextInviteUrl) {
-                throw new Error('Convite sem URL.');
+                const createdInvite = await api.post<IndicacaoLinkApiLike>(apiRoutes.indicacoes.meuLink);
+                nextInviteUrl = normalizeInviteUrl(createdInvite.data);
+            }
+
+            if (!nextInviteUrl) {
+                throw new Error('Indicacao sem URL.');
             }
 
             setInviteUrl(nextInviteUrl);
@@ -1314,11 +1401,10 @@ export function RoletaVipScreen() {
             return;
         }
 
-        if (roleta.urlConvite) return;
         if (isLoading || fetchRoletaInFlightRef.current) return;
 
         void fetchInviteUrl();
-    }, [fetchInviteUrl, isAuthenticated, isLoading, roleta.urlConvite]);
+    }, [fetchInviteUrl, isAuthenticated, isLoading]);
 
     const fetchDailyProducts = useCallback(async () => {
         setIsDailyLoading(true);
@@ -1384,8 +1470,27 @@ export function RoletaVipScreen() {
 
         try {
             const { data } = await api.post<RoletaGiroResponse>(apiRoutes.roleta.girar);
-            const rawPrize = getPremioAtualFromSpin(data) ?? getPremioAtualFromStatus(data.roleta);
-            const responseRoleta = data.roleta ? normalizeRoletaStatus(data.roleta) : null;
+            const statusPayload = data.roleta ?? (hasRoletaStatusPayload(data) ? data : null);
+            const rawPrize = getPremioAtualFromSpin(data) ?? getPremioAtualFromStatus(statusPayload);
+            const normalizedStatus = statusPayload ? normalizeRoletaStatus(statusPayload) : null;
+            const responseRoleta = normalizedStatus && !data.roleta
+                ? {
+                    ...roleta,
+                    ...normalizedStatus,
+                    urlConvite: normalizedStatus.urlConvite || roleta.urlConvite,
+                    notificacoes: normalizedStatus.notificacoes.length
+                        ? normalizedStatus.notificacoes
+                        : roleta.notificacoes,
+                    opcoes: normalizedStatus.opcoes.length ? normalizedStatus.opcoes : roleta.opcoes,
+                    ...(!hasMetaPayloadFields(statusPayload) ? {
+                        hasMeta: roleta.hasMeta,
+                        metaAtual: roleta.metaAtual,
+                        metaGrupo: roleta.metaGrupo,
+                        progressoGrupo: roleta.progressoGrupo,
+                        girosBonusGrupo: roleta.girosBonusGrupo,
+                    } : {}),
+                }
+                : normalizedStatus;
             const slicesForSpin = responseRoleta?.opcoes.length ? responseRoleta.opcoes : roleta.opcoes;
             const nextPrize = createPrizeView(rawPrize, slicesForSpin);
             const targetSliceIndex = getPrizeSliceIndex(rawPrize, slicesForSpin);
@@ -1399,9 +1504,8 @@ export function RoletaVipScreen() {
             ));
             await waitForAnimation(WHEEL_SPIN_DURATION_MS);
 
-            if (data.roleta) {
-                const nextRoleta = responseRoleta ?? normalizeRoletaStatus(data.roleta);
-                setRoleta(nextPrize ? { ...nextRoleta, premioAtual: nextPrize } : nextRoleta);
+            if (responseRoleta) {
+                setRoleta(nextPrize ? { ...responseRoleta, premioAtual: nextPrize } : responseRoleta);
             } else if (
                 nextPrize
                 || data.girosDisponiveis !== undefined
@@ -1954,16 +2058,24 @@ export function RoletaVipScreen() {
 
 
                     <section className="roleta-vip-group-goal" aria-label="Meta atual do grupo">
-                        <div className="roleta-vip-group-goal-row">
-                            <span>Meta atual do grupo</span>
-                            <strong>{roleta.progressoGrupo}/{roleta.metaGrupo}</strong>
-                        </div>
-                        <div className="roleta-vip-group-progress" aria-hidden="true">
-                            <span style={{ width: `${progressPercent}%` }} />
-                        </div>
-                        <p>
-                            {roleta.metaGrupo} acoes -&gt; + {roleta.girosBonusGrupo} giros pra todos.
-                        </p>
+                        {hasGroupGoal ? (
+                            <>
+                                <div className="roleta-vip-group-goal-row">
+                                    <span>{groupGoalTitle}</span>
+                                    <strong>{roleta.progressoGrupo}/{roleta.metaGrupo}</strong>
+                                </div>
+                                <div className="roleta-vip-group-progress" aria-hidden="true">
+                                    <span style={{ width: `${progressPercent}%` }} />
+                                </div>
+                                <p>
+                                    {roleta.metaGrupo} acoes -&gt; + {roleta.girosBonusGrupo} giros pra todos.
+                                </p>
+                            </>
+                        ) : (
+                            <p className="roleta-vip-group-goal-empty">
+                                Nenhuma meta ativa no momento.
+                            </p>
+                        )}
                     </section>
 
                     {error && (
@@ -2326,14 +2438,16 @@ export function RoletaVipScreen() {
 
                                 <div className="roleta-vip-invite-link-row">
                                     <span>
-                                        {isAuthenticated && isInviteLoading
-                                            ? 'Carregando link...'
-                                            : visibleInviteUrl}
+                                        {!isAuthenticated
+                                            ? 'Entre para gerar seu link.'
+                                            : isInviteLoading
+                                                ? 'Carregando link...'
+                                                : visibleInviteUrl || 'Link indisponivel.'}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => void handleCopyInviteUrl()}
-                                        disabled={isAuthenticated && (isInviteLoading || !visibleInviteUrl)}
+                                        disabled={!isAuthenticated || isInviteLoading || !visibleInviteUrl}
                                     >
                                         {inviteCopyLabel}
                                     </button>

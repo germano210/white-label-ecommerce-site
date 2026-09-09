@@ -24,6 +24,7 @@ import com.whiteLabel.backend.domain.Usuario;
 import com.whiteLabel.backend.domain.UsuarioRole;
 import com.whiteLabel.backend.dto.InfinitePayLinkRequest;
 import com.whiteLabel.backend.dto.InfinitePayLinkResponse;
+import com.whiteLabel.backend.repository.IndicacaoRepository;
 import com.whiteLabel.backend.repository.PagamentoRepository;
 import com.whiteLabel.backend.repository.PedidoItemRepository;
 import com.whiteLabel.backend.repository.PedidoRepository;
@@ -104,6 +105,9 @@ class RoletaControllerTest {
 
     @Autowired
     private RoletaConviteRepository roletaConviteRepository;
+
+    @Autowired
+    private IndicacaoRepository indicacaoRepository;
 
     @Autowired
     private RoletaGiroRepository roletaGiroRepository;
@@ -457,7 +461,7 @@ class RoletaControllerTest {
         assertTrue(convite.getGirosConcedidos() >= 2);
         assertTrue(convite.getGirosConcedidos() <= 5);
         assertTrue(convite.getConvertidoEm() != null);
-        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("CONVITE:" + convite.getId()));
+        assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("CONVITE:" + indicado.getId()));
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEventoStartingWith("CONVITE:"));
         var participanteIndicador = roletaParticipanteRepository.findByUsuarioId(indicador.getId())
                 .orElseThrow();
@@ -537,6 +541,79 @@ class RoletaControllerTest {
                         .content(payload))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PAGO"));
+
+        assertEquals("5.00", roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow()
+                .getValorDisponivelResgate()
+                .toPlainString());
+    }
+
+    @Test
+    void shouldCreditReferralCommissionWhenUserWasIndicatedByCentralReferralLink() throws Exception {
+        Usuario indicador = criarUsuario("Indicador Central", "551199992047");
+        String linkResponse = mockMvc.perform(get("/api/indicacoes/meu-link")
+                        .header("Authorization", bearer(indicador))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String codigo = objectMapper.readTree(linkResponse).path("codigo").asText();
+
+        mockMvc.perform(post("/api/auth/request-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "telefone": "551199992048",
+                                  "nome": "Indicada Central",
+                                  "codigoIndicacao": "%s"
+                                }
+                                """.formatted(codigo)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("NEW_USER"));
+
+        Usuario indicada = usuarioRepository.findByTelefone("551199992048").orElseThrow();
+        assertEquals(indicador.getId(), indicada.getIndicadoPor().getId());
+
+        Produto produto = criarProduto("Produto Comissao Central");
+        produto.setPrecoVenda(new BigDecimal("100.00"));
+        produto = produtoRepository.save(produto);
+
+        String checkoutResponse = mockMvc.perform(post("/api/checkout/produtos/{produtoId}", produto.getId())
+                        .header("Authorization", bearer(indicada))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String checkoutId = objectMapper.readTree(checkoutResponse).path("checkoutId").asText();
+        String payload = """
+                {
+                  "eventId": "evt_indicacao_central_comissao",
+                  "paymentId": "pay_indicacao_central_comissao",
+                  "checkoutId": "%s",
+                  "status": "PAGO"
+                }
+                """.formatted(checkoutId);
+
+        mockMvc.perform(post("/api/pagamentos/infinitepay/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Payment-Signature", assinatura(payload))
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAGO"));
+
+        assertEquals("5.00", roletaParticipanteRepository.findByUsuarioId(indicador.getId())
+                .orElseThrow()
+                .getValorDisponivelResgate()
+                .toPlainString());
+
+        mockMvc.perform(post("/api/pagamentos/infinitepay/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Payment-Signature", assinatura(payload))
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.duplicado").value(true));
 
         assertEquals("5.00", roletaParticipanteRepository.findByUsuarioId(indicador.getId())
                 .orElseThrow()
@@ -2139,6 +2216,7 @@ class RoletaControllerTest {
         produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();
         pedidoRepository.deleteAll();
+        indicacaoRepository.deleteAll();
         roletaConviteRepository.deleteAll();
         roletaGiroRepository.deleteAll();
         roletaGiroCreditoRepository.deleteAll();
@@ -2152,6 +2230,11 @@ class RoletaControllerTest {
         usuarioMissaoSemanalRepository.deleteAll();
         missaoRepository.deleteAll();
         produtoRepository.deleteAll();
+
+        List<Usuario> usuarios = usuarioRepository.findAll();
+        usuarios.forEach(usuario -> usuario.setIndicadoPor(null));
+        usuarioRepository.saveAll(usuarios);
+        usuarioRepository.flush();
         usuarioRepository.deleteAll();
     }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Gift, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Gift, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
@@ -97,6 +97,37 @@ interface AdminRoletaResponse {
     niveis?: AdminRoletaNivelApi[] | null;
 }
 
+interface AdminRoletaMetaApi {
+    id?: number | string | null;
+    titulo?: string | null;
+    descricao?: string | null;
+    quantidadeAlvo?: number | string | null;
+    quantidade_alvo?: number | string | null;
+    progressoAtual?: number | string | null;
+    progresso_atual?: number | string | null;
+    girosRecompensa?: number | string | null;
+    giros_recompensa?: number | string | null;
+    ordem?: number | string | null;
+    ativa?: boolean | number | string | null;
+    ativo?: boolean | number | string | null;
+    status?: string | null;
+    criadaEm?: string | null;
+    criada_em?: string | null;
+    atualizadaEm?: string | null;
+    atualizada_em?: string | null;
+    iniciadaEm?: string | null;
+    iniciada_em?: string | null;
+    concluidaEm?: string | null;
+    concluida_em?: string | null;
+}
+
+interface AdminRoletaMetasResponse {
+    content?: AdminRoletaMetaApi[];
+    metas?: AdminRoletaMetaApi[];
+    data?: AdminRoletaMetaApi[];
+    items?: AdminRoletaMetaApi[];
+}
+
 interface RoletaPrizeForm {
     localId: string;
     id?: number | string | null;
@@ -131,6 +162,32 @@ interface RoletaFormState {
     girosGanhosPorConvite: string;
     multiplicadorDificuldadePadrao: string;
     niveis: RoletaLevelForm[];
+}
+
+interface RoletaMetaForm {
+    localId: string;
+    id?: number | string | null;
+    titulo: string;
+    descricao: string;
+    quantidadeAlvo: string;
+    progressoAtual: number;
+    girosRecompensa: string;
+    ordem: string;
+    ativa: boolean;
+    status: string;
+    criadaEm: string;
+    atualizadaEm: string;
+    iniciadaEm: string;
+    concluidaEm: string;
+}
+
+interface RoletaMetaPayload {
+    titulo: string;
+    descricao: string | null;
+    quantidadeAlvo: number;
+    girosRecompensa: number;
+    ordem: number;
+    ativa: boolean;
 }
 
 interface RoletaNivelPayload {
@@ -314,6 +371,24 @@ function createBlankLevel(order: number, pesoRelativo: number | string): RoletaL
     };
 }
 
+function createBlankMeta(order = 1): RoletaMetaForm {
+    return {
+        localId: createLocalId('meta'),
+        titulo: '',
+        descricao: '',
+        quantidadeAlvo: '',
+        progressoAtual: 0,
+        girosRecompensa: '',
+        ordem: String(order),
+        ativa: true,
+        status: 'ATIVA',
+        criadaEm: '',
+        atualizadaEm: '',
+        iniciadaEm: '',
+        concluidaEm: '',
+    };
+}
+
 function getProdutoImagePath(image: ProdutoImagemApi) {
     if (typeof image === 'string') return image;
     return image.url ?? image.imagemUrl ?? image.caminho ?? image.path ?? '';
@@ -436,6 +511,42 @@ function normalizeRoletaLevels(roleta?: AdminRoletaResponse | null) {
     }
 
     return [];
+}
+
+function normalizeMetaFromApi(meta: AdminRoletaMetaApi): RoletaMetaForm {
+    const quantidadeAlvo = Math.max(0, Math.floor(parseNumber(
+        meta.quantidadeAlvo ?? meta.quantidade_alvo,
+    )));
+    const rawProgress = Math.max(0, Math.floor(parseNumber(
+        meta.progressoAtual ?? meta.progresso_atual,
+    )));
+
+    return {
+        localId: createLocalId('meta'),
+        id: meta.id,
+        titulo: meta.titulo ?? '',
+        descricao: meta.descricao ?? '',
+        quantidadeAlvo: String(quantidadeAlvo || ''),
+        progressoAtual: quantidadeAlvo > 0 ? Math.min(rawProgress, quantidadeAlvo) : rawProgress,
+        girosRecompensa: String(Math.max(0, Math.floor(parseNumber(
+            meta.girosRecompensa ?? meta.giros_recompensa,
+        )))),
+        ordem: String(Math.max(0, Math.floor(parseNumber(meta.ordem)))),
+        ativa: toBoolean(meta.ativa ?? meta.ativo, true),
+        status: meta.status?.trim() ?? '',
+        criadaEm: meta.criadaEm ?? meta.criada_em ?? '',
+        atualizadaEm: meta.atualizadaEm ?? meta.atualizada_em ?? '',
+        iniciadaEm: meta.iniciadaEm ?? meta.iniciada_em ?? '',
+        concluidaEm: meta.concluidaEm ?? meta.concluida_em ?? '',
+    };
+}
+
+function normalizeMetasResponse(data: AdminRoletaMetaApi[] | AdminRoletaMetasResponse) {
+    const metas = Array.isArray(data)
+        ? data
+        : data.content ?? data.metas ?? data.data ?? data.items ?? [];
+
+    return metas.map(normalizeMetaFromApi);
 }
 
 function createFormFromRoleta(roleta?: AdminRoletaResponse | null): RoletaFormState {
@@ -585,6 +696,55 @@ function getValidationError(form: RoletaFormState) {
     return '';
 }
 
+function isMetaConcluida(meta: RoletaMetaForm) {
+    return meta.status.trim().toUpperCase() === 'CONCLUIDA';
+}
+
+function formatMetaDate(value: string) {
+    if (!value) return '--';
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function getMetaValidationError(meta: RoletaMetaForm) {
+    const quantidadeAlvo = Math.floor(parseNumber(meta.quantidadeAlvo));
+    const girosRecompensa = Math.floor(parseNumber(meta.girosRecompensa));
+
+    if (!meta.titulo.trim()) {
+        return 'Informe o titulo da meta.';
+    }
+
+    if (!Number.isFinite(quantidadeAlvo) || quantidadeAlvo <= 0) {
+        return 'A quantidade alvo precisa ser maior que zero.';
+    }
+
+    if (!Number.isFinite(girosRecompensa) || girosRecompensa < 0) {
+        return 'Os giros de recompensa precisam ser maior ou igual a zero.';
+    }
+
+    return '';
+}
+
+function createMetaPayload(meta: RoletaMetaForm): RoletaMetaPayload {
+    return {
+        titulo: meta.titulo.trim(),
+        descricao: meta.descricao.trim() || null,
+        quantidadeAlvo: Math.max(1, toPositiveInteger(meta.quantidadeAlvo, 1)),
+        girosRecompensa: Math.max(0, toPositiveInteger(meta.girosRecompensa, 0)),
+        ordem: Math.max(0, toPositiveInteger(meta.ordem, 0)),
+        ativa: meta.ativa,
+    };
+}
+
 export function RoletaAdminPanel() {
     const [form, setForm] = useState<RoletaFormState>(createDefaultForm);
     const [produtos, setProdutos] = useState<ProdutoAdmin[]>([]);
@@ -595,6 +755,14 @@ export function RoletaAdminPanel() {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [metas, setMetas] = useState<RoletaMetaForm[]>([]);
+    const [newMeta, setNewMeta] = useState<RoletaMetaForm>(() => createBlankMeta());
+    const [isLoadingMetas, setIsLoadingMetas] = useState(false);
+    const [metaActionId, setMetaActionId] = useState<string | null>(null);
+    const [isCreatingMeta, setIsCreatingMeta] = useState(false);
+    const [metaError, setMetaError] = useState('');
+    const [metaSuccess, setMetaSuccess] = useState('');
+    const [expandedLevelIds, setExpandedLevelIds] = useState<Record<string, boolean>>({});
 
     const produtosById = useMemo(() => (
         produtos.reduce<Record<number, ProdutoAdmin>>((acc, produto) => {
@@ -646,6 +814,44 @@ export function RoletaAdminPanel() {
     useEffect(() => {
         void loadPanel();
     }, [loadPanel]);
+
+    const loadMetas = useCallback(async (resetNewMeta = false) => {
+        setIsLoadingMetas(true);
+        setMetaError('');
+
+        try {
+            const { data } = await api.get<AdminRoletaMetaApi[] | AdminRoletaMetasResponse>(
+                apiRoutes.admin.roletaMetas.list,
+            );
+            const nextMetas = normalizeMetasResponse(data);
+
+            setMetas(nextMetas);
+            setNewMeta((currentMeta) => {
+                if (!resetNewMeta && (
+                    currentMeta.id
+                    || currentMeta.titulo
+                    || currentMeta.quantidadeAlvo
+                    || currentMeta.girosRecompensa
+                )) {
+                    return currentMeta;
+                }
+
+                const nextOrder = nextMetas.reduce((maxOrder, meta) => (
+                    Math.max(maxOrder, toPositiveInteger(meta.ordem, 0))
+                ), 0) + 1;
+
+                return createBlankMeta(nextOrder);
+            });
+        } catch {
+            setMetaError('Nao foi possivel carregar as metas da roleta.');
+        } finally {
+            setIsLoadingMetas(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadMetas();
+    }, [loadMetas]);
 
     const updateForm = <K extends keyof RoletaFormState>(
         key: K,
@@ -712,18 +918,36 @@ export function RoletaAdminPanel() {
             const nextWeight = currentForm.niveis.length > 0
                 ? Math.max(0.0001, lastWeight / multiplier)
                 : lastWeight;
+            const nextLevel = createBlankLevel(nextOrder, nextWeight);
+
+            setExpandedLevelIds((currentIds) => ({
+                ...currentIds,
+                [nextLevel.localId]: true,
+            }));
 
             return {
                 ...currentForm,
-                niveis: [...currentForm.niveis, createBlankLevel(nextOrder, nextWeight)],
+                niveis: [...currentForm.niveis, nextLevel],
             };
         });
     };
 
     const removeLevel = (levelLocalId: string) => {
+        setExpandedLevelIds((currentIds) => {
+            const nextIds = { ...currentIds };
+            delete nextIds[levelLocalId];
+            return nextIds;
+        });
         setForm((currentForm) => ({
             ...currentForm,
             niveis: currentForm.niveis.filter((level) => level.localId !== levelLocalId),
+        }));
+    };
+
+    const toggleLevelDropdown = (levelLocalId: string) => {
+        setExpandedLevelIds((currentIds) => ({
+            ...currentIds,
+            [levelLocalId]: !currentIds[levelLocalId],
         }));
     };
 
@@ -823,6 +1047,121 @@ export function RoletaAdminPanel() {
         }
     };
 
+    const updateNewMeta = <K extends keyof RoletaMetaForm>(
+        key: K,
+        value: RoletaMetaForm[K],
+    ) => {
+        setNewMeta((currentMeta) => ({
+            ...currentMeta,
+            [key]: value,
+        }));
+    };
+
+    const updateMeta = <K extends keyof RoletaMetaForm>(
+        metaLocalId: string,
+        key: K,
+        value: RoletaMetaForm[K],
+    ) => {
+        setMetas((currentMetas) => (
+            currentMetas.map((meta) => (
+                meta.localId === metaLocalId
+                    ? { ...meta, [key]: value }
+                    : meta
+            ))
+        ));
+    };
+
+    const createMeta = async () => {
+        setMetaError('');
+        setMetaSuccess('');
+
+        const validationError = getMetaValidationError(newMeta);
+        if (validationError) {
+            setMetaError(validationError);
+            return;
+        }
+
+        setIsCreatingMeta(true);
+
+        try {
+            await api.post<AdminRoletaMetaApi>(
+                apiRoutes.admin.roletaMetas.create,
+                createMetaPayload(newMeta),
+            );
+            await loadMetas(true);
+            setMetaSuccess('Meta cadastrada com sucesso.');
+        } catch {
+            setMetaError('Nao foi possivel cadastrar a meta.');
+        } finally {
+            setIsCreatingMeta(false);
+        }
+    };
+
+    const saveMeta = async (meta: RoletaMetaForm) => {
+        if (meta.id === undefined || meta.id === null || meta.id === '') return;
+
+        setMetaError('');
+        setMetaSuccess('');
+
+        const validationError = getMetaValidationError(meta);
+        if (validationError) {
+            setMetaError(validationError);
+            return;
+        }
+
+        setMetaActionId(meta.localId);
+
+        try {
+            await api.put<AdminRoletaMetaApi>(
+                apiRoutes.admin.roletaMetas.update(meta.id),
+                createMetaPayload(meta),
+            );
+            await loadMetas();
+            setMetaSuccess('Meta atualizada com sucesso.');
+        } catch {
+            setMetaError('Nao foi possivel atualizar a meta.');
+        } finally {
+            setMetaActionId(null);
+        }
+    };
+
+    const deactivateMeta = async (meta: RoletaMetaForm) => {
+        if (meta.id === undefined || meta.id === null || meta.id === '') return;
+
+        setMetaError('');
+        setMetaSuccess('');
+        setMetaActionId(meta.localId);
+
+        try {
+            await api.delete<AdminRoletaMetaApi>(apiRoutes.admin.roletaMetas.delete(meta.id));
+            await loadMetas();
+            setMetaSuccess('Meta desativada com sucesso.');
+        } catch {
+            setMetaError('Nao foi possivel desativar a meta.');
+        } finally {
+            setMetaActionId(null);
+        }
+    };
+
+    const resetMeta = async (meta: RoletaMetaForm) => {
+        if (meta.id === undefined || meta.id === null || meta.id === '') return;
+        if (!window.confirm('Reiniciar esta meta? O progresso atual sera zerado.')) return;
+
+        setMetaError('');
+        setMetaSuccess('');
+        setMetaActionId(meta.localId);
+
+        try {
+            await api.post<AdminRoletaMetaApi>(apiRoutes.admin.roletaMetas.reset(meta.id));
+            await loadMetas();
+            setMetaSuccess('Meta reiniciada com sucesso.');
+        } catch {
+            setMetaError('Nao foi possivel reiniciar a meta.');
+        } finally {
+            setMetaActionId(null);
+        }
+    };
+
     return (
         <div style={panelStyle}>
             <h3 style={panelTitleStyle}>
@@ -833,6 +1172,7 @@ export function RoletaAdminPanel() {
             {isLoading ? (
                 <div style={emptyStyle}>Carregando roleta...</div>
             ) : (
+                <>
                 <form onSubmit={savePanel} style={formStyle}>
                     <label style={toggleStyle}>
                         <input
@@ -914,10 +1254,17 @@ export function RoletaAdminPanel() {
                                     .sort((a, b) => toPositiveInteger(a.ordem, 0) - toPositiveInteger(b.ordem, 0))
                                     .map((level) => {
                                         const hasActivePrize = level.premios.some((prize) => prize.ativo);
+                                        const activePrizeCount = level.premios.filter((prize) => prize.ativo).length;
+                                        const isExpanded = Boolean(expandedLevelIds[level.localId]);
 
                                         return (
                                             <article key={level.localId} style={levelCardStyle}>
-                                                <div style={levelHeaderStyle}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleLevelDropdown(level.localId)}
+                                                    style={levelDropdownTriggerStyle}
+                                                    aria-expanded={isExpanded}
+                                                >
                                                     <span
                                                         style={{ ...colorSwatchStyle, background: normalizeHexColor(level.corHex, brandPrimaryHex) }}
                                                         aria-hidden="true"
@@ -927,204 +1274,226 @@ export function RoletaAdminPanel() {
                                                             {level.nome.trim() || `Nivel ${level.ordem}`}
                                                         </strong>
                                                         <span style={chanceStyle}>
-                                                            Chance calculada: {formatChance(levelChances[level.localId])}
+                                                            Chance: {formatChance(levelChances[level.localId])} - Peso: {level.pesoRelativo || '0'} - Premios: {activePrizeCount}/{level.premios.length}
                                                         </span>
                                                     </div>
-                                                    <label style={smallToggleStyle}>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={level.ativo}
-                                                            onChange={(event) => updateLevel(level.localId, 'ativo', event.target.checked)}
-                                                        />
-                                                        Ativo
-                                                    </label>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeLevel(level.localId)}
-                                                        style={{ ...iconButtonStyle, color: '#FF3B30', background: '#FFF1F0' }}
-                                                        aria-label="Remover nivel"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
+                                                    <span style={{
+                                                        ...levelStatusPillStyle,
+                                                        background: level.ativo ? '#EDF7F0' : '#F2F2F2',
+                                                        color: level.ativo ? brandPrimaryCssVar : '#777',
+                                                    }}>
+                                                        {level.ativo ? 'Ativo' : 'Inativo'}
+                                                    </span>
+                                                    <ChevronDown
+                                                        size={16}
+                                                        style={{
+                                                            color: '#333',
+                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                            transition: 'transform 0.2s ease',
+                                                        }}
+                                                    />
+                                                </button>
 
-                                                <div style={levelGridStyle}>
-                                                    <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
-                                                        Nome do nivel
-                                                        <input
-                                                            value={level.nome}
-                                                            onChange={(event) => updateLevel(level.localId, 'nome', event.target.value)}
-                                                            placeholder="Ex: Grau Militar"
-                                                            style={inputStyle}
-                                                        />
-                                                    </label>
-                                                    <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
-                                                        Cor hexadecimal do nivel
-                                                        <div style={colorFieldStyle}>
-                                                            <input
-                                                                type="color"
-                                                                value={normalizeHexColor(level.corHex, brandPrimaryHex)}
-                                                                onChange={(event) => updateLevel(level.localId, 'corHex', normalizeHexColor(event.target.value, brandPrimaryHex))}
-                                                                style={colorInputStyle}
-                                                            />
-                                                            <input
-                                                                type="text"
-                                                                inputMode="text"
-                                                                maxLength={7}
-                                                                value={level.corHex}
-                                                                onChange={(event) => {
-                                                                    const nextValue = event.target.value.toUpperCase();
-                                                                    if (isHexColorDraft(nextValue)) {
-                                                                        updateLevel(level.localId, 'corHex', nextValue);
-                                                                    }
-                                                                }}
-                                                                onBlur={() => {
-                                                                    if (isCompleteHexColor(level.corHex)) {
-                                                                        updateLevel(level.localId, 'corHex', normalizeHexColor(level.corHex, brandPrimaryHex));
-                                                                    }
-                                                                }}
-                                                                placeholder="#E83E8C"
-                                                                style={colorTextInputStyle}
-                                                            />
+                                                {isExpanded && (
+                                                    <div style={levelDropdownContentStyle}>
+                                                        <div style={levelDropdownActionsStyle}>
+                                                            <label style={smallToggleStyle}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={level.ativo}
+                                                                    onChange={(event) => updateLevel(level.localId, 'ativo', event.target.checked)}
+                                                                />
+                                                                Ativo
+                                                            </label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeLevel(level.localId)}
+                                                                style={{ ...iconButtonStyle, color: '#FF3B30', background: '#FFF1F0' }}
+                                                                aria-label="Remover nivel"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
                                                         </div>
-                                                        <span style={fieldHintStyle}>
-                                                            Digite o hexadecimal exato e depois use Salvar roleta para gravar no backend.
-                                                        </span>
-                                                    </label>
-                                                    <label style={fieldLabelStyle}>
-                                                        Ordem
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            value={level.ordem}
-                                                            onChange={(event) => updateLevel(level.localId, 'ordem', event.target.value)}
-                                                            style={inputStyle}
+
+                                                        <div style={levelGridStyle}>
+                                                            <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                                                Nome do nivel
+                                                                <input
+                                                                    value={level.nome}
+                                                                    onChange={(event) => updateLevel(level.localId, 'nome', event.target.value)}
+                                                                    placeholder="Ex: Grau Militar"
+                                                                    style={inputStyle}
+                                                                />
+                                                            </label>
+                                                            <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                                                Cor hexadecimal do nivel
+                                                                <div style={colorFieldStyle}>
+                                                                    <input
+                                                                        type="color"
+                                                                        value={normalizeHexColor(level.corHex, brandPrimaryHex)}
+                                                                        onChange={(event) => updateLevel(level.localId, 'corHex', normalizeHexColor(event.target.value, brandPrimaryHex))}
+                                                                        style={colorInputStyle}
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        inputMode="text"
+                                                                        maxLength={7}
+                                                                        value={level.corHex}
+                                                                        onChange={(event) => {
+                                                                            const nextValue = event.target.value.toUpperCase();
+                                                                            if (isHexColorDraft(nextValue)) {
+                                                                                updateLevel(level.localId, 'corHex', nextValue);
+                                                                            }
+                                                                        }}
+                                                                        onBlur={() => {
+                                                                            if (isCompleteHexColor(level.corHex)) {
+                                                                                updateLevel(level.localId, 'corHex', normalizeHexColor(level.corHex, brandPrimaryHex));
+                                                                            }
+                                                                        }}
+                                                                        placeholder="#E83E8C"
+                                                                        style={colorTextInputStyle}
+                                                                    />
+                                                                </div>
+                                                                <span style={fieldHintStyle}>
+                                                                    Digite o hexadecimal exato e depois use Salvar roleta para gravar no backend.
+                                                                </span>
+                                                            </label>
+                                                            <label style={fieldLabelStyle}>
+                                                                Ordem
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={level.ordem}
+                                                                    onChange={(event) => updateLevel(level.localId, 'ordem', event.target.value)}
+                                                                    style={inputStyle}
+                                                                />
+                                                            </label>
+                                                            <label style={fieldLabelStyle}>
+                                                                Peso relativo
+                                                                <input
+                                                                    type="text"
+                                                                    inputMode="decimal"
+                                                                    step="0.00001"
+                                                                    value={level.pesoRelativo}
+                                                                    onChange={(event) => {
+                                                                        const nextValue = event.target.value;
+                                                                        if (isDecimalDraft(nextValue)) {
+                                                                            updateLevel(level.localId, 'pesoRelativo', nextValue);
+                                                                        }
+                                                                    }}
+                                                                    style={inputStyle}
+                                                                />
+                                                                <span style={fieldHintStyle}>
+                                                                    Peso relativo define a chance. A chance calculada e somente leitura.
+                                                                </span>
+                                                            </label>
+                                                            <label style={fieldLabelStyle}>
+                                                                Chance calculada
+                                                                <input
+                                                                    value={formatChance(levelChances[level.localId])}
+                                                                    readOnly
+                                                                    style={{ ...inputStyle, background: '#F4F4F4', color: brandPrimaryCssVar }}
+                                                                />
+                                                            </label>
+                                                        </div>
+
+                                                        <textarea
+                                                            value={level.descricao}
+                                                            onChange={(event) => updateLevel(level.localId, 'descricao', event.target.value)}
+                                                            placeholder="Descricao opcional do nivel"
+                                                            style={textareaStyle}
+                                                            rows={2}
                                                         />
-                                                    </label>
-                                                    <label style={fieldLabelStyle}>
-                                                        Peso relativo
-                                                        <input
-                                                            type="text"
-                                                            inputMode="decimal"
-                                                            step="0.00001"
-                                                            value={level.pesoRelativo}
-                                                            onChange={(event) => {
-                                                                const nextValue = event.target.value;
-                                                                if (isDecimalDraft(nextValue)) {
-                                                                    updateLevel(level.localId, 'pesoRelativo', nextValue);
-                                                                }
-                                                            }}
-                                                            style={inputStyle}
-                                                        />
-                                                        <span style={fieldHintStyle}>
-                                                            Peso relativo define a chance. A chance calculada e somente leitura.
-                                                        </span>
-                                                    </label>
-                                                    <label style={fieldLabelStyle}>
-                                                        Chance calculada
-                                                        <input
-                                                            value={formatChance(levelChances[level.localId])}
-                                                            readOnly
-                                                            style={{ ...inputStyle, background: '#F4F4F4', color: brandPrimaryCssVar }}
-                                                        />
-                                                    </label>
-                                                </div>
 
-                                                <textarea
-                                                    value={level.descricao}
-                                                    onChange={(event) => updateLevel(level.localId, 'descricao', event.target.value)}
-                                                    placeholder="Descricao opcional do nivel"
-                                                    style={textareaStyle}
-                                                    rows={2}
-                                                />
+                                                        {level.ativo && !hasActivePrize && (
+                                                            <div style={warningStyle}>
+                                                                Este nivel esta ativo, mas ainda nao possui premio ativo.
+                                                            </div>
+                                                        )}
 
-                                                {level.ativo && !hasActivePrize && (
-                                                    <div style={warningStyle}>
-                                                        Este nivel esta ativo, mas ainda nao possui premio ativo.
-                                                    </div>
-                                                )}
+                                                        <div style={prizeHeaderStyle}>
+                                                            <strong>Premios do nivel</strong>
+                                                            <button type="button" onClick={() => addPrize(level.localId)} style={miniButtonStyle}>
+                                                                <Plus size={12} />
+                                                                Adicionar valor
+                                                            </button>
+                                                        </div>
 
-                                                <div style={prizeHeaderStyle}>
-                                                    <strong>Premios do nivel</strong>
-                                                    <button type="button" onClick={() => addPrize(level.localId)} style={miniButtonStyle}>
-                                                        <Plus size={12} />
-                                                        Adicionar valor
-                                                    </button>
-                                                </div>
-
-                                                {level.premios.length === 0 ? (
-                                                    <div style={emptyStyle}>Nenhum premio cadastrado neste nivel.</div>
-                                                ) : (
-                                                    <div style={prizesListStyle}>
-                                                        {level.premios
-                                                            .slice()
-                                                            .sort((a, b) => toPositiveInteger(a.ordem, 0) - toPositiveInteger(b.ordem, 0))
-                                                            .map((prize) => (
-                                                                <article key={prize.localId} style={prizeCardStyle}>
-                                                                    <div style={prizeGridStyle}>
-                                                                        <label style={fieldLabelStyle}>
-                                                                            Tipo
-                                                                            <select
-                                                                                value={prize.tipoPremio}
-                                                                                onChange={(event) => updatePrize(
-                                                                                    level.localId,
-                                                                                    prize.localId,
-                                                                                    'tipoPremio',
-                                                                                    event.target.value as RoletaTipoPremio,
-                                                                                )}
-                                                                                style={inputStyle}
-                                                                            >
-                                                                                {tipoPremioOptions.map((option) => (
-                                                                                    <option key={option.value} value={option.value}>
-                                                                                        {option.label}
-                                                                                    </option>
-                                                                                ))}
-                                                                            </select>
-                                                                        </label>
-                                                                        <label style={fieldLabelStyle}>
-                                                                            Valor
-                                                                            <input
-                                                                                type="text"
-                                                                                inputMode="decimal"
-                                                                                step="0.01"
-                                                                                value={prize.valor}
-                                                                                onChange={(event) => {
-                                                                                    const nextValue = event.target.value;
-                                                                                    if (isDecimalDraft(nextValue)) {
-                                                                                        updatePrize(level.localId, prize.localId, 'valor', nextValue);
-                                                                                    }
-                                                                                }}
-                                                                                style={inputStyle}
-                                                                            />
-                                                                        </label>
-                                                                        <label style={fieldLabelStyle}>
-                                                                            Ordem
-                                                                            <input
-                                                                                type="number"
-                                                                                min="1"
-                                                                                value={prize.ordem}
-                                                                                onChange={(event) => updatePrize(level.localId, prize.localId, 'ordem', event.target.value)}
-                                                                                style={inputStyle}
-                                                                            />
-                                                                        </label>
-                                                                        <label style={smallToggleStyle}>
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={prize.ativo}
-                                                                                onChange={(event) => updatePrize(level.localId, prize.localId, 'ativo', event.target.checked)}
-                                                                            />
-                                                                            Ativo
-                                                                        </label>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => removePrize(level.localId, prize.localId)}
-                                                                            style={dangerTextButtonStyle}
-                                                                        >
-                                                                            Remover
-                                                                        </button>
-                                                                    </div>
-                                                                </article>
-                                                            ))}
+                                                        {level.premios.length === 0 ? (
+                                                            <div style={emptyStyle}>Nenhum premio cadastrado neste nivel.</div>
+                                                        ) : (
+                                                            <div style={prizesListStyle}>
+                                                                {level.premios
+                                                                    .slice()
+                                                                    .sort((a, b) => toPositiveInteger(a.ordem, 0) - toPositiveInteger(b.ordem, 0))
+                                                                    .map((prize) => (
+                                                                        <article key={prize.localId} style={prizeCardStyle}>
+                                                                            <div style={prizeGridStyle}>
+                                                                                <label style={fieldLabelStyle}>
+                                                                                    Tipo
+                                                                                    <select
+                                                                                        value={prize.tipoPremio}
+                                                                                        onChange={(event) => updatePrize(
+                                                                                            level.localId,
+                                                                                            prize.localId,
+                                                                                            'tipoPremio',
+                                                                                            event.target.value as RoletaTipoPremio,
+                                                                                        )}
+                                                                                        style={inputStyle}
+                                                                                    >
+                                                                                        {tipoPremioOptions.map((option) => (
+                                                                                            <option key={option.value} value={option.value}>
+                                                                                                {option.label}
+                                                                                            </option>
+                                                                                        ))}
+                                                                                    </select>
+                                                                                </label>
+                                                                                <label style={fieldLabelStyle}>
+                                                                                    Valor
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        inputMode="decimal"
+                                                                                        step="0.01"
+                                                                                        value={prize.valor}
+                                                                                        onChange={(event) => {
+                                                                                            const nextValue = event.target.value;
+                                                                                            if (isDecimalDraft(nextValue)) {
+                                                                                                updatePrize(level.localId, prize.localId, 'valor', nextValue);
+                                                                                            }
+                                                                                        }}
+                                                                                        style={inputStyle}
+                                                                                    />
+                                                                                </label>
+                                                                                <label style={fieldLabelStyle}>
+                                                                                    Ordem
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        min="1"
+                                                                                        value={prize.ordem}
+                                                                                        onChange={(event) => updatePrize(level.localId, prize.localId, 'ordem', event.target.value)}
+                                                                                        style={inputStyle}
+                                                                                    />
+                                                                                </label>
+                                                                                <label style={smallToggleStyle}>
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={prize.ativo}
+                                                                                        onChange={(event) => updatePrize(level.localId, prize.localId, 'ativo', event.target.checked)}
+                                                                                    />
+                                                                                    Ativo
+                                                                                </label>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => removePrize(level.localId, prize.localId)}
+                                                                                    style={dangerTextButtonStyle}
+                                                                                >
+                                                                                    Remover
+                                                                                </button>
+                                                                            </div>
+                                                                        </article>
+                                                                    ))}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </article>
@@ -1194,6 +1563,219 @@ export function RoletaAdminPanel() {
                         {isSaving ? 'Salvando...' : 'Salvar roleta'}
                     </button>
                 </form>
+
+                <section style={metasSectionStyle}>
+                    <div style={sectionHeaderStyle}>
+                        <strong>Metas da roleta</strong>
+                        <span>{metas.length} meta(s)</span>
+                    </div>
+
+                    <article style={metaCardStyle}>
+                        <div style={metaHeaderStyle}>
+                            <div>
+                                <strong style={metaTitleStyle}>Nova meta</strong>
+                                <span style={metaSubtitleStyle}>Criar meta configuravel para a roleta.</span>
+                            </div>
+                            <label style={smallToggleStyle}>
+                                <input
+                                    type="checkbox"
+                                    checked={newMeta.ativa}
+                                    onChange={(event) => updateNewMeta('ativa', event.target.checked)}
+                                />
+                                Ativa
+                            </label>
+                        </div>
+
+                        <div style={metaGridStyle}>
+                            <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                Titulo
+                                <input
+                                    value={newMeta.titulo}
+                                    onChange={(event) => updateNewMeta('titulo', event.target.value)}
+                                    placeholder="Ex: Meta atual do grupo"
+                                    style={inputStyle}
+                                />
+                            </label>
+                            <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                Descricao
+                                <textarea
+                                    value={newMeta.descricao}
+                                    onChange={(event) => updateNewMeta('descricao', event.target.value)}
+                                    placeholder="Descricao opcional"
+                                    style={textareaStyle}
+                                    rows={2}
+                                />
+                            </label>
+                            <label style={fieldLabelStyle}>
+                                Quantidade alvo
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={newMeta.quantidadeAlvo}
+                                    onChange={(event) => updateNewMeta('quantidadeAlvo', event.target.value)}
+                                    style={inputStyle}
+                                />
+                            </label>
+                            <label style={fieldLabelStyle}>
+                                Giros recompensa
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={newMeta.girosRecompensa}
+                                    onChange={(event) => updateNewMeta('girosRecompensa', event.target.value)}
+                                    style={inputStyle}
+                                />
+                            </label>
+                            <label style={fieldLabelStyle}>
+                                Ordem
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={newMeta.ordem}
+                                    onChange={(event) => updateNewMeta('ordem', event.target.value)}
+                                    style={inputStyle}
+                                />
+                            </label>
+                        </div>
+
+                        <button type="button" onClick={() => void createMeta()} disabled={isCreatingMeta} style={secondaryButtonStyle}>
+                            <Plus size={14} />
+                            {isCreatingMeta ? 'Criando...' : 'Adicionar meta'}
+                        </button>
+                    </article>
+
+                    {isLoadingMetas ? (
+                        <div style={emptyStyle}>Carregando metas...</div>
+                    ) : metas.length === 0 ? (
+                        <div style={emptyStyle}>Nenhuma meta cadastrada.</div>
+                    ) : (
+                        <div style={metaListStyle}>
+                            {metas.map((meta) => {
+                                const completed = isMetaConcluida(meta);
+                                const isBusy = metaActionId === meta.localId;
+
+                                return (
+                                    <article key={meta.localId} style={metaCardStyle}>
+                                        <div style={metaHeaderStyle}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <strong style={metaTitleStyle}>{meta.titulo || 'Meta sem titulo'}</strong>
+                                                <span style={metaSubtitleStyle}>
+                                                    Status: {meta.status || '--'} - Progresso: {meta.progressoAtual}/{meta.quantidadeAlvo || '0'}
+                                                </span>
+                                            </div>
+                                            <label style={smallToggleStyle}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={meta.ativa}
+                                                    onChange={(event) => updateMeta(meta.localId, 'ativa', event.target.checked)}
+                                                />
+                                                Ativa
+                                            </label>
+                                        </div>
+
+                                        {completed && (
+                                            <div style={noticeStyle}>
+                                                Meta concluida: quantidade alvo e giros recompensa ficam bloqueados no front.
+                                            </div>
+                                        )}
+
+                                        <div style={metaGridStyle}>
+                                            <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                                Titulo
+                                                <input
+                                                    value={meta.titulo}
+                                                    onChange={(event) => updateMeta(meta.localId, 'titulo', event.target.value)}
+                                                    style={inputStyle}
+                                                />
+                                            </label>
+                                            <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                                Descricao
+                                                <textarea
+                                                    value={meta.descricao}
+                                                    onChange={(event) => updateMeta(meta.localId, 'descricao', event.target.value)}
+                                                    style={textareaStyle}
+                                                    rows={2}
+                                                />
+                                            </label>
+                                            <label style={fieldLabelStyle}>
+                                                Quantidade alvo
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={meta.quantidadeAlvo}
+                                                    onChange={(event) => updateMeta(meta.localId, 'quantidadeAlvo', event.target.value)}
+                                                    disabled={completed}
+                                                    style={completed ? disabledInputStyle : inputStyle}
+                                                />
+                                            </label>
+                                            <label style={fieldLabelStyle}>
+                                                Giros recompensa
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={meta.girosRecompensa}
+                                                    onChange={(event) => updateMeta(meta.localId, 'girosRecompensa', event.target.value)}
+                                                    disabled={completed}
+                                                    style={completed ? disabledInputStyle : inputStyle}
+                                                />
+                                            </label>
+                                            <label style={fieldLabelStyle}>
+                                                Ordem
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={meta.ordem}
+                                                    onChange={(event) => updateMeta(meta.localId, 'ordem', event.target.value)}
+                                                    style={inputStyle}
+                                                />
+                                            </label>
+                                        </div>
+
+                                        <div style={metaDatesGridStyle}>
+                                            <span>Criada em: {formatMetaDate(meta.criadaEm)}</span>
+                                            <span>Atualizada em: {formatMetaDate(meta.atualizadaEm)}</span>
+                                            <span>Iniciada em: {formatMetaDate(meta.iniciadaEm)}</span>
+                                            <span>Concluida em: {formatMetaDate(meta.concluidaEm)}</span>
+                                        </div>
+
+                                        <div style={metaActionsStyle}>
+                                            <button
+                                                type="button"
+                                                onClick={() => void saveMeta(meta)}
+                                                disabled={isBusy}
+                                                style={miniButtonStyle}
+                                            >
+                                                <Save size={12} />
+                                                {isBusy ? 'Salvando...' : 'Salvar'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void resetMeta(meta)}
+                                                disabled={isBusy}
+                                                style={miniButtonStyle}
+                                            >
+                                                <RefreshCw size={12} />
+                                                Reiniciar
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void deactivateMeta(meta)}
+                                                disabled={isBusy}
+                                                style={dangerTextButtonStyle}
+                                            >
+                                                Desativar
+                                            </button>
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {metaError && <div role="alert" style={errorStyle}>{metaError}</div>}
+                    {metaSuccess && <div role="status" style={successStyle}>{metaSuccess}</div>}
+                </section>
+                </>
             )}
         </div>
     );
@@ -1232,6 +1814,13 @@ const inputStyle: CSSProperties = {
     background: '#F9F9F9',
     color: '#111',
     fontSize: '13px',
+};
+
+const disabledInputStyle: CSSProperties = {
+    ...inputStyle,
+    background: '#EFEFEF',
+    color: '#999',
+    cursor: 'not-allowed',
 };
 
 const textareaStyle: CSSProperties = {
@@ -1296,6 +1885,74 @@ const sectionStyle: CSSProperties = {
     gap: '12px',
     borderTop: '1px solid #EEE',
     paddingTop: '16px',
+};
+
+const metasSectionStyle: CSSProperties = {
+    ...sectionStyle,
+    marginTop: '18px',
+};
+
+const metaListStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+};
+
+const metaCardStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    borderRadius: '18px',
+    border: '1px solid #ECECEC',
+    background: '#FDFDFD',
+    padding: '14px',
+};
+
+const metaHeaderStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    alignItems: 'start',
+    gap: '12px',
+};
+
+const metaTitleStyle: CSSProperties = {
+    display: 'block',
+    overflow: 'hidden',
+    color: '#111',
+    fontSize: '13px',
+    fontWeight: 900,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+const metaSubtitleStyle: CSSProperties = {
+    display: 'block',
+    color: '#777',
+    fontSize: '11px',
+    lineHeight: 1.35,
+    marginTop: '3px',
+};
+
+const metaGridStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: '10px',
+};
+
+const metaDatesGridStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '6px 10px',
+    color: '#777',
+    fontSize: '10px',
+    lineHeight: 1.3,
+};
+
+const metaActionsStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
 };
 
 const sectionHeaderStyle: CSSProperties = {
@@ -1400,18 +2057,49 @@ const levelsListStyle: CSSProperties = {
 const levelCardStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '0',
     borderRadius: '18px',
     border: '1px solid #ECECEC',
     background: '#FDFDFD',
-    padding: '14px',
+    padding: '0',
+    overflow: 'hidden',
 };
 
-const levelHeaderStyle: CSSProperties = {
+const levelDropdownTriggerStyle: CSSProperties = {
     display: 'grid',
+    width: '100%',
     gridTemplateColumns: '20px minmax(0, 1fr) auto auto',
     alignItems: 'center',
     gap: '10px',
+    border: 0,
+    background: 'transparent',
+    cursor: 'pointer',
+    padding: '14px',
+    textAlign: 'left',
+};
+
+const levelDropdownContentStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    borderTop: '1px solid #EFEFEF',
+    padding: '14px',
+};
+
+const levelDropdownActionsStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+};
+
+const levelStatusPillStyle: CSSProperties = {
+    borderRadius: '999px',
+    fontSize: '10px',
+    fontWeight: 900,
+    padding: '5px 8px',
+    textTransform: 'uppercase',
+    whiteSpace: 'nowrap',
 };
 
 const colorSwatchStyle: CSSProperties = {

@@ -28,6 +28,7 @@ export const apiRoutes = {
     },
     indicacoes: {
         meuLink: '/api/indicacoes/meu-link',
+        open: (codigo: RouteId) => `/api/indicacoes/${routeId(codigo)}/abrir`,
     },
     checkout: {
         create: '/api/checkout',
@@ -72,6 +73,13 @@ export const apiRoutes = {
             create: '/api/admin/missoes',
             update: (id: RouteId) => `/api/admin/missoes/${routeId(id)}`,
             delete: (id: RouteId) => `/api/admin/missoes/${routeId(id)}`,
+        },
+        roletaMetas: {
+            list: '/api/admin/roleta/metas',
+            create: '/api/admin/roleta/metas',
+            update: (id: RouteId) => `/api/admin/roleta/metas/${routeId(id)}`,
+            delete: (id: RouteId) => `/api/admin/roleta/metas/${routeId(id)}`,
+            reset: (id: RouteId) => `/api/admin/roleta/metas/${routeId(id)}/reiniciar`,
         },
     },
 } as const;

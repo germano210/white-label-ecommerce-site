@@ -249,6 +249,11 @@
     line-height: 1.2;
 }
 
+.roleta-vip-group-goal-empty {
+    margin: 0;
+    text-align: center;
+}
+
 .roleta-vip-inline-error {
     margin: 0;
     border-radius: 9px;

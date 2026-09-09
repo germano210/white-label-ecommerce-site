@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
+import { useEffect, useState } from 'react';
 import {
     BrowserRouter,
     Navigate,
@@ -19,47 +18,15 @@ import { type AuthUser, useAuthStore } from './store/useAuthStore';
 import { api, isCookieAuthMode } from './utils/api';
 import { apiRoutes } from './utils/apiRoutes';
 import { appRoutes } from './utils/appRoutes';
+import {
+    clearPendingIndicationCode,
+    storePendingIndicationCode,
+} from './utils/indicacaoReferral';
 
-const pendingRoletaInviteStorageKey = 'viabras-pending-roleta-invite-code';
-const attemptedRoletaInviteStoragePrefix = 'viabras-attempted-roleta-invite-code';
+const openedIndicationStoragePrefix = 'brechodacami-opened-indication-code';
 
-function getAttemptedRoletaInviteStorageKey(inviteCode: string) {
-    return `${attemptedRoletaInviteStoragePrefix}:${encodeURIComponent(inviteCode)}`;
-}
-
-function waitForRoletaBootstrapRetry(durationMs: number) {
-    return new Promise((resolve) => {
-        window.setTimeout(resolve, durationMs);
-    });
-}
-
-function isRoletaParticipantConflictError(error: unknown) {
-    if (!axios.isAxiosError(error)) return false;
-
-    const responseText = typeof error.response?.data === 'string'
-        ? error.response.data
-        : JSON.stringify(error.response?.data ?? {});
-
-    return error.response?.status === 500 && (
-        responseText.includes('uk_roleta_participante_usuario')
-        || responseText.includes('roleta_participantes')
-        || responseText.toLowerCase().includes('duplicate key')
-    );
-}
-
-async function postRoletaInviteWithParticipantRetry(inviteCode: string) {
-    try {
-        await api.post(apiRoutes.roleta.convites, {
-            codigoConvite: inviteCode,
-        });
-    } catch (error) {
-        if (!isRoletaParticipantConflictError(error)) throw error;
-
-        await waitForRoletaBootstrapRetry(450);
-        await api.post(apiRoutes.roleta.convites, {
-            codigoConvite: inviteCode,
-        });
-    }
+function getOpenedIndicationStorageKey(indicationCode: string) {
+    return `${openedIndicationStoragePrefix}:${encodeURIComponent(indicationCode)}`;
 }
 
 interface AuthMeResponse {
@@ -112,9 +79,7 @@ function AppRoutes() {
     const hasHydrated = useAuthStore((state) => state.hasHydrated);
     const setSession = useAuthStore((state) => state.setSession);
     const logout = useAuthStore((state) => state.logout);
-    const [pendingRoletaInviteCode, setPendingRoletaInviteCode] = useState<string | null>(null);
     const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
-    const registeringRoletaInviteCodeRef = useRef<string | null>(null);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const isAdminRoute = normalizedPathname === appRoutes.admin;
     const isRoletaRoute = normalizedPathname === appRoutes.root || normalizedPathname === appRoutes.roletaVip;
@@ -125,21 +90,20 @@ function AppRoutes() {
 
         const params = new URLSearchParams(location.search);
         const inviteCode = params.get('ref')?.trim();
-        const storedInviteCode = window.sessionStorage.getItem(pendingRoletaInviteStorageKey);
-        const nextInviteCode = inviteCode || storedInviteCode;
+        if (!inviteCode) return;
 
-        if (nextInviteCode) {
-            if (
-                registeringRoletaInviteCodeRef.current === nextInviteCode
-                || window.sessionStorage.getItem(getAttemptedRoletaInviteStorageKey(nextInviteCode)) === '1'
-            ) {
-                return;
-            }
-
-            window.sessionStorage.setItem(pendingRoletaInviteStorageKey, nextInviteCode);
-            setPendingRoletaInviteCode(nextInviteCode);
+        if (!isAuthenticated) {
+            storePendingIndicationCode(inviteCode);
         }
-    }, [isAdminRoute, isRoletaRoute, location.search]);
+
+        const openedStorageKey = getOpenedIndicationStorageKey(inviteCode);
+        if (window.sessionStorage.getItem(openedStorageKey) === '1') return;
+
+        window.sessionStorage.setItem(openedStorageKey, '1');
+        void api.post(apiRoutes.indicacoes.open(inviteCode)).catch(() => {
+            // A roleta continua acessivel mesmo se o tracking da abertura falhar.
+        });
+    }, [isAdminRoute, isAuthenticated, isRoletaRoute, location.search]);
 
     useEffect(() => {
         void fetchPublicConfiguracoes();
@@ -177,49 +141,18 @@ function AppRoutes() {
     }, [hasHydrated, logout, setSession]);
 
     useEffect(() => {
-        if (!isRoletaRoute || !hasHydrated || !pendingRoletaInviteCode || !isAuthenticated || !user) return;
-        if (registeringRoletaInviteCodeRef.current === pendingRoletaInviteCode) return;
+        if (!isRoletaRoute || !hasHydrated || !isAuthenticated) return;
 
-        const attemptedInviteStorageKey = getAttemptedRoletaInviteStorageKey(pendingRoletaInviteCode);
-        if (window.sessionStorage.getItem(attemptedInviteStorageKey) === '1') {
-            window.sessionStorage.removeItem(pendingRoletaInviteStorageKey);
-            setPendingRoletaInviteCode(null);
-            return;
-        }
+        clearPendingIndicationCode();
 
-        let isActive = true;
-        registeringRoletaInviteCodeRef.current = pendingRoletaInviteCode;
+        const params = new URLSearchParams(location.search);
+        if (!params.has('ref')) return;
 
-        const registerRoletaInvite = async () => {
-            try {
-                await postRoletaInviteWithParticipantRetry(pendingRoletaInviteCode);
-            } catch {
-                // O acesso a roleta nao depende da conversao do convite.
-            } finally {
-                window.sessionStorage.setItem(attemptedInviteStorageKey, '1');
-                if (registeringRoletaInviteCodeRef.current === pendingRoletaInviteCode) {
-                    registeringRoletaInviteCodeRef.current = null;
-                }
-
-                if (!isActive) return;
-
-                window.sessionStorage.removeItem(pendingRoletaInviteStorageKey);
-                setPendingRoletaInviteCode(null);
-
-                const params = new URLSearchParams(location.search);
-                params.delete('ref');
-                navigate({
-                    pathname: location.pathname,
-                    search: params.toString() ? `?${params.toString()}` : '',
-                }, { replace: true });
-            }
-        };
-
-        void registerRoletaInvite();
-
-        return () => {
-            isActive = false;
-        };
+        params.delete('ref');
+        navigate({
+            pathname: location.pathname,
+            search: params.toString() ? `?${params.toString()}` : '',
+        }, { replace: true });
     }, [
         hasHydrated,
         isAuthenticated,
@@ -227,8 +160,6 @@ function AppRoutes() {
         location.pathname,
         location.search,
         navigate,
-        pendingRoletaInviteCode,
-        user,
     ]);
 
     if (!hasHydrated || isRestoringCookieSession) {

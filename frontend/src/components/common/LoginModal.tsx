@@ -3,6 +3,10 @@ import axios from 'axios';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
+import {
+    clearPendingIndicationCode,
+    getPendingIndicationCode,
+} from '../../utils/indicacaoReferral';
 import { BrechoDaCamiLogo } from './BrechoDaCamiLogo';
 import './LoginModal.css';
 
@@ -35,6 +39,16 @@ interface VerifyOtpResponse {
 interface RequestOtpResponse {
     status?: string;
     message?: string;
+}
+
+interface RequestOtpPayload {
+    telefone: string;
+    codigoIndicacao?: string;
+}
+
+interface VerifyOtpPayload {
+    telefone: string;
+    codigo: string;
 }
 
 interface AuthMeResponse {
@@ -136,9 +150,16 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
         setIsLoading(true);
 
         try {
-            const { data } = await api.post<RequestOtpResponse>(apiRoutes.auth.requestOtp, {
+            const pendingIndicationCode = getPendingIndicationCode();
+            const payload: RequestOtpPayload = {
                 telefone: phoneDigits,
-            });
+            };
+
+            if (pendingIndicationCode) {
+                payload.codigoIndicacao = pendingIndicationCode;
+            }
+
+            const { data } = await api.post<RequestOtpResponse>(apiRoutes.auth.requestOtp, payload);
 
             if (accessMode === 'first' && isDuplicatePhoneResponse(data)) {
                 setNotice('Já possui este número em nosso cadastro iremos enviar o código para fazer o login normalmente.');
@@ -175,10 +196,12 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
         setIsLoading(true);
 
         try {
-            const { data } = await api.post<VerifyOtpResponse>(apiRoutes.auth.verifyOtp, {
+            const payload: VerifyOtpPayload = {
                 telefone: phoneDigits,
                 codigo: otp,
-            });
+            };
+
+            const { data } = await api.post<VerifyOtpResponse>(apiRoutes.auth.verifyOtp, payload);
             const token = data.token ?? data.accessToken ?? null;
 
             if (!token && !isCookieAuthMode) {
@@ -202,6 +225,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
             };
 
             setSession(token, user);
+            clearPendingIndicationCode();
         } catch (verificationError) {
             setError(getErrorMessage(
                 verificationError,

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface IndicacaoRepository extends JpaRepository<Indicacao, Long> {
@@ -15,4 +16,15 @@ public interface IndicacaoRepository extends JpaRepository<Indicacao, Long> {
             where indicacao.usuarioIndicado.id = :usuarioIndicadoId
             """)
     boolean existsByUsuarioIndicadoId(@Param("usuarioIndicadoId") UUID usuarioIndicadoId);
+
+    @Query("""
+            select indicacao
+            from Indicacao indicacao
+            join fetch indicacao.usuarioIndicador
+            where indicacao.usuarioIndicado.id = :usuarioIndicadoId
+            order by indicacao.id asc
+            """)
+    List<Indicacao> findByUsuarioIndicadoIdFetchIndicador(
+            @Param("usuarioIndicadoId") UUID usuarioIndicadoId
+    );
 }
