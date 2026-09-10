@@ -1181,6 +1181,7 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",
@@ -1200,7 +1201,7 @@ class RoletaControllerTest {
                                 }
                                 """)
                         .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Ordem do nivel da roleta repetida: 1"));
     }
 
@@ -1213,6 +1214,7 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",
@@ -1232,7 +1234,7 @@ class RoletaControllerTest {
                                 }
                                 """)
                         .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Nome do nivel da roleta repetido: grau militar"));
     }
 
@@ -1267,6 +1269,105 @@ class RoletaControllerTest {
     }
 
     @Test
+    void shouldUpdateGeneralConfigWithoutChangingLevelsWhenFlagIsAbsent() throws Exception {
+        Usuario admin = criarAdmin("551199992049");
+        RoletaNivel nivel = criarNivel("Grau Militar", 1, "#4b69ff", "1.00000000", true);
+
+        mockMvc.perform(put("/api/admin/roleta")
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "giroDiarioQuantidade": 3,
+                                  "niveis": []
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.giroDiarioQuantidade").value(3))
+                .andExpect(jsonPath("$.niveis.length()").value(1))
+                .andExpect(jsonPath("$.niveis[0].id").value(nivel.getId()))
+                .andExpect(jsonPath("$.niveis[0].ativo").value(true));
+
+        assertEquals(1, roletaNivelRepository.count());
+        assertEquals(true, roletaNivelRepository.findById(nivel.getId()).orElseThrow().getAtivo());
+    }
+
+    @Test
+    void shouldOnlyClearLevelsWhenExplicitlyRequested() throws Exception {
+        Usuario admin = criarAdmin("551199992050");
+        RoletaNivel primeiro = criarNivel("Grau Militar", 1, "#4b69ff", "1.00000000", true);
+        RoletaNivel segundo = criarNivel("Restrito", 2, "#8847ff", "0.20000000", true);
+
+        mockMvc.perform(put("/api/admin/roleta")
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "niveis": []
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.niveis.length()").value(2));
+
+        assertEquals(true, roletaNivelRepository.findById(primeiro.getId()).orElseThrow().getAtivo());
+        assertEquals(true, roletaNivelRepository.findById(segundo.getId()).orElseThrow().getAtivo());
+
+        mockMvc.perform(put("/api/admin/roleta")
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "atualizarNiveis": true,
+                                  "niveis": []
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.niveis.length()").value(2))
+                .andExpect(jsonPath("$.niveis[0].ativo").value(false))
+                .andExpect(jsonPath("$.niveis[1].ativo").value(false));
+
+        mockMvc.perform(get("/api/roleta").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.niveis.length()").value(0));
+    }
+
+    @Test
+    void shouldReuseExistingLevelWhenPayloadLosesIdButKeepsNameOrOrder() throws Exception {
+        Usuario admin = criarAdmin("551199992051");
+        RoletaNivel nivel = criarNivel("Grau Militar", 1, "#4b69ff", "1.00000000", true);
+
+        mockMvc.perform(put("/api/admin/roleta")
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "atualizarNiveis": true,
+                                  "niveis": [
+                                    {
+                                      "nome": "Grau Militar",
+                                      "corHex": "#0055aa",
+                                      "ordem": 1,
+                                      "pesoRelativo": 1.2,
+                                      "ativo": true
+                                    }
+                                  ]
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.niveis.length()").value(1))
+                .andExpect(jsonPath("$.niveis[0].id").value(nivel.getId()))
+                .andExpect(jsonPath("$.niveis[0].corHex").value("#0055aa"))
+                .andExpect(jsonPath("$.niveis[0].pesoRelativo").value(1.2));
+
+        assertEquals(1, roletaNivelRepository.count());
+        assertEquals(nivel.getId(), roletaNivelRepository.findAllByOrderByOrdemAscIdAsc().get(0).getId());
+    }
+
+    @Test
     void shouldIgnoreLegacyInternalPrizeWeightAndGeneratePrizeTitle() throws Exception {
         Usuario admin = criarAdmin("551199992012");
         RoletaNivel nivel = criarNivel("Grau Militar", 1, "#4b69ff", "1.00000000", true);
@@ -1276,14 +1377,24 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "premios": [
+                                  "atualizarNiveis": true,
+                                  "niveis": [
                                     {
-                                      "nivelId": %d,
-                                      "tipoPremio": "DESCONTO_VALOR",
-                                      "valor": 1.00,
-                                      "pesoInterno": 0,
+                                      "id": %d,
+                                      "nome": "Grau Militar",
+                                      "corHex": "#4b69ff",
+                                      "ordem": 1,
+                                      "pesoRelativo": 1,
                                       "ativo": true,
-                                      "ordem": 0
+                                      "premios": [
+                                        {
+                                          "tipoPremio": "DESCONTO_VALOR",
+                                          "valor": 1.00,
+                                          "pesoInterno": 0,
+                                          "ativo": true,
+                                          "ordem": 0
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -1325,6 +1436,7 @@ class RoletaControllerTest {
                         .content("""
                                 {
                                   "multiplicadorDificuldadePadrao": 5.00,
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Peso Decimal",
@@ -1373,6 +1485,7 @@ class RoletaControllerTest {
                                 {
                                   "multiplicadorDificuldadePadrao": 5.00,
                                   "usarPesosManuais": false,
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",
@@ -1431,6 +1544,7 @@ class RoletaControllerTest {
                         .content("""
                                 {
                                   "usarPesosManuais": false,
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "id": %d,
@@ -1655,13 +1769,22 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "premios": [
+                                  "atualizarNiveis": true,
+                                  "niveis": [
                                     {
-                                      "nivelId": %d,
-                                      "tipoPremio": "DESCONTO_VALOR",
-                                      "valor": 6.00,
+                                      "id": %d,
+                                      "nome": "Grau Militar",
+                                      "corHex": "#4b69ff",
+                                      "ordem": 1,
                                       "ativo": true,
-                                      "ordem": 0
+                                      "premios": [
+                                        {
+                                          "tipoPremio": "DESCONTO_VALOR",
+                                          "valor": 6.00,
+                                          "ativo": true,
+                                          "ordem": 0
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -1692,6 +1815,7 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",
@@ -1750,6 +1874,7 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "id": %d,
@@ -1789,13 +1914,22 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "premios": [
+                                  "atualizarNiveis": true,
+                                  "niveis": [
                                     {
-                                      "nivelId": %d,
-                                      "tipoPremio": "GIRO_EXTRA",
-                                      "valor": 1.00,
+                                      "id": %d,
+                                      "nome": "Grau Militar",
+                                      "corHex": "#4b69ff",
+                                      "ordem": 1,
                                       "ativo": true,
-                                      "ordem": 0
+                                      "premios": [
+                                        {
+                                          "tipoPremio": "GIRO_EXTRA",
+                                          "valor": 1.00,
+                                          "ativo": true,
+                                          "ordem": 0
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -1815,12 +1949,21 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "premios": [
+                                  "atualizarNiveis": true,
+                                  "niveis": [
                                     {
-                                      "nivelId": %d,
-                                      "tipoPremio": "DESCONTO_VALOR",
+                                      "id": %d,
+                                      "nome": "Grau Militar",
+                                      "corHex": "#4b69ff",
+                                      "ordem": 1,
                                       "ativo": true,
-                                      "ordem": 0
+                                      "premios": [
+                                        {
+                                          "tipoPremio": "DESCONTO_VALOR",
+                                          "ativo": true,
+                                          "ordem": 0
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -1841,6 +1984,7 @@ class RoletaControllerTest {
                         .content("""
                                 {
                                   "produtoIds": [%d],
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",
@@ -1866,6 +2010,7 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "id": %d,
@@ -1906,6 +2051,7 @@ class RoletaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",
@@ -2018,6 +2164,7 @@ class RoletaControllerTest {
                                   "multiplicadorDificuldadePadrao": 5.00,
                                   "usarPesosManuais": true,
                                   "produtoIds": [%d],
+                                  "atualizarNiveis": true,
                                   "niveis": [
                                     {
                                       "nome": "Grau Militar",

@@ -35,6 +35,7 @@ import com.whiteLabel.backend.dto.RoletaOpcaoResponse;
 import com.whiteLabel.backend.dto.RoletaPremioConfiguradoResponse;
 import com.whiteLabel.backend.dto.RoletaPremioFaixaResponse;
 import com.whiteLabel.backend.dto.RoletaPremioResponse;
+import com.whiteLabel.backend.dto.RoletaSaqueResponse;
 import com.whiteLabel.backend.dto.RoletaStatusResponse;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
@@ -64,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -103,6 +105,7 @@ public class RoletaService {
     private final ProdutoService produtoService;
     private final PedidoService pedidoService;
     private final RoletaMetaService roletaMetaService;
+    private final RoletaInteracaoService roletaInteracaoService;
     private final IndicacaoService indicacaoService;
     private final UsuarioRepository usuarioRepository;
     private final SecureRandom secureRandom;
@@ -121,6 +124,7 @@ public class RoletaService {
             ProdutoService produtoService,
             PedidoService pedidoService,
             RoletaMetaService roletaMetaService,
+            RoletaInteracaoService roletaInteracaoService,
             IndicacaoService indicacaoService,
             UsuarioRepository usuarioRepository
     ) {
@@ -136,6 +140,7 @@ public class RoletaService {
         this.produtoService = produtoService;
         this.pedidoService = pedidoService;
         this.roletaMetaService = roletaMetaService;
+        this.roletaInteracaoService = roletaInteracaoService;
         this.indicacaoService = indicacaoService;
         this.usuarioRepository = usuarioRepository;
         this.secureRandom = new SecureRandom();
@@ -203,11 +208,8 @@ public class RoletaService {
             );
         }
 
-        if (roletaMetaService.possuiMetasConfiguradas()) {
-            roletaMetaService.registrarAcaoGrupo();
-        } else {
-            incrementarProgressoGrupo(config);
-        }
+        roletaInteracaoService.registrarGiroRoleta(usuario, giro);
+        roletaInteracaoService.registrarPremioRecebido(usuario, nivelSorteado, premioSorteado, giro);
         roletaParticipanteRepository.save(participante);
         roletaConfigRepository.save(config);
 
@@ -370,12 +372,11 @@ public class RoletaService {
         if (deveAtualizarProdutosSelecionados(request)) {
             atualizarProdutosSelecionados(request.produtoIds());
         }
-        boolean possuiPremiosAninhados = possuiPremiosAninhados(request);
-        if (request.niveis() != null) {
-            atualizarNiveis(config, request.niveis());
-        }
-        if (!possuiPremiosAninhados && request.premios() != null) {
-            atualizarPremios(request.premios());
+        if (deveAtualizarNiveis(request)) {
+            atualizarNiveis(
+                    config,
+                    request.niveis() == null ? List.of() : request.niveis()
+            );
         }
 
         return montarAdminResponse(roletaConfigRepository.save(config));
@@ -386,10 +387,8 @@ public class RoletaService {
                 && (!request.produtoIds().isEmpty() || Boolean.TRUE.equals(request.atualizarProdutos()));
     }
 
-    private boolean possuiPremiosAninhados(AdminRoletaRequest request) {
-        return request.niveis() != null
-                && request.niveis().stream()
-                .anyMatch(nivel -> nivel != null && nivel.premios() != null);
+    private boolean deveAtualizarNiveis(AdminRoletaRequest request) {
+        return Boolean.TRUE.equals(request.atualizarNiveis());
     }
 
     private RoletaConfig obterConfig() {
@@ -964,6 +963,8 @@ public class RoletaService {
         Map<Long, RoletaNivel> niveisPorId = existentes.stream()
                 .filter(nivel -> nivel.getId() != null)
                 .collect(Collectors.toMap(RoletaNivel::getId, Function.identity()));
+        Map<String, RoletaNivel> niveisPorNome = mapearNiveisPorNome(existentes);
+        Map<Integer, RoletaNivel> niveisPorOrdem = mapearNiveisPorOrdem(existentes);
 
         Set<Long> idsRecebidos = new LinkedHashSet<>();
         List<RoletaNivel> proximosNiveis = new ArrayList<>();
@@ -976,25 +977,28 @@ public class RoletaService {
                         Comparator.nullsLast(Comparator.naturalOrder())
                 )))
                 .toList();
-        validarDuplicidadeNiveis(requestsOrdenados);
+        validarDuplicidadeNiveis(requestsOrdenados, niveisPorId);
 
         for (AdminRoletaNivelRequest request : requestsOrdenados) {
             validarNivelRequest(request);
 
-            RoletaNivel nivel = request.id() == null
-                    ? new RoletaNivel()
-                    : niveisPorId.get(request.id());
-
-            if (request.id() != null && nivel == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Nivel da roleta nao encontrado: " + request.id()
-                );
-            }
             if (request.id() != null && !idsRecebidos.add(request.id())) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "Nivel da roleta repetido: " + request.id()
+                );
+            }
+
+            RoletaNivel nivel = resolverNivelParaAtualizacao(
+                    request,
+                    niveisPorId,
+                    niveisPorNome,
+                    niveisPorOrdem
+            );
+            if (request.id() == null && nivel.getId() != null && !idsRecebidos.add(nivel.getId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Nivel da roleta repetido: " + nivel.getId()
                 );
             }
 
@@ -1019,7 +1023,10 @@ public class RoletaService {
         premiosPorNivel.forEach(premios -> atualizarPremiosDoNivel(premios.nivel(), premios.premios()));
     }
 
-    private void validarDuplicidadeNiveis(List<AdminRoletaNivelRequest> requests) {
+    private void validarDuplicidadeNiveis(
+            List<AdminRoletaNivelRequest> requests,
+            Map<Long, RoletaNivel> niveisPorId
+    ) {
         Set<Integer> ordensRecebidas = new LinkedHashSet<>();
         Set<String> nomesRecebidos = new LinkedHashSet<>();
 
@@ -1027,22 +1034,121 @@ public class RoletaService {
             if (request == null) {
                 continue;
             }
+            if (!isNivelAtivoNoPayload(request, niveisPorId)) {
+                continue;
+            }
             if (request.ordem() != null && !ordensRecebidas.add(request.ordem())) {
                 throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
+                        HttpStatus.CONFLICT,
                         "Ordem do nivel da roleta repetida: " + request.ordem()
                 );
             }
             if (request.nome() != null && !request.nome().isBlank()) {
-                String nomeNormalizado = request.nome().trim().toLowerCase(Locale.ROOT);
+                String nomeNormalizado = normalizarNomeNivel(request.nome());
                 if (!nomesRecebidos.add(nomeNormalizado)) {
                     throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST,
+                            HttpStatus.CONFLICT,
                             "Nome do nivel da roleta repetido: " + request.nome().trim()
                     );
                 }
             }
         }
+    }
+
+    private RoletaNivel resolverNivelParaAtualizacao(
+            AdminRoletaNivelRequest request,
+            Map<Long, RoletaNivel> niveisPorId,
+            Map<String, RoletaNivel> niveisPorNome,
+            Map<Integer, RoletaNivel> niveisPorOrdem
+    ) {
+        if (request.id() != null) {
+            RoletaNivel nivel = niveisPorId.get(request.id());
+            if (nivel == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Nivel da roleta nao encontrado: " + request.id()
+                );
+            }
+            return nivel;
+        }
+
+        RoletaNivel nivelPorNome = request.nome() == null || request.nome().isBlank()
+                ? null
+                : niveisPorNome.get(normalizarNomeNivel(request.nome()));
+        RoletaNivel nivelPorOrdem = request.ordem() == null
+                ? null
+                : niveisPorOrdem.get(request.ordem());
+
+        if (nivelPorNome != null
+                && nivelPorOrdem != null
+                && !nivelPorNome.getId().equals(nivelPorOrdem.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Nome e ordem do nivel apontam para registros diferentes"
+            );
+        }
+
+        if (nivelPorNome != null) {
+            return nivelPorNome;
+        }
+        if (nivelPorOrdem != null) {
+            return nivelPorOrdem;
+        }
+
+        return new RoletaNivel();
+    }
+
+    private Map<String, RoletaNivel> mapearNiveisPorNome(List<RoletaNivel> niveis) {
+        return niveis.stream()
+                .filter(nivel -> nivel.getNome() != null && !nivel.getNome().isBlank())
+                .collect(Collectors.toMap(
+                        nivel -> normalizarNomeNivel(nivel.getNome()),
+                        Function.identity(),
+                        this::preferirNivelAtivoOuMaisAntigo
+                ));
+    }
+
+    private Map<Integer, RoletaNivel> mapearNiveisPorOrdem(List<RoletaNivel> niveis) {
+        return niveis.stream()
+                .filter(nivel -> nivel.getOrdem() != null)
+                .collect(Collectors.toMap(
+                        RoletaNivel::getOrdem,
+                        Function.identity(),
+                        this::preferirNivelAtivoOuMaisAntigo
+                ));
+    }
+
+    private RoletaNivel preferirNivelAtivoOuMaisAntigo(RoletaNivel atual, RoletaNivel candidato) {
+        if (!Boolean.TRUE.equals(atual.getAtivo()) && Boolean.TRUE.equals(candidato.getAtivo())) {
+            return candidato;
+        }
+        if (Boolean.TRUE.equals(atual.getAtivo()) && !Boolean.TRUE.equals(candidato.getAtivo())) {
+            return atual;
+        }
+        if (atual.getId() == null) {
+            return candidato;
+        }
+        if (candidato.getId() == null) {
+            return atual;
+        }
+        return atual.getId() <= candidato.getId() ? atual : candidato;
+    }
+
+    private boolean isNivelAtivoNoPayload(
+            AdminRoletaNivelRequest request,
+            Map<Long, RoletaNivel> niveisPorId
+    ) {
+        if (request.ativo() != null) {
+            return request.ativo();
+        }
+        if (request.id() != null && niveisPorId.containsKey(request.id())) {
+            return Boolean.TRUE.equals(niveisPorId.get(request.id()).getAtivo());
+        }
+        return true;
+    }
+
+    private String normalizarNomeNivel(String nome) {
+        return nome.trim().toLowerCase(Locale.ROOT);
     }
 
     private void aplicarNivel(

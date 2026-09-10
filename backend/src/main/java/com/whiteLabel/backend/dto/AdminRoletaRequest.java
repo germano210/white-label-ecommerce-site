@@ -21,6 +21,7 @@ public record AdminRoletaRequest(
         BigDecimal multiplicadorDificuldadePadrao,
         Boolean usarPesosManuais,
         Boolean atualizarProdutos,
+        Boolean atualizarNiveis,
         List<Long> produtoIds,
         List<@Valid AdminRoletaNivelRequest> niveis,
         List<@Valid AdminRoletaOpcaoRequest> opcoes,

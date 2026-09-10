@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, Gift, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Gift, Pencil, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { api } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
 import { getImageUrl } from '../../utils/imageUtils';
@@ -11,6 +11,12 @@ interface ProdutoAdmin {
     id: number | string;
     nome: string;
     precoVenda: number | string;
+    precoAntigo?: number | string | null;
+    precoCusto?: number | string | null;
+    preco_custo?: number | string | null;
+    condicao?: number | string | null;
+    condicaoRoupa?: number | string | null;
+    condicao_roupa?: number | string | null;
     tamanho?: string | null;
     imagemUrl?: string | null;
     imagens?: ProdutoImagemApi[] | null;
@@ -181,6 +187,16 @@ interface RoletaMetaForm {
     concluidaEm: string;
 }
 
+interface ProdutoRoletaEditState {
+    id: number;
+    nome: string;
+    precoVenda: string;
+    precoAntigo: string;
+    precoCusto: string;
+    condicao: string;
+    tamanho: string;
+}
+
 interface RoletaMetaPayload {
     titulo: string;
     descricao: string | null;
@@ -191,7 +207,7 @@ interface RoletaMetaPayload {
 }
 
 interface RoletaNivelPayload {
-    id?: number | string | null;
+    id?: number | string;
     nome: string;
     descricao?: string | null;
     corHex: string;
@@ -202,8 +218,7 @@ interface RoletaNivelPayload {
 }
 
 interface RoletaPremioPayload {
-    id?: number | string | null;
-    nivelId?: number | string | null;
+    id?: number | string;
     tipoPremio: RoletaTipoPremio;
     valor: number;
     ordem: number;
@@ -272,6 +287,10 @@ function decimalPayloadValue(value: string, fallback = '0') {
     if (!Number.isFinite(parsedValue) || parsedValue < 0) return fallback;
 
     return normalizedValue;
+}
+
+function getPersistedId(value: number | string | null | undefined) {
+    return value === null || value === undefined || value === '' ? undefined : value;
 }
 
 function toBoolean(value: boolean | number | string | null | undefined, fallback = true) {
@@ -419,6 +438,55 @@ function getProdutoMainImage(produto: ProdutoAdmin) {
     return getImageUrl(orderedImages[0]?.path ?? produto.imagemUrl);
 }
 
+function getProdutoCondicao(produto: ProdutoAdmin) {
+    const rawValue = produto.condicao ?? produto.condicaoRoupa ?? produto.condicao_roupa;
+    if (rawValue === null || rawValue === undefined || rawValue === '') return '';
+
+    return decimalInputValue(rawValue);
+}
+
+function getProdutoPrecoCusto(produto: ProdutoAdmin) {
+    return decimalInputValue(produto.precoCusto ?? produto.preco_custo);
+}
+
+function createProdutoRoletaEditState(produto: ProdutoAdmin): ProdutoRoletaEditState {
+    return {
+        id: Number(produto.id),
+        nome: produto.nome,
+        precoVenda: decimalInputValue(produto.precoVenda),
+        precoAntigo: decimalInputValue(produto.precoAntigo),
+        precoCusto: getProdutoPrecoCusto(produto),
+        condicao: getProdutoCondicao(produto),
+        tamanho: produto.tamanho ?? '',
+    };
+}
+
+function getProdutoExistingImages(produto: ProdutoAdmin) {
+    const images = (produto.imagens ?? [])
+        .map((image, index) => ({
+            url: getProdutoImagePath(image),
+            principal: typeof image === 'object' && image !== null
+                ? isPrincipalImage(image.principal)
+                : index === 0,
+            ordem: typeof image === 'object' && image !== null
+                ? Number(image.ordem ?? index)
+                : index,
+        }))
+        .filter((image) => image.url.trim())
+        .sort((a, b) => a.ordem - b.ordem);
+
+    if (images.length > 0) {
+        const hasPrincipal = images.some((image) => image.principal);
+        return hasPrincipal
+            ? images
+            : images.map((image, index) => ({ ...image, principal: index === 0 }));
+    }
+
+    return produto.imagemUrl
+        ? [{ url: produto.imagemUrl, principal: true, ordem: 0 }]
+        : [];
+}
+
 function formatPrice(value: number | string) {
     const parsedValue = typeof value === 'number'
         ? value
@@ -551,7 +619,7 @@ function normalizeMetasResponse(data: AdminRoletaMetaApi[] | AdminRoletaMetasRes
 
 function createFormFromRoleta(roleta?: AdminRoletaResponse | null): RoletaFormState {
     return {
-        ativa: roleta?.ativa ?? true,
+        ativa: true,
         titulo: roleta?.titulo ?? 'Brecho da Cami',
         metaGrupo: String(roleta?.metaGrupo ?? 20),
         girosBonusGrupo: String(roleta?.girosBonusGrupo ?? 2),
@@ -590,15 +658,18 @@ function calculateLevelChances(levels: RoletaLevelForm[]) {
     }, {});
 }
 
-function createPayload(form: RoletaFormState, selectedIds: number[], atualizarProdutos: boolean) {
+function createPayload(
+    form: RoletaFormState,
+    selectedIds: number[],
+    atualizarProdutos: boolean,
+    atualizarNiveis: boolean,
+) {
     const multiplier = toPositiveDecimal(form.multiplicadorDificuldadePadrao, 5, 1.01);
     const niveis: RoletaNivelPayload[] = form.niveis
         .map((level, levelIndex) => {
             const ordem = Math.max(1, toPositiveInteger(level.ordem, levelIndex + 1));
             const preset = rarityPresets[(ordem - 1) % rarityPresets.length];
-
-            return {
-                id: level.id,
+            const payloadLevel: RoletaNivelPayload = {
                 nome: level.nome.trim() || `Nivel ${ordem}`,
                 corHex: normalizeHexColor(level.corHex, preset.corHex),
                 ordem,
@@ -606,47 +677,44 @@ function createPayload(form: RoletaFormState, selectedIds: number[], atualizarPr
                 ativo: level.ativo,
                 premios: level.premios
                     .map((prize, prizeIndex) => {
-                        const tipoPremio = prize.tipoPremio;
-                        const value = toPositiveDecimal(prize.valor, 0);
-
-                        return {
-                            id: prize.id,
-                            nivelId: prize.nivelId ?? level.id,
-                            tipoPremio,
-                            valor: value,
+                        const payloadPrize: RoletaPremioPayload = {
+                            tipoPremio: prize.tipoPremio,
+                            valor: toPositiveDecimal(prize.valor, 0),
                             ordem: Math.max(1, toPositiveInteger(prize.ordem, prizeIndex + 1)),
                             ativo: prize.ativo,
                         };
+                        const prizeId = getPersistedId(prize.id);
+
+                        return prizeId === undefined
+                            ? payloadPrize
+                            : { ...payloadPrize, id: prizeId };
                     })
                     .sort((a, b) => a.ordem - b.ordem),
             };
+            const levelId = getPersistedId(level.id);
+
+            if (level.descricao.trim()) {
+                payloadLevel.descricao = level.descricao.trim();
+            }
+
+            return levelId === undefined
+                ? payloadLevel
+                : { ...payloadLevel, id: levelId };
         })
         .sort((a, b) => a.ordem - b.ordem);
 
     const payload: {
-        ativa: boolean;
-        titulo: string;
-        metaGrupo: number;
-        girosBonusGrupo: number;
-        girosIniciais: number;
         giroDiarioQuantidade: number;
-        giroDiarioSomenteQuandoZerar: boolean;
         girosGanhosPorConvite: number;
         multiplicadorDificuldadePadrao: number;
         atualizarProdutos?: boolean;
         produtoIds?: number[];
-        niveis: RoletaNivelPayload[];
+        atualizarNiveis?: boolean;
+        niveis?: RoletaNivelPayload[];
     } = {
-        ativa: form.ativa,
-        titulo: form.titulo.trim(),
-        metaGrupo: Math.max(1, toPositiveInteger(form.metaGrupo, 20)),
-        girosBonusGrupo: toPositiveInteger(form.girosBonusGrupo, 2),
-        girosIniciais: toPositiveInteger(form.girosIniciais, 8),
         giroDiarioQuantidade: toPositiveInteger(form.giroDiarioQuantidade, 1),
-        giroDiarioSomenteQuandoZerar: form.giroDiarioSomenteQuandoZerar,
         girosGanhosPorConvite: toPositiveInteger(form.girosGanhosPorConvite, 1),
         multiplicadorDificuldadePadrao: multiplier,
-        niveis,
     };
 
     if (atualizarProdutos) {
@@ -654,23 +722,25 @@ function createPayload(form: RoletaFormState, selectedIds: number[], atualizarPr
         payload.produtoIds = selectedIds;
     }
 
+    if (atualizarNiveis) {
+        payload.atualizarNiveis = true;
+        payload.niveis = niveis;
+    }
+
     return payload;
 }
 
-function getValidationError(form: RoletaFormState) {
+function getValidationError(form: RoletaFormState, shouldValidateLevels: boolean) {
+    if (!shouldValidateLevels) {
+        return '';
+    }
+
     const activeLevels = form.niveis.filter((level) => level.ativo);
-    const hasActivePrize = activeLevels.some((level) => (
-        level.premios.some((prize) => prize.ativo)
-    ));
 
     const hasInvalidLevelColor = form.niveis.some((level) => !isCompleteHexColor(level.corHex));
 
     if (hasInvalidLevelColor) {
         return 'Informe a cor do nivel em hexadecimal. Ex: #E83E8C.';
-    }
-
-    if (!hasActivePrize) {
-        return 'Cadastre pelo menos um nivel ativo com premio ativo antes de salvar.';
     }
 
     const hasPrizeWithoutValue = activeLevels.some((level) => (
@@ -694,6 +764,37 @@ function getValidationError(form: RoletaFormState) {
     }
 
     return '';
+}
+
+function getRequestErrorMessage(error: unknown, fallback: string) {
+    if (typeof error !== 'object' || error === null || !('response' in error)) {
+        return fallback;
+    }
+
+    const response = (error as { response?: { data?: unknown } }).response;
+    const data = response?.data;
+
+    if (typeof data === 'string' && data.trim()) {
+        return data;
+    }
+
+    if (typeof data === 'object' && data !== null) {
+        const message = (data as {
+            message?: unknown;
+            mensagem?: unknown;
+            error?: unknown;
+            erro?: unknown;
+        }).message
+            ?? (data as { mensagem?: unknown }).mensagem
+            ?? (data as { error?: unknown }).error
+            ?? (data as { erro?: unknown }).erro;
+
+        if (typeof message === 'string' && message.trim()) {
+            return message;
+        }
+    }
+
+    return fallback;
 }
 
 function isMetaConcluida(meta: RoletaMetaForm) {
@@ -750,6 +851,7 @@ export function RoletaAdminPanel() {
     const [produtos, setProdutos] = useState<ProdutoAdmin[]>([]);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [produtosAlterados, setProdutosAlterados] = useState(false);
+    const [niveisAlterados, setNiveisAlterados] = useState(false);
     const [addProdutoId, setAddProdutoId] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -763,6 +865,9 @@ export function RoletaAdminPanel() {
     const [metaError, setMetaError] = useState('');
     const [metaSuccess, setMetaSuccess] = useState('');
     const [expandedLevelIds, setExpandedLevelIds] = useState<Record<string, boolean>>({});
+    const [expandedProdutoIds, setExpandedProdutoIds] = useState<Record<number, boolean>>({});
+    const [editingProdutos, setEditingProdutos] = useState<Record<number, ProdutoRoletaEditState>>({});
+    const [savingProdutoId, setSavingProdutoId] = useState<number | null>(null);
 
     const produtosById = useMemo(() => (
         produtos.reduce<Record<number, ProdutoAdmin>>((acc, produto) => {
@@ -803,6 +908,7 @@ export function RoletaAdminPanel() {
             setProdutos(apiProdutos);
             setSelectedIds(normalizeSelectedProductIds(roleta));
             setProdutosAlterados(false);
+            setNiveisAlterados(false);
             setForm(createFormFromRoleta(roleta));
         } catch {
             setError('Nao foi possivel carregar a configuracao da roleta.');
@@ -868,6 +974,7 @@ export function RoletaAdminPanel() {
         key: K,
         value: RoletaLevelForm[K],
     ) => {
+        setNiveisAlterados(true);
         setForm((currentForm) => ({
             ...currentForm,
             niveis: currentForm.niveis.map((level) => (
@@ -884,6 +991,7 @@ export function RoletaAdminPanel() {
         key: K,
         value: RoletaPrizeForm[K],
     ) => {
+        setNiveisAlterados(true);
         setForm((currentForm) => ({
             ...currentForm,
             niveis: currentForm.niveis.map((level) => {
@@ -902,6 +1010,7 @@ export function RoletaAdminPanel() {
     };
 
     const addLevel = () => {
+        setNiveisAlterados(true);
         setForm((currentForm) => {
             const multiplier = toPositiveDecimal(currentForm.multiplicadorDificuldadePadrao, 5, 1.01);
             const lastOrder = currentForm.niveis.reduce((maxOrder, level) => (
@@ -933,6 +1042,7 @@ export function RoletaAdminPanel() {
     };
 
     const removeLevel = (levelLocalId: string) => {
+        setNiveisAlterados(true);
         setExpandedLevelIds((currentIds) => {
             const nextIds = { ...currentIds };
             delete nextIds[levelLocalId];
@@ -952,6 +1062,7 @@ export function RoletaAdminPanel() {
     };
 
     const addPrize = (levelLocalId: string) => {
+        setNiveisAlterados(true);
         setForm((currentForm) => ({
             ...currentForm,
             niveis: currentForm.niveis.map((level) => {
@@ -970,6 +1081,7 @@ export function RoletaAdminPanel() {
     };
 
     const removePrize = (levelLocalId: string, prizeLocalId: string) => {
+        setNiveisAlterados(true);
         setForm((currentForm) => ({
             ...currentForm,
             niveis: currentForm.niveis.map((level) => {
@@ -993,6 +1105,16 @@ export function RoletaAdminPanel() {
     };
 
     const removeProduto = (produtoId: number) => {
+        setExpandedProdutoIds((currentIds) => {
+            const nextIds = { ...currentIds };
+            delete nextIds[produtoId];
+            return nextIds;
+        });
+        setEditingProdutos((currentProdutos) => {
+            const nextProdutos = { ...currentProdutos };
+            delete nextProdutos[produtoId];
+            return nextProdutos;
+        });
         setSelectedIds((currentIds) => currentIds.filter((id) => id !== produtoId));
         setProdutosAlterados(true);
     };
@@ -1017,13 +1139,142 @@ export function RoletaAdminPanel() {
         });
     };
 
+    const toggleProdutoDropdown = (produto: ProdutoAdmin) => {
+        const produtoId = Number(produto.id);
+        if (!Number.isFinite(produtoId)) return;
+
+        setEditingProdutos((currentProdutos) => ({
+            ...currentProdutos,
+            [produtoId]: currentProdutos[produtoId] ?? createProdutoRoletaEditState(produto),
+        }));
+        setExpandedProdutoIds((currentIds) => ({
+            ...currentIds,
+            [produtoId]: !currentIds[produtoId],
+        }));
+    };
+
+    const updateProdutoEdit = <K extends keyof ProdutoRoletaEditState>(
+        produtoId: number,
+        key: K,
+        value: ProdutoRoletaEditState[K],
+    ) => {
+        setEditingProdutos((currentProdutos) => {
+            const currentProduto = currentProdutos[produtoId];
+            if (!currentProduto) return currentProdutos;
+
+            return {
+                ...currentProdutos,
+                [produtoId]: {
+                    ...currentProduto,
+                    [key]: value,
+                },
+            };
+        });
+    };
+
+    const refreshProdutos = async () => {
+        const { data } = await api.get<ProdutoAdmin[] | ProdutosPage>(apiRoutes.admin.produtos.list);
+        const apiProdutos = Array.isArray(data) ? data : data.content ?? [];
+        setProdutos(apiProdutos);
+        return apiProdutos;
+    };
+
+    const saveProdutoEdit = async (produtoId: number) => {
+        const produtoAtual = produtosById[produtoId];
+        const produtoEditado = editingProdutos[produtoId];
+
+        if (!produtoAtual || !produtoEditado) return;
+
+        if (!produtoEditado.nome.trim()) {
+            setError('Informe o nome do produto antes de salvar.');
+            return;
+        }
+
+        if (toPositiveDecimal(produtoEditado.precoVenda, 0) <= 0) {
+            setError('Informe um preco de venda maior que zero.');
+            return;
+        }
+
+        const fotosExistentes = getProdutoExistingImages(produtoAtual);
+        const ordemFotos = fotosExistentes.map((foto, index) => ({
+            tipo: 'EXISTENTE',
+            url: foto.url,
+            principal: foto.principal,
+            ordem: index,
+        }));
+        const fotoPrincipal = fotosExistentes.find((foto) => foto.principal)?.url ?? fotosExistentes[0]?.url ?? '';
+        const formData = new FormData();
+
+        formData.append('nome', produtoEditado.nome.trim());
+        formData.append('precoVenda', decimalPayloadValue(produtoEditado.precoVenda));
+        formData.append('precoAntigo', decimalPayloadValue(produtoEditado.precoAntigo, ''));
+        formData.append('precoCusto', decimalPayloadValue(produtoEditado.precoCusto, ''));
+        formData.append('condicao', decimalPayloadValue(produtoEditado.condicao, ''));
+        formData.append('tamanho', produtoEditado.tamanho.trim());
+        formData.append('imagensExistentes', JSON.stringify(fotosExistentes));
+        formData.append('ordemFotos', JSON.stringify(ordemFotos));
+        formData.append('imagemPrincipal', fotoPrincipal);
+        formData.append('novaImagemPrincipal', 'false');
+
+        setSavingProdutoId(produtoId);
+        setError('');
+        setSuccess('');
+
+        try {
+            const { data } = await api.put<ProdutoAdmin>(
+                apiRoutes.admin.produtos.update(produtoId),
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                    timeout: 60000,
+                },
+            );
+
+            if (data?.id) {
+                setProdutos((currentProdutos) => (
+                    currentProdutos.map((produto) => (
+                        Number(produto.id) === produtoId ? data : produto
+                    ))
+                ));
+                setEditingProdutos((currentProdutos) => ({
+                    ...currentProdutos,
+                    [produtoId]: createProdutoRoletaEditState(data),
+                }));
+            } else {
+                const apiProdutos = await refreshProdutos();
+                const produtoAtualizado = apiProdutos.find((produto) => Number(produto.id) === produtoId);
+                if (produtoAtualizado) {
+                    setEditingProdutos((currentProdutos) => ({
+                        ...currentProdutos,
+                        [produtoId]: createProdutoRoletaEditState(produtoAtualizado),
+                    }));
+                }
+            }
+
+            setExpandedProdutoIds((currentIds) => ({
+                ...currentIds,
+                [produtoId]: false,
+            }));
+            setSuccess('Produto da roleta atualizado com sucesso.');
+        } catch (error) {
+            setError(getRequestErrorMessage(
+                error,
+                'Nao foi possivel atualizar o produto. Confira os dados e tente novamente.',
+            ));
+        } finally {
+            setSavingProdutoId(null);
+        }
+    };
+
     const savePanel = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setIsSaving(true);
         setError('');
         setSuccess('');
 
-        const validationError = getValidationError(form);
+        const validationError = getValidationError(form, niveisAlterados);
         if (validationError) {
             setError(validationError);
             setIsSaving(false);
@@ -1033,15 +1284,26 @@ export function RoletaAdminPanel() {
         try {
             const { data } = await api.put<AdminRoletaResponse>(
                 apiRoutes.admin.roleta,
-                createPayload(form, selectedIds, produtosAlterados),
+                createPayload(form, selectedIds, produtosAlterados, niveisAlterados),
             );
+            const responseHasLevels = Array.isArray(data.niveis);
 
             setSelectedIds((currentIds) => normalizeSelectedProductIds(data, currentIds));
             setProdutosAlterados(false);
-            setForm(createFormFromRoleta(data));
+            setNiveisAlterados(false);
+            setForm((currentForm) => {
+                const nextForm = createFormFromRoleta(data);
+
+                return responseHasLevels
+                    ? nextForm
+                    : { ...nextForm, niveis: currentForm.niveis };
+            });
             setSuccess('Roleta atualizada com sucesso.');
-        } catch {
-            setError('Nao foi possivel salvar a roleta. Confira os campos e tente novamente.');
+        } catch (error) {
+            setError(getRequestErrorMessage(
+                error,
+                'Nao foi possivel salvar a roleta. Confira os campos e tente novamente.',
+            ));
         } finally {
             setIsSaving(false);
         }
@@ -1174,39 +1436,44 @@ export function RoletaAdminPanel() {
             ) : (
                 <>
                 <form onSubmit={savePanel} style={formStyle}>
-                    <label style={toggleStyle}>
-                        <input
-                            type="checkbox"
-                            checked={form.ativa}
-                            onChange={(event) => updateForm('ativa', event.target.checked)}
-                        />
-                        Roleta ativa
-                    </label>
+                    <section style={sectionStyle}>
+                        <div style={sectionHeaderStyle}>
+                            <strong>Configuracoes de giros</strong>
+                            <span>Editavel a qualquer momento</span>
+                        </div>
 
-                    <input
-                        value={form.titulo}
-                        onChange={(event) => updateForm('titulo', event.target.value)}
-                        placeholder="Titulo da roleta"
-                        style={inputStyle}
-                        required
-                    />
+                        <div style={gridStyle}>
+                            <label style={fieldLabelStyle}>
+                                Giros iniciais do dia
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={form.giroDiarioQuantidade}
+                                    onChange={(event) => updateForm('giroDiarioQuantidade', event.target.value)}
+                                    placeholder="Giros por dia"
+                                    style={inputStyle}
+                                />
+                                <span style={fieldHintStyle}>
+                                    Sempre que trocar o dia, os giros disponiveis do usuario resetam para essa quantidade.
+                                </span>
+                            </label>
 
-                    <div style={gridStyle}>
-                        <input type="number" min="1" value={form.metaGrupo} onChange={(event) => updateForm('metaGrupo', event.target.value)} placeholder="Meta do grupo" style={inputStyle} />
-                        <input type="number" min="0" value={form.girosBonusGrupo} onChange={(event) => updateForm('girosBonusGrupo', event.target.value)} placeholder="Giros bonus" style={inputStyle} />
-                        <input type="number" min="0" value={form.girosIniciais} onChange={(event) => updateForm('girosIniciais', event.target.value)} placeholder="Giros iniciais" style={inputStyle} />
-                        <input type="number" min="0" value={form.giroDiarioQuantidade} onChange={(event) => updateForm('giroDiarioQuantidade', event.target.value)} placeholder="Giro diario" style={inputStyle} />
-                        <input type="number" min="0" value={form.girosGanhosPorConvite} onChange={(event) => updateForm('girosGanhosPorConvite', event.target.value)} placeholder="Giros por convite" style={inputStyle} />
-                    </div>
-
-                    <label style={toggleStyle}>
-                        <input
-                            type="checkbox"
-                            checked={form.giroDiarioSomenteQuandoZerar}
-                            onChange={(event) => updateForm('giroDiarioSomenteQuandoZerar', event.target.checked)}
-                        />
-                        Liberar giro diario somente quando zerar chances
-                    </label>
+                            <label style={fieldLabelStyle}>
+                                Giros por convite
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={form.girosGanhosPorConvite}
+                                    onChange={(event) => updateForm('girosGanhosPorConvite', event.target.value)}
+                                    placeholder="Giros por convite"
+                                    style={inputStyle}
+                                />
+                                <span style={fieldHintStyle}>
+                                    Quantidade de giros adicionada quando uma indicacao valida for convertida.
+                                </span>
+                            </label>
+                        </div>
+                    </section>
 
                     <section style={sectionStyle}>
                         <div style={sectionHeaderStyle}>
@@ -1533,21 +1800,135 @@ export function RoletaAdminPanel() {
                             <div style={productsListStyle}>
                                 {selectedProdutos.map((produto, index) => {
                                     const produtoId = Number(produto.id);
+                                    const isProdutoExpanded = Boolean(expandedProdutoIds[produtoId]);
+                                    const produtoEdit = editingProdutos[produtoId] ?? createProdutoRoletaEditState(produto);
+                                    const isSavingProduto = savingProdutoId === produtoId;
 
                                     return (
                                         <article key={produto.id} style={productRowStyle}>
-                                            <img src={getProdutoMainImage(produto)} alt={produto.nome} style={productImageStyle} />
-                                            <div style={{ minWidth: 0 }}>
-                                                <strong style={productNameStyle}>#{produto.id} {produto.nome}</strong>
-                                                <span style={productMetaStyle}>
-                                                    Tam. {produto.tamanho || 'Unico'} - {formatPrice(produto.precoVenda)}
-                                                </span>
+                                            <div style={productSummaryStyle}>
+                                                <img src={getProdutoMainImage(produto)} alt={produto.nome} style={productImageStyle} />
+                                                <div style={{ minWidth: 0 }}>
+                                                    <strong style={productNameStyle}>#{produto.id} {produto.nome}</strong>
+                                                    <span style={productMetaStyle}>
+                                                        Tam. {produto.tamanho || 'Unico'} - {formatPrice(produto.precoVenda)}
+                                                    </span>
+                                                </div>
+                                                <div style={productActionsStyle}>
+                                                    <button type="button" disabled={index === 0} onClick={() => moveProduto(produtoId, -1)} style={iconButtonStyle} aria-label="Subir produto"><ArrowUp size={14} /></button>
+                                                    <button type="button" disabled={index === selectedProdutos.length - 1} onClick={() => moveProduto(produtoId, 1)} style={iconButtonStyle} aria-label="Descer produto"><ArrowDown size={14} /></button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleProdutoDropdown(produto)}
+                                                        style={{
+                                                            ...iconButtonStyle,
+                                                            background: isProdutoExpanded ? '#EDF7F0' : '#F4F4F4',
+                                                            color: isProdutoExpanded ? brandPrimaryCssVar : '#333',
+                                                        }}
+                                                        aria-label="Editar produto"
+                                                        aria-expanded={isProdutoExpanded}
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                    <button type="button" onClick={() => removeProduto(produtoId)} style={{ ...iconButtonStyle, color: '#FF3B30', background: '#FFF1F0' }} aria-label="Remover produto"><Trash2 size={14} /></button>
+                                                </div>
                                             </div>
-                                            <div style={productActionsStyle}>
-                                                <button type="button" disabled={index === 0} onClick={() => moveProduto(produtoId, -1)} style={iconButtonStyle} aria-label="Subir produto"><ArrowUp size={14} /></button>
-                                                <button type="button" disabled={index === selectedProdutos.length - 1} onClick={() => moveProduto(produtoId, 1)} style={iconButtonStyle} aria-label="Descer produto"><ArrowDown size={14} /></button>
-                                                <button type="button" onClick={() => removeProduto(produtoId)} style={{ ...iconButtonStyle, color: '#FF3B30', background: '#FFF1F0' }} aria-label="Remover produto"><Trash2 size={14} /></button>
-                                            </div>
+
+                                            {isProdutoExpanded && (
+                                                <div style={productEditDropdownStyle}>
+                                                    <label style={{ ...fieldLabelStyle, gridColumn: '1 / -1' }}>
+                                                        Nome
+                                                        <input
+                                                            value={produtoEdit.nome}
+                                                            onChange={(event) => updateProdutoEdit(produtoId, 'nome', event.target.value)}
+                                                            style={inputStyle}
+                                                        />
+                                                    </label>
+
+                                                    <label style={fieldLabelStyle}>
+                                                        Tamanho
+                                                        <input
+                                                            value={produtoEdit.tamanho}
+                                                            onChange={(event) => updateProdutoEdit(produtoId, 'tamanho', event.target.value)}
+                                                            style={inputStyle}
+                                                        />
+                                                    </label>
+
+                                                    <label style={fieldLabelStyle}>
+                                                        Preco venda
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={produtoEdit.precoVenda}
+                                                            onChange={(event) => {
+                                                                const nextValue = event.target.value;
+                                                                if (isDecimalDraft(nextValue)) {
+                                                                    updateProdutoEdit(produtoId, 'precoVenda', nextValue);
+                                                                }
+                                                            }}
+                                                            style={inputStyle}
+                                                        />
+                                                    </label>
+
+                                                    <label style={fieldLabelStyle}>
+                                                        Preco antigo
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={produtoEdit.precoAntigo}
+                                                            onChange={(event) => {
+                                                                const nextValue = event.target.value;
+                                                                if (isDecimalDraft(nextValue)) {
+                                                                    updateProdutoEdit(produtoId, 'precoAntigo', nextValue);
+                                                                }
+                                                            }}
+                                                            style={inputStyle}
+                                                        />
+                                                    </label>
+
+                                                    <label style={fieldLabelStyle}>
+                                                        Preco custo
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={produtoEdit.precoCusto}
+                                                            onChange={(event) => {
+                                                                const nextValue = event.target.value;
+                                                                if (isDecimalDraft(nextValue)) {
+                                                                    updateProdutoEdit(produtoId, 'precoCusto', nextValue);
+                                                                }
+                                                            }}
+                                                            style={inputStyle}
+                                                        />
+                                                    </label>
+
+                                                    <label style={fieldLabelStyle}>
+                                                        Condicao
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={produtoEdit.condicao}
+                                                            onChange={(event) => {
+                                                                const nextValue = event.target.value;
+                                                                if (isDecimalDraft(nextValue)) {
+                                                                    updateProdutoEdit(produtoId, 'condicao', nextValue);
+                                                                }
+                                                            }}
+                                                            style={inputStyle}
+                                                        />
+                                                    </label>
+
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSavingProduto}
+                                                        onClick={() => void saveProdutoEdit(produtoId)}
+                                                        style={{ ...secondaryButtonStyle, gridColumn: '1 / -1' }}
+                                                    >
+                                                        <Save size={14} />
+                                                        {isSavingProduto ? 'Salvando...' : 'Salvar produto'}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </article>
                                     );
                                 })}
@@ -1858,15 +2239,6 @@ const gridStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '10px',
-};
-
-const toggleStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '9px',
-    color: 'var(--dark)',
-    fontSize: '13px',
-    fontWeight: 800,
 };
 
 const smallToggleStyle: CSSProperties = {
@@ -2183,14 +2555,20 @@ const productsListStyle: CSSProperties = {
 };
 
 const productRowStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '54px minmax(0, 1fr) auto',
-    alignItems: 'center',
+    display: 'flex',
+    flexDirection: 'column',
     gap: '10px',
     borderRadius: '14px',
     border: '1px solid #EEE',
     background: '#FDFDFD',
     padding: '10px',
+};
+
+const productSummaryStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '54px minmax(0, 1fr) auto',
+    alignItems: 'center',
+    gap: '10px',
 };
 
 const productImageStyle: CSSProperties = {
@@ -2222,6 +2600,14 @@ const productMetaStyle: CSSProperties = {
 const productActionsStyle: CSSProperties = {
     display: 'flex',
     gap: '5px',
+};
+
+const productEditDropdownStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '10px',
+    borderTop: '1px solid #EFEFEF',
+    paddingTop: '10px',
 };
 
 const iconButtonStyle: CSSProperties = {

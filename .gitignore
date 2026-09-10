@@ -46,6 +46,7 @@ uploads/
 # ==========================================
 # 5. IDEs E SISTEMA OPERACIONAL
 # ==========================================
+AGENTS.md
 .idea/
 .vscode/
 *.swp
