@@ -99,43 +99,6 @@
     white-space: nowrap;
 }
 
-.roleta-vip-notifications {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 1px 0 2px;
-    scrollbar-width: none;
-}
-
-.roleta-vip-notifications::-webkit-scrollbar {
-    display: none;
-}
-
-.roleta-vip-notification-chip {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 4px;
-    max-width: 78%;
-    min-height: 16px;
-    overflow: hidden;
-    border-radius: 14px;
-    background: var(--brand-primary);
-    color: #8B8B8B;
-    font-size: 8px;
-    font-weight: 700;
-    line-height: 1;
-    padding: 0 8px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.roleta-vip-notification-chip svg {
-    flex: 0 0 auto;
-    color: #8B8B8B;
-}
-
 .roleta-vip-summary {
     display: grid;
     grid-template-columns: minmax(0, 40%) minmax(0, 60%);
@@ -205,9 +168,14 @@
 
 .roleta-vip-group-goal {
     margin-bottom: clamp(14px, 4.8vw, 20px);
-    padding: 25px 15px;
+    padding: 20px 15px;
     background-color: #F7F7F7 ;
     border-radius: 7px;
+    overflow: hidden;
+}
+
+.roleta-vip-group-goal .roleta-notifications-story {
+    margin-bottom: 20px;
 }
 
 .roleta-vip-group-goal-row {

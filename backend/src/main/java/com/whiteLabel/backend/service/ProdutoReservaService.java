@@ -20,6 +20,8 @@ import com.whiteLabel.backend.repository.PedidoRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.ProdutoReservaRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -45,6 +47,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ProdutoReservaService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProdutoReservaService.class);
 
     private final ProdutoRepository produtoRepository;
     private final ProdutoReservaRepository produtoReservaRepository;
@@ -312,18 +316,31 @@ public class ProdutoReservaService {
         List<Pedido> pedidosExpirados = new ArrayList<>();
         List<Pagamento> pagamentosExpirados = new ArrayList<>();
 
-        vencidas.forEach(reserva -> expirarReservaComCheckoutPendente(
-                reserva,
-                agora,
-                pedidosExpirados,
-                pagamentosExpirados
-        ));
-        produtoReservaRepository.saveAll(vencidas);
-        pedidoRepository.saveAll(pedidosExpirados);
-        pagamentoRepository.saveAll(pagamentosExpirados);
-        produtoRepository.saveAll(vencidas.stream()
-                .map(ProdutoReserva::getProduto)
-                .toList());
+        try {
+            vencidas.forEach(reserva -> expirarReservaComCheckoutPendente(
+                    reserva,
+                    agora,
+                    pedidosExpirados,
+                    pagamentosExpirados
+            ));
+            produtoReservaRepository.saveAll(vencidas);
+            pedidoRepository.saveAll(pedidosExpirados);
+            pagamentoRepository.saveAll(pagamentosExpirados);
+            produtoRepository.saveAll(vencidas.stream()
+                    .map(ProdutoReserva::getProduto)
+                    .toList());
+        } catch (DataIntegrityViolationException exception) {
+            log.error(
+                    "Falha de integridade ao expirar reservas vencidas. "
+                            + "reservas={}, pedidos={}, pagamentos={}. "
+                            + "Verifique constraints de status no banco.",
+                    vencidas.size(),
+                    pedidosExpirados.size(),
+                    pagamentosExpirados.size(),
+                    exception
+            );
+            throw exception;
+        }
     }
 
     @Transactional

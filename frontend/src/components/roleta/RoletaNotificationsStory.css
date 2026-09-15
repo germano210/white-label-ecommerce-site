@@ -1,0 +1,52 @@
+.roleta-notifications-story {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 2px;
+    scroll-behavior: smooth;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.roleta-notifications-story::-webkit-scrollbar {
+    display: none;
+}
+
+.roleta-notifications-story__chip {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    max-width: 92%;
+    min-height: 25px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 20px;
+    background: #ffffff;
+    color: #7E7E7E;
+    font-size: 11px;
+    font-weight: 300;
+    line-height: 1;
+    padding: 0 15px;
+    scroll-snap-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roleta-notifications-story__chip > span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: lowercase;
+    white-space: nowrap;
+}
+
+.roleta-notifications-story__chip svg {
+    flex: 0 0 auto;
+    color: #7E7E7E;
+}

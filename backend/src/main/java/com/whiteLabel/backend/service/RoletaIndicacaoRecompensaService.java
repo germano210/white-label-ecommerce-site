@@ -30,6 +30,7 @@ public class RoletaIndicacaoRecompensaService {
     private final RoletaGiroCreditoRepository roletaGiroCreditoRepository;
     private final UsuarioRepository usuarioRepository;
     private final MissaoSemanalService missaoSemanalService;
+    private final RoletaInteracaoService roletaInteracaoService;
     private final SecureRandom secureRandom;
 
     public RoletaIndicacaoRecompensaService(
@@ -38,7 +39,8 @@ public class RoletaIndicacaoRecompensaService {
             RoletaConviteRepository roletaConviteRepository,
             RoletaGiroCreditoRepository roletaGiroCreditoRepository,
             UsuarioRepository usuarioRepository,
-            MissaoSemanalService missaoSemanalService
+            MissaoSemanalService missaoSemanalService,
+            RoletaInteracaoService roletaInteracaoService
     ) {
         this.roletaConfigRepository = roletaConfigRepository;
         this.roletaParticipanteRepository = roletaParticipanteRepository;
@@ -46,6 +48,7 @@ public class RoletaIndicacaoRecompensaService {
         this.roletaGiroCreditoRepository = roletaGiroCreditoRepository;
         this.usuarioRepository = usuarioRepository;
         this.missaoSemanalService = missaoSemanalService;
+        this.roletaInteracaoService = roletaInteracaoService;
         this.secureRandom = new SecureRandom();
     }
 
@@ -82,6 +85,10 @@ public class RoletaIndicacaoRecompensaService {
             missaoSemanalService.registrarAcao(
                     conversao.indicador(),
                     MissaoTipoAcao.CONVIDAR_PESSOAS.name()
+            );
+            roletaInteracaoService.registrarIndicacaoConvertida(
+                    conversao.indicador(),
+                    conversao.indicado()
             );
         }
     }

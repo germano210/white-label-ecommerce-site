@@ -142,6 +142,13 @@ public class RoletaParticipante {
         valorDisponivelResgate = getValorDisponivelResgate().add(normalizarValor(valor));
     }
 
+    public BigDecimal sacarValorDisponivel() {
+        BigDecimal valorSacado = getValorDisponivelResgate();
+        valorDisponivelResgate = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        valorTotalResgatado = getValorTotalResgatado().add(valorSacado);
+        return valorSacado;
+    }
+
     public LocalDateTime getUltimoGiroDiarioEm() {
         return ultimoGiroDiarioEm;
     }

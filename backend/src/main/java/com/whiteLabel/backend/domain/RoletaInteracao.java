@@ -12,19 +12,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-        name = "roleta_interacoes",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_roleta_interacao_chave_evento", columnNames = "chave_evento")
-        }
-)
+@Table(name = "roleta_interacoes")
 public class RoletaInteracao {
 
     @Id
@@ -70,13 +64,13 @@ public class RoletaInteracao {
     @JoinColumn(name = "premio_id")
     private RoletaPremio premio;
 
-    @Column(precision = 12, scale = 2)
+    @Column(precision = 12, scale = 2, columnDefinition = "numeric(12,2) default 0.00")
     private BigDecimal valor;
 
     @Column(name = "texto_snapshot", nullable = false, length = 500)
     private String textoSnapshot;
 
-    @Column(name = "conta_para_meta", nullable = false)
+    @Column(name = "conta_para_meta", nullable = false, columnDefinition = "boolean default true")
     private Boolean contaParaMeta = true;
 
     @Column(name = "chave_evento", length = 180)
@@ -130,16 +124,32 @@ public class RoletaInteracao {
         return tipo;
     }
 
+    public Usuario getUsuario() {
+        return usuario;
+    }
+
     public String getUsuarioNomeSnapshot() {
         return usuarioNomeSnapshot;
+    }
+
+    public Usuario getUsuarioSecundario() {
+        return usuarioSecundario;
     }
 
     public String getUsuarioSecundarioNomeSnapshot() {
         return usuarioSecundarioNomeSnapshot;
     }
 
+    public Produto getProduto() {
+        return produto;
+    }
+
     public String getProdutoNomeSnapshot() {
         return produtoNomeSnapshot;
+    }
+
+    public RoletaNivel getNivel() {
+        return nivel;
     }
 
     public String getNivelNomeSnapshot() {
@@ -148,6 +158,10 @@ public class RoletaInteracao {
 
     public String getNivelCorHex() {
         return nivelCorHex;
+    }
+
+    public RoletaPremio getPremio() {
+        return premio;
     }
 
     public BigDecimal getValor() {

@@ -229,7 +229,7 @@ public class RoletaService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<ProdutoResponseDTO> listarProdutosRoleta() {
         return montarProdutosSelecionados();
     }
@@ -282,6 +282,32 @@ public class RoletaService {
         RoletaParticipante participanteIndicado = garantirParticipanteForUpdate(usuarioIndicado, config);
 
         return montarConvitesResponse(config, participanteIndicado);
+    }
+
+    @Transactional
+    public RoletaSaqueResponse sacarValorDisponivel() {
+        Usuario usuario = obterUsuarioAutenticado();
+        RoletaConfig config = obterConfig();
+        RoletaParticipante participante = garantirParticipanteForUpdate(usuario, config);
+        BigDecimal valorDisponivel = participante.getValorDisponivelResgate();
+
+        if (valorDisponivel.compareTo(new BigDecimal("5.00")) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Valor minimo de saque nao atingido"
+            );
+        }
+
+        BigDecimal valorSacado = participante.sacarValorDisponivel();
+        roletaParticipanteRepository.save(participante);
+        roletaInteracaoService.registrarSaque(usuario, valorSacado);
+
+        return new RoletaSaqueResponse(
+                valorSacado,
+                participante.getValorDisponivelResgate(),
+                participante.getValorTotalResgatado(),
+                montarStatus(config, participante)
+        );
     }
 
     @Transactional
@@ -458,29 +484,6 @@ public class RoletaService {
         }
     }
 
-    private void incrementarProgressoGrupo(RoletaConfig config) {
-        int meta = config.getMetaGrupo();
-        int progresso = config.getProgressoGrupo() + 1;
-
-        if (progresso >= meta) {
-            config.setProgressoGrupo(progresso % meta);
-            int ciclo = config.avancarCicloMetaGrupo();
-            int bonus = config.getGirosBonusGrupo();
-            if (bonus > 0) {
-                List<RoletaParticipante> participantes = roletaParticipanteRepository.findAll();
-                participantes.forEach(participante -> creditarGiros(
-                        participante,
-                        bonus,
-                        "META_GRUPO:" + ciclo + ":" + participante.getUsuario().getId()
-                ));
-                roletaParticipanteRepository.saveAll(participantes);
-            }
-            return;
-        }
-
-        config.setProgressoGrupo(progresso);
-    }
-
     private boolean creditarGiros(
             RoletaParticipante participante,
             Integer quantidade,
@@ -603,16 +606,11 @@ public class RoletaService {
     }
 
     private List<RoletaNotificacaoResponse> montarNotificacoes() {
-        return List.of();
+        return roletaInteracaoService.listarNotificacoes();
     }
 
     private List<String> montarUltimosEventos() {
-        return roletaGiroRepository.findTop3ByOrderByCriadoEmDesc()
-                .stream()
-                .map(giro -> "Um membro ganhou "
-                        + RoletaPremioResponse.from(giro).valorFormatado()
-                        + " OFF")
-                .toList();
+        return roletaInteracaoService.listarUltimosEventos();
     }
 
     private List<RoletaPremioFaixaResponse> montarPremiosEmJogo() {

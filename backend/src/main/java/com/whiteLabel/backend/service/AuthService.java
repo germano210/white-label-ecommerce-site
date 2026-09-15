@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -31,6 +32,27 @@ public class AuthService {
     private static final int OTP_VALIDITY_MINUTES = 5;
     private static final int MIN_PHONE_DIGITS = 8;
     private static final int MAX_PHONE_DIGITS = 15;
+    private static final List<String> NOMES_INICIAIS = List.of(
+            "Birdperson",
+            "Meeseeks",
+            "Squanchy",
+            "Solenya",
+            "Terry",
+            "Nubnub",
+            "Jaguar",
+            "Curtis",
+            "Wing",
+            "Diane",
+            "Golden fold",
+            "Jessica",
+            "Brad",
+            "Ice-t",
+            "Planetina",
+            "Morty",
+            "Rick",
+            "Jerry",
+            "Beth"
+    );
 
     private final UsuarioRepository usuarioRepository;
     private final JwtService jwtService;
@@ -87,11 +109,7 @@ public class AuthService {
         var usuarioExistente = usuarioRepository.findByTelefone(telefone);
         boolean existingUser = usuarioExistente.isPresent();
         Usuario usuario = usuarioExistente
-                .orElseGet(() -> createNewUser(request.nome(), telefone));
-
-        if (request.nome() != null && !request.nome().isBlank()) {
-            usuario.setNome(request.nome().trim());
-        }
+                .orElseGet(() -> createNewUser(telefone));
 
         String otp = Integer.toString(secureRandom.nextInt(1_000_000) + 1_000_000)
                 .substring(1);
@@ -167,9 +185,12 @@ public class AuthService {
         return UsuarioResponse.from(usuarioRepository.save(usuario));
     }
 
-    private Usuario createNewUser(String nome, String telefone) {
-        String nomeNormalizado = nome == null || nome.isBlank() ? null : nome.trim();
-        return new Usuario(nomeNormalizado, telefone);
+    private Usuario createNewUser(String telefone) {
+        return new Usuario(sortearNomeInicial(), telefone);
+    }
+
+    private String sortearNomeInicial() {
+        return NOMES_INICIAIS.get(secureRandom.nextInt(NOMES_INICIAIS.size()));
     }
 
     private String normalize(String telefone) {

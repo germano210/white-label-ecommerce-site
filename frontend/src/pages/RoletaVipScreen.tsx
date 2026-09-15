@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type UIEvent } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Heart } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { BrechoDaCamiLogo } from '../components/common/BrechoDaCamiLogo';
 import { AppIcon } from '../components/icons/AppIcon';
 import { RoletaProfileModal } from '../components/roleta/RoletaProfileModal';
+import { RoletaNotificationsStory } from '../components/roleta/RoletaNotificationsStory';
 import { useAuthStore } from '../store/useAuthStore';
 import { api, isCookieAuthMode } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
 import { normalizeIndicationLink, type IndicacaoLinkApiLike } from '../utils/indicacaoReferral';
+import {
+    normalizeRoletaNotifications,
+    sortRoletaNotificationsByNewest,
+    type RoletaNotificacaoApi,
+    type RoletaNotificationView,
+} from '../utils/roletaNotifications';
 import arrowImageIcon from '../assets/icons/arrowImage.svg';
 import compartilhamentoIcon from '../assets/icons/compartilhamento.svg';
 import './RoletaVipScreen.css';
@@ -21,24 +27,6 @@ type RoletaTab = 'spin' | 'daily';
 type RoletaTipoPremio = 'DESCONTO_VALOR' | 'DESCONTO_PERCENTUAL' | 'GIRO_EXTRA' | 'SEM_PREMIO';
 type WheelRarityKey = 'COMUM' | 'INCOMUM' | 'MAGICO' | 'RARO' | 'LENDARIO';
 type DailyProductStatus = 'DISPONIVEL' | 'RESERVADO' | 'VENDIDO';
-
-type RoletaNotificacaoApi = string | {
-    texto?: string | null;
-    nomeRoupa?: string | null;
-    nome_roupa?: string | null;
-    nomeProduto?: string | null;
-    nome_produto?: string | null;
-    produtoNome?: string | null;
-    produto_nome?: string | null;
-    itemNome?: string | null;
-    item_nome?: string | null;
-    roupa?: {
-        nome?: string | null;
-    } | null;
-    produto?: {
-        nome?: string | null;
-    } | null;
-};
 
 interface RoletaPremioApi {
     id?: number | string | null;
@@ -155,7 +143,7 @@ interface RoletaStatusApi {
     girosBonusGrupo?: NumericApiValue;
     giros_bonus_grupo?: NumericApiValue;
     notificacoes?: RoletaNotificacaoApi[] | null;
-    ultimosEventos?: string[] | null;
+    ultimosEventos?: RoletaNotificacaoApi[] | null;
     niveis?: RoletaNivelApi[] | null;
     niveisRoleta?: RoletaNivelApi[] | null;
     niveis_roleta?: RoletaNivelApi[] | null;
@@ -299,7 +287,7 @@ interface RoletaViewState {
     metaGrupo: number;
     progressoGrupo: number;
     girosBonusGrupo: number;
-    notificacoes: string[];
+    notificacoes: RoletaNotificationView[];
     opcoes: RoletaWheelSlice[];
     premioAtual: RoletaSpinResult | null;
 }
@@ -348,6 +336,8 @@ const DAILY_CARD_TAP_THRESHOLD = 10;
 const WHEEL_FULL_TURNS = 7;
 const WHEEL_SPIN_DURATION_MS = 3800;
 const DAILY_TAB_QUERY_VALUE = 'itens';
+const LOCAL_ROULETTE_NOTIFICATIONS_KEY = 'roleta-vip-local-notifications';
+const LOCAL_ROULETTE_NOTIFICATION_TTL_MS = 30 * 60 * 1000;
 
 function getInitialRoletaTabFromUrl(): RoletaTab {
     if (typeof window === 'undefined') return 'spin';
@@ -525,27 +515,93 @@ function shouldUseDarkTextForPrizeLevel(prize?: RoletaSpinResult | null) {
     );
 }
 
-function normalizeNotification(notification: RoletaNotificacaoApi) {
-    if (typeof notification === 'string') return notification.trim();
+function readLocalRouletteNotifications() {
+    if (typeof window === 'undefined') return [];
 
-    const directText = notification.texto?.trim();
-    if (directText) return directText;
+    try {
+        const rawNotifications = window.sessionStorage.getItem(LOCAL_ROULETTE_NOTIFICATIONS_KEY);
+        if (!rawNotifications) return [];
 
-    const productName = (
-        notification.nomeRoupa
-        ?? notification.nome_roupa
-        ?? notification.nomeProduto
-        ?? notification.nome_produto
-        ?? notification.produtoNome
-        ?? notification.produto_nome
-        ?? notification.itemNome
-        ?? notification.item_nome
-        ?? notification.roupa?.nome
-        ?? notification.produto?.nome
-        ?? ''
-    ).trim();
+        const parsedNotifications = JSON.parse(rawNotifications);
+        if (!Array.isArray(parsedNotifications)) return [];
 
-    return productName ? `Um membro resgatou a ${productName}` : '';
+        const now = Date.now();
+        const notifications = parsedNotifications.filter((notification): notification is RoletaNotificationView => (
+            notification
+            && typeof notification === 'object'
+            && typeof notification.id === 'string'
+            && typeof notification.texto === 'string'
+            && typeof notification.createdAtMs === 'number'
+            && now - notification.createdAtMs <= LOCAL_ROULETTE_NOTIFICATION_TTL_MS
+        ));
+
+        window.sessionStorage.setItem(
+            LOCAL_ROULETTE_NOTIFICATIONS_KEY,
+            JSON.stringify(notifications),
+        );
+
+        return notifications;
+    } catch {
+        return [];
+    }
+}
+
+function saveLocalRouletteNotifications(notifications: RoletaNotificationView[]) {
+    if (typeof window === 'undefined') return;
+
+    try {
+        window.sessionStorage.setItem(
+            LOCAL_ROULETTE_NOTIFICATIONS_KEY,
+            JSON.stringify(sortRoletaNotificationsByNewest(notifications).slice(0, 12)),
+        );
+    } catch {
+        // sessionStorage can be unavailable in restrictive browsers; the in-memory update still works.
+    }
+}
+
+function pushLocalRouletteNotification(notification: RoletaNotificationView) {
+    const currentNotifications = readLocalRouletteNotifications();
+    const nextNotifications = [
+        notification,
+        ...currentNotifications.filter((currentNotification) => currentNotification.id !== notification.id),
+    ];
+
+    saveLocalRouletteNotifications(nextNotifications);
+}
+
+function mergeLocalNotificationsIntoRoleta(roletaState: RoletaViewState): RoletaViewState {
+    const serverNotificationTexts = new Set(
+        roletaState.notificacoes.map((notification) => notification.texto.trim().toLocaleLowerCase('pt-BR')),
+    );
+    const localNotifications = readLocalRouletteNotifications().filter((notification) => (
+        !serverNotificationTexts.has(notification.texto.trim().toLocaleLowerCase('pt-BR'))
+    ));
+
+    if (localNotifications.length === 0) return roletaState;
+
+    return {
+        ...roletaState,
+        notificacoes: sortRoletaNotificationsByNewest([
+            ...localNotifications,
+            ...roletaState.notificacoes,
+        ]),
+    };
+}
+
+function createLocalPrizeUseNotification(product: DailyProduct): RoletaNotificationView {
+    const now = new Date();
+    const createdAtMs = now.getTime();
+
+    return {
+        id: `local-usar-premio-${product.id}-${createdAtMs}`,
+        tipo: 'USAR_PREMIO',
+        texto: `Um membro resgatou a ${product.nome}`,
+        nivelNome: '',
+        nivelCorHex: '',
+        criadoEm: now.toISOString(),
+        createdAtMs,
+        sourceIndex: -1,
+    };
 }
 
 function normalizeWheelSlicesFromLevels(levels: RoletaNivelApi[]) {
@@ -670,9 +726,7 @@ function normalizeRoletaStatus(data?: RoletaStatusApi | null): RoletaViewState {
         metaGrupo,
         progressoGrupo,
         girosBonusGrupo,
-        notificacoes: rawNotifications
-            .map(normalizeNotification)
-            .filter(Boolean),
+        notificacoes: normalizeRoletaNotifications(rawNotifications),
         opcoes,
         premioAtual: createPrizeView(getPremioAtualFromStatus(data), opcoes),
     };
@@ -1338,7 +1392,7 @@ export function RoletaVipScreen() {
             const { data } = await runWithRoletaParticipantRetry(() => (
                 api.get<RoletaStatusApi>(apiRoutes.roleta.status)
             ));
-            const nextRoleta = normalizeRoletaStatus(data);
+            const nextRoleta = mergeLocalNotificationsIntoRoleta(normalizeRoletaStatus(data));
             setRoleta(nextRoleta);
         } catch (roletaError) {
             if (axios.isAxiosError(roletaError) && (
@@ -1420,6 +1474,7 @@ export function RoletaVipScreen() {
             return nextProducts;
         } catch (dailyProductsError) {
             setDailyError(getRoletaErrorMessage(dailyProductsError));
+            setHasLoadedDailyProducts(true);
             return [];
         } finally {
             setIsDailyLoading(false);
@@ -1472,7 +1527,9 @@ export function RoletaVipScreen() {
             const { data } = await api.post<RoletaGiroResponse>(apiRoutes.roleta.girar);
             const statusPayload = data.roleta ?? (hasRoletaStatusPayload(data) ? data : null);
             const rawPrize = getPremioAtualFromSpin(data) ?? getPremioAtualFromStatus(statusPayload);
-            const normalizedStatus = statusPayload ? normalizeRoletaStatus(statusPayload) : null;
+            const normalizedStatus = statusPayload
+                ? mergeLocalNotificationsIntoRoleta(normalizeRoletaStatus(statusPayload))
+                : null;
             const responseRoleta = normalizedStatus && !data.roleta
                 ? {
                     ...roleta,
@@ -1607,6 +1664,16 @@ export function RoletaVipScreen() {
                 throw new Error('Checkout sem URL de redirecionamento.');
             }
 
+            const localNotification = createLocalPrizeUseNotification(product);
+            pushLocalRouletteNotification(localNotification);
+            setRoleta((currentRoleta) => ({
+                ...currentRoleta,
+                notificacoes: sortRoletaNotificationsByNewest([
+                    localNotification,
+                    ...currentRoleta.notificacoes.filter((notification) => notification.id !== localNotification.id),
+                ]),
+            }));
+            await fetchRoleta();
             await fetchDailyProducts();
             window.location.href = checkoutUrl;
         } catch (checkoutError) {
@@ -2041,23 +2108,9 @@ export function RoletaVipScreen() {
                         </div>
                     </div>
 
-                    {roleta.notificacoes.length > 0 && (
-                        <div className="roleta-vip-notifications" aria-label="Notificacoes da roleta">
-                            {roleta.notificacoes.map((notification, index) => (
-                                <span
-                                    className="roleta-vip-notification-chip"
-                                    key={`${notification}-${index}`}
-                                >
-                                    <Heart size={8} fill="currentColor" strokeWidth={0} />
-                                    {notification}
-                                </span>
-                            ))}
-                        </div>
-                    )}
-
-
-
                     <section className="roleta-vip-group-goal" aria-label="Meta atual do grupo">
+                        <RoletaNotificationsStory notifications={roleta.notificacoes} />
+
                         {hasGroupGoal ? (
                             <>
                                 <div className="roleta-vip-group-goal-row">
@@ -2181,7 +2234,13 @@ export function RoletaVipScreen() {
                                 {!isDailyLoading && dailyError && (
                                     <div className="roleta-vip-daily-state" role="alert">
                                         <span>{dailyError}</span>
-                                        <button type="button" onClick={() => void fetchDailyProducts()}>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setDailyError('');
+                                                void fetchDailyProducts();
+                                            }}
+                                        >
                                             Tentar novamente
                                         </button>
                                     </div>

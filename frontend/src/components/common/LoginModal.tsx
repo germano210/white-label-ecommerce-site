@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import axios from 'axios';
+import { RoletaNotificationsStory } from '../roleta/RoletaNotificationsStory';
 import { useAuthStore, type AuthUser } from '../../store/useAuthStore';
 import { api, isCookieAuthMode } from '../../utils/api';
 import { apiRoutes } from '../../utils/apiRoutes';
@@ -7,6 +8,11 @@ import {
     clearPendingIndicationCode,
     getPendingIndicationCode,
 } from '../../utils/indicacaoReferral';
+import {
+    normalizeRoletaNotifications,
+    type RoletaNotificacaoApi,
+    type RoletaNotificationView,
+} from '../../utils/roletaNotifications';
 import { BrechoDaCamiLogo } from './BrechoDaCamiLogo';
 import './LoginModal.css';
 
@@ -54,6 +60,11 @@ interface VerifyOtpPayload {
 interface AuthMeResponse {
     usuario?: VerifyOtpResponse['usuario'];
     user?: VerifyOtpResponse['user'];
+}
+
+interface RoletaNotificationsResponse {
+    notificacoes?: RoletaNotificacaoApi[] | null;
+    ultimosEventos?: RoletaNotificacaoApi[] | null;
 }
 
 function onlyDigits(value: string) {
@@ -125,8 +136,11 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [notifications, setNotifications] = useState<RoletaNotificationView[]>([]);
 
     const phoneDigits = onlyDigits(phone);
+    const isPhoneValid = phoneDigits.length >= 10;
+    const hasNotifications = notifications.length > 0;
     const phoneStepTitle = accessMode === 'first'
         ? 'Digite seu Whatsapp'
         : 'Bem-vindo(a) de volta';
@@ -137,6 +151,19 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
         setNotice('');
         setStep('details');
     };
+
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const { data } = await api.get<RoletaNotificationsResponse>(apiRoutes.roleta.status);
+            setNotifications(normalizeRoletaNotifications(data.notificacoes ?? data.ultimosEventos ?? []));
+        } catch {
+            setNotifications([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        void fetchNotifications();
+    }, [fetchNotifications]);
 
     const requestOtp = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -250,7 +277,15 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                             <BrechoDaCamiLogo className="login-modal__brand-logo" />
                         </h1>
 
-                        <div className="login-modal__actions flex flex-col gap-3 mt-6">
+                        {hasNotifications && (
+                            <RoletaNotificationsStory
+                                notifications={notifications}
+                                className="login-modal__notifications"
+                                ariaLabel="Notificacoes da roleta no login"
+                            />
+                        )}
+
+                        <div className={`login-modal__actions${hasNotifications ? ' login-modal__actions--after-notifications' : ''} flex flex-col gap-3 mt-6`}>
                             <button
                                 className="login-modal__primary"
                                 type="button"
@@ -292,11 +327,11 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                         />
                         {error && <p className="login-modal__error" role="alert">{error}</p>}
                         <button
-                            className="login-modal__primary"
+                            className={`login-modal__primary${!isPhoneValid ? ' login-modal__primary--inactive' : ''}`}
                             type="submit"
-                            disabled={isLoading}
+                            disabled={isLoading || !isPhoneValid}
                         >
-                            Entrar
+                            Acessar perfil
                         </button>
                     </form>
                 )}
@@ -328,7 +363,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                             type="submit"
                             disabled={isLoading}
                         >
-                            Entrar
+                            Acessar Perfil
                         </button>
                     </form>
                 )}

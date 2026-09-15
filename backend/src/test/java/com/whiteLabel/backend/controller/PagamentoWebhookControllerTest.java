@@ -16,11 +16,13 @@ import com.whiteLabel.backend.repository.PedidoItemRepository;
 import com.whiteLabel.backend.repository.PedidoRepository;
 import com.whiteLabel.backend.repository.ProdutoReservaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
+import com.whiteLabel.backend.repository.RoletaInteracaoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoRepository;
 import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import com.whiteLabel.backend.service.InfinitePayClient;
 import com.whiteLabel.backend.service.JwtService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,6 +97,9 @@ class PagamentoWebhookControllerTest {
     private ProdutoReservaRepository produtoReservaRepository;
 
     @Autowired
+    private RoletaInteracaoRepository roletaInteracaoRepository;
+
+    @Autowired
     private MissaoRepository missaoRepository;
 
     @Autowired
@@ -102,6 +107,16 @@ class PagamentoWebhookControllerTest {
 
     @BeforeEach
     void setUp() {
+        limparDados();
+    }
+
+    @AfterEach
+    void tearDown() {
+        limparDados();
+    }
+
+    private void limparDados() {
+        roletaInteracaoRepository.deleteAll();
         pagamentoRepository.deleteAll();
         produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();

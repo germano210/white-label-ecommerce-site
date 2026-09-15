@@ -11,13 +11,37 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 class BackendApplicationTests {
+
+	private static final List<String> NOMES_INICIAIS = List.of(
+			"Birdperson",
+			"Meeseeks",
+			"Squanchy",
+			"Solenya",
+			"Terry",
+			"Nubnub",
+			"Jaguar",
+			"Curtis",
+			"Wing",
+			"Diane",
+			"Golden fold",
+			"Jessica",
+			"Brad",
+			"Ice-t",
+			"Planetina",
+			"Morty",
+			"Rick",
+			"Jerry",
+			"Beth"
+	);
 
 	@Autowired
 	private AuthService authService;
@@ -37,20 +61,23 @@ class BackendApplicationTests {
 
 		Usuario usuario = usuarioRepository.findByTelefone(telefone).orElseThrow();
 		UUID idOriginal = usuario.getId();
+		String nomeInicial = usuario.getNome();
 		assertNotNull(idOriginal);
+		assertNotNull(nomeInicial);
+		assertTrue(NOMES_INICIAIS.contains(nomeInicial));
 
 		TokenResponse response = authService.verifyOtp(
 				new VerifyOtpRequest(telefone, usuario.getOtp())
 		);
 
 		assertEquals(idOriginal, response.usuario().id());
-		assertEquals("Ana", response.usuario().nome());
+		assertEquals(nomeInicial, response.usuario().nome());
 		assertEquals(telefone, response.usuario().telefone());
 
 		authService.requestOtp(new RequestOtpRequest(telefone, "Ana Atualizada"));
 		Usuario mesmoUsuario = usuarioRepository.findByTelefone(telefone).orElseThrow();
 
 		assertEquals(idOriginal, mesmoUsuario.getId());
-		assertEquals("Ana Atualizada", mesmoUsuario.getNome());
+		assertEquals(nomeInicial, mesmoUsuario.getNome());
 	}
 }

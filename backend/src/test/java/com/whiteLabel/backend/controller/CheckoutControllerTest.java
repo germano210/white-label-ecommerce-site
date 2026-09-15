@@ -14,6 +14,7 @@ import com.whiteLabel.backend.repository.PedidoItemRepository;
 import com.whiteLabel.backend.repository.PedidoRepository;
 import com.whiteLabel.backend.repository.ProdutoReservaRepository;
 import com.whiteLabel.backend.repository.ProdutoRepository;
+import com.whiteLabel.backend.repository.RoletaInteracaoRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import com.whiteLabel.backend.service.InfinitePayClient;
 import com.whiteLabel.backend.service.JwtService;
@@ -90,6 +91,9 @@ class CheckoutControllerTest {
     private ProdutoReservaRepository produtoReservaRepository;
 
     @Autowired
+    private RoletaInteracaoRepository roletaInteracaoRepository;
+
+    @Autowired
     private UsuarioRepository usuarioRepository;
 
     @Autowired
@@ -97,6 +101,7 @@ class CheckoutControllerTest {
 
     @BeforeEach
     void setUp() {
+        roletaInteracaoRepository.deleteAll();
         pagamentoRepository.deleteAll();
         produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();
@@ -108,6 +113,7 @@ class CheckoutControllerTest {
 
     @AfterEach
     void tearDown() {
+        roletaInteracaoRepository.deleteAll();
         pagamentoRepository.deleteAll();
         produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();
@@ -348,7 +354,12 @@ class CheckoutControllerTest {
         assertEquals(1, request.items().size());
         assertEquals(12000L, request.items().get(0).price());
         assertEquals("Jaqueta Checkout", request.items().get(0).description());
-        assertEquals(1, pedidoRepository.findById(pedidoId).orElseThrow().getItens().size());
+        Integer totalItens = jdbcTemplate.queryForObject(
+                "select count(*) from pedido_itens where pedido_id = ?",
+                Integer.class,
+                pedidoId
+        );
+        assertEquals(1, totalItens);
         assertEquals(1, produtoReservaRepository.findByPedidoId(pedidoId).size());
     }
 

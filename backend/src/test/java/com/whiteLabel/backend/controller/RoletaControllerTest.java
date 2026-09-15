@@ -12,6 +12,7 @@ import com.whiteLabel.backend.domain.ProdutoReservaStatus;
 import com.whiteLabel.backend.domain.ProdutoStatus;
 import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaGiroCredito;
+import com.whiteLabel.backend.domain.RoletaInteracaoTipo;
 import com.whiteLabel.backend.domain.RoletaMeta;
 import com.whiteLabel.backend.domain.RoletaMetaStatus;
 import com.whiteLabel.backend.domain.RoletaNivel;
@@ -35,6 +36,7 @@ import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
 import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
+import com.whiteLabel.backend.repository.RoletaInteracaoRepository;
 import com.whiteLabel.backend.repository.RoletaMetaRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
 import com.whiteLabel.backend.repository.RoletaOpcaoRepository;
@@ -114,6 +116,9 @@ class RoletaControllerTest {
 
     @Autowired
     private RoletaGiroCreditoRepository roletaGiroCreditoRepository;
+
+    @Autowired
+    private RoletaInteracaoRepository roletaInteracaoRepository;
 
     @Autowired
     private RoletaMetaRepository roletaMetaRepository;
@@ -235,6 +240,12 @@ class RoletaControllerTest {
     }
 
     @Test
+    void shouldRequireAuthToWithdrawRoletaBalance() throws Exception {
+        mockMvc.perform(post("/api/roleta/saques").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void shouldRejectSpinWithoutActivePrizeLevels() throws Exception {
         Usuario usuario = criarUsuario("Cliente Sem Fatia", "551199992010");
 
@@ -287,6 +298,97 @@ class RoletaControllerTest {
                 .andExpect(jsonPath("$.roleta.premioPendente.valorPremio").value(10.00))
                 .andExpect(jsonPath("$.roleta.valorDisponivelResgate").value(0.00))
                 .andExpect(jsonPath("$.roleta.progressoGrupo").value(1));
+    }
+
+    @Test
+    void shouldReturnRoletaNotificationsFromRealInteractionHistory() throws Exception {
+        criarPremioPadrao();
+        Usuario usuario = criarUsuario("Cliente Historico", "551199992150");
+
+        mockMvc.perform(post("/api/roleta/girar")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roleta.progressoGrupo").value(1));
+
+        assertEquals(2, roletaInteracaoRepository.count());
+        var giro = roletaGiroRepository.findAll().get(0);
+        var interacaoGiro = roletaInteracaoRepository
+                .findByChaveEvento("GIRAR_ROLETA:" + giro.getId())
+                .orElseThrow();
+        var interacaoPremio = roletaInteracaoRepository
+                .findByChaveEvento("RECEBER_PREMIO:" + giro.getId())
+                .orElseThrow();
+        assertEquals(RoletaInteracaoTipo.GIRAR_ROLETA, interacaoGiro.getTipo());
+        assertEquals(true, interacaoGiro.getContaParaMeta());
+        assertEquals(RoletaInteracaoTipo.RECEBER_PREMIO, interacaoPremio.getTipo());
+        assertEquals(false, interacaoPremio.getContaParaMeta());
+        assertEquals("Grau Militar", interacaoPremio.getNivelNomeSnapshot());
+        assertEquals("#4b69ff", interacaoPremio.getNivelCorHex());
+
+        mockMvc.perform(get("/api/roleta").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notificacoes.length()").value(2))
+                .andExpect(jsonPath("$.notificacoes[0].tipo").value("RECEBER_PREMIO"))
+                .andExpect(jsonPath("$.notificacoes[0].texto").value("Cliente Historico tirou Grau Militar"))
+                .andExpect(jsonPath("$.notificacoes[0].usuarioNome").value("Cliente Historico"))
+                .andExpect(jsonPath("$.notificacoes[0].nivelNome").value("Grau Militar"))
+                .andExpect(jsonPath("$.notificacoes[0].nivelCorHex").value("#4b69ff"))
+                .andExpect(jsonPath("$.notificacoes[1].tipo").value("GIRAR_ROLETA"))
+                .andExpect(jsonPath("$.notificacoes[1].texto").value("Cliente Historico girou a roleta"))
+                .andExpect(jsonPath("$.ultimosEventos.length()").value(2));
+    }
+
+    @Test
+    void shouldRejectWithdrawalBelowMinimumWithoutCreatingInteraction() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Saque Baixo", "551199992152");
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
+        participante.adicionarValorDisponivel(new BigDecimal("4.99"));
+        roletaParticipanteRepository.save(participante);
+
+        mockMvc.perform(post("/api/roleta/saques")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Valor minimo de saque nao atingido"));
+
+        assertEquals(0, contarInteracoes(RoletaInteracaoTipo.SACAR_VALOR));
+    }
+
+    @Test
+    void shouldRegisterWithdrawalInteractionAndAdvanceGroupGoal() throws Exception {
+        Usuario usuario = criarUsuario("Cliente Saque", "551199992151");
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
+        participante.adicionarValorDisponivel(new BigDecimal("6.00"));
+        roletaParticipanteRepository.save(participante);
+
+        mockMvc.perform(post("/api/roleta/saques")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.valorSacado").value(6.00))
+                .andExpect(jsonPath("$.valorDisponivelResgate").value(0.00))
+                .andExpect(jsonPath("$.valorTotalResgatado").value(6.00))
+                .andExpect(jsonPath("$.roleta.progressoGrupo").value(1))
+                .andExpect(jsonPath("$.roleta.notificacoes[0].tipo").value("SACAR_VALOR"))
+                .andExpect(jsonPath("$.roleta.notificacoes[0].texto").value("Cliente Saque sacou"))
+                .andExpect(jsonPath("$.roleta.notificacoes[0].usuarioNome").value("Cliente Saque"));
+
+        assertEquals(1, contarInteracoes(RoletaInteracaoTipo.SACAR_VALOR));
+        var interacaoSaque = roletaInteracaoRepository.findAll().get(0);
+        assertEquals(true, interacaoSaque.getContaParaMeta());
     }
 
     @Test
@@ -463,6 +565,18 @@ class RoletaControllerTest {
         assertTrue(convite.getConvertidoEm() != null);
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("CONVITE:" + indicado.getId()));
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEventoStartingWith("CONVITE:"));
+        assertEquals(1, contarInteracoes(RoletaInteracaoTipo.INDICACAO_CONVERTIDA));
+        var interacaoIndicacao = roletaInteracaoRepository
+                .findByChaveEvento("INDICACAO_CONVERTIDA:" + indicado.getId())
+                .orElseThrow();
+        assertEquals(indicador.getId(), interacaoIndicacao.getUsuario().getId());
+        assertEquals(indicado.getId(), interacaoIndicacao.getUsuarioSecundario().getId());
+        assertEquals("Indicador Roleta", interacaoIndicacao.getUsuarioNomeSnapshot());
+        assertEquals("Indicado Roleta", interacaoIndicacao.getUsuarioSecundarioNomeSnapshot());
+        assertEquals(true, interacaoIndicacao.getContaParaMeta());
+        assertEquals(1, roletaConfigRepository.findById(1L)
+                .orElseThrow()
+                .getProgressoGrupo());
         var participanteIndicador = roletaParticipanteRepository.findByUsuarioId(indicador.getId())
                 .orElseThrow();
         assertEquals(8 + convite.getGirosConcedidos(), participanteIndicador.getGirosDisponiveis());
@@ -836,6 +950,22 @@ class RoletaControllerTest {
         assertEquals(1, pagamentoRepository.count());
         assertEquals(1, pedidoRepository.count());
         assertEquals(1, infinitePayClient.chamadas);
+
+        Long pedidoId = primeiroJson.path("pedidoId").asLong();
+        Long roletaGiroId = jdbcTemplate.queryForObject(
+                "select roleta_giro_id from pedidos where id = ?",
+                Long.class,
+                pedidoId
+        );
+        assertEquals(1, contarInteracoes(RoletaInteracaoTipo.USAR_PREMIO));
+        var interacaoUsoPremio = roletaInteracaoRepository
+                .findByChaveEvento("USAR_PREMIO:" + pedidoId + ":" + roletaGiroId)
+                .orElseThrow();
+        assertEquals("Saia Checkout", interacaoUsoPremio.getProdutoNomeSnapshot());
+        assertEquals(false, interacaoUsoPremio.getContaParaMeta());
+        assertEquals(1, roletaConfigRepository.findById(1L)
+                .orElseThrow()
+                .getProgressoGrupo());
     }
 
     @Test
@@ -906,17 +1036,26 @@ class RoletaControllerTest {
                 .andExpect(jsonPath("$[0].reservado").value(false))
                 .andExpect(jsonPath("$[0].checkoutUrl").isEmpty());
 
-        assertEquals(PedidoStatus.EXPIRADO, pedidoRepository.findById(pedidoId)
-                .orElseThrow()
-                .getStatus());
-        assertEquals(PagamentoStatus.EXPIRADO, pagamentoRepository
-                .findTopByPedidoIdOrderByDataCriacaoDescIdDesc(pedidoId)
-                .orElseThrow()
-                .getStatus());
-        assertEquals(ProdutoReservaStatus.EXPIRADA, produtoReservaRepository.findAll().get(0).getStatus());
-        assertEquals(ProdutoStatus.DISPONIVEL, produtoRepository.findById(produto.getId())
-                .orElseThrow()
-                .getStatus());
+        assertEquals(PedidoStatus.EXPIRADO.name(), jdbcTemplate.queryForObject(
+                "select status from pedidos where id = ?",
+                String.class,
+                pedidoId
+        ));
+        assertEquals(PagamentoStatus.EXPIRADO.name(), jdbcTemplate.queryForObject(
+                "select status from pagamentos where pedido_id = ?",
+                String.class,
+                pedidoId
+        ));
+        assertEquals(ProdutoReservaStatus.EXPIRADA.name(), jdbcTemplate.queryForObject(
+                "select status from produto_reservas where produto_id = ?",
+                String.class,
+                produto.getId()
+        ));
+        assertEquals(ProdutoStatus.DISPONIVEL.name(), jdbcTemplate.queryForObject(
+                "select status from produtos where id = ?",
+                String.class,
+                produto.getId()
+        ));
     }
 
     @Test
@@ -967,6 +1106,24 @@ class RoletaControllerTest {
         assertEquals(RoletaGiroStatus.USADO, roletaGiroRepository.findById(roletaGiroId)
                 .orElseThrow()
                 .getStatus());
+        assertEquals(1, contarInteracoes(RoletaInteracaoTipo.RESGATAR_ITEM));
+        var interacaoResgate = roletaInteracaoRepository
+                .findByChaveEvento("RESGATAR_ITEM:" + pedidoId)
+                .orElseThrow();
+        assertEquals("Vestido Pago", interacaoResgate.getProdutoNomeSnapshot());
+        assertEquals(true, interacaoResgate.getContaParaMeta());
+
+        mockMvc.perform(post("/api/pagamentos/infinitepay/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Payment-Signature", assinatura(payload))
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.duplicado").value(true));
+
+        assertEquals(1, contarInteracoes(RoletaInteracaoTipo.RESGATAR_ITEM));
+        assertEquals(2, roletaConfigRepository.findById(1L)
+                .orElseThrow()
+                .getProgressoGrupo());
     }
 
     @Test
@@ -2347,6 +2504,13 @@ class RoletaControllerTest {
         return "Bearer " + jwtService.generateToken(usuario);
     }
 
+    private long contarInteracoes(RoletaInteracaoTipo tipo) {
+        return roletaInteracaoRepository.findAll()
+                .stream()
+                .filter(interacao -> interacao.getTipo() == tipo)
+                .count();
+    }
+
     private String assinatura(String payload) throws Exception {
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(
@@ -2359,6 +2523,7 @@ class RoletaControllerTest {
     }
 
     private void limparDados() {
+        roletaInteracaoRepository.deleteAll();
         pagamentoRepository.deleteAll();
         produtoReservaRepository.deleteAll();
         pedidoItemRepository.deleteAll();

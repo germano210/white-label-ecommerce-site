@@ -5,6 +5,7 @@ import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
 import com.whiteLabel.backend.dto.RoletaGiroResponse;
+import com.whiteLabel.backend.dto.RoletaSaqueResponse;
 import com.whiteLabel.backend.dto.RoletaStatusResponse;
 import com.whiteLabel.backend.service.RoletaService;
 import jakarta.validation.Valid;
@@ -60,5 +61,11 @@ public class RoletaController {
             @Valid @RequestBody RoletaConvitesRequest request
     ) {
         return roletaService.registrarConvite(request);
+    }
+
+    @PostMapping("/saques")
+    @ResponseStatus(HttpStatus.CREATED)
+    public RoletaSaqueResponse sacarValorDisponivel() {
+        return roletaService.sacarValorDisponivel();
     }
 }

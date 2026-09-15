@@ -7,7 +7,9 @@ import com.whiteLabel.backend.repository.IndicacaoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
 import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
+import com.whiteLabel.backend.repository.RoletaInteracaoRepository;
 import com.whiteLabel.backend.repository.RoletaParticipanteRepository;
+import com.whiteLabel.backend.repository.UsuarioMissaoSemanalRepository;
 import com.whiteLabel.backend.repository.UsuarioRepository;
 import com.whiteLabel.backend.service.JwtService;
 import org.junit.jupiter.api.AfterEach;
@@ -51,6 +53,9 @@ class IndicacaoControllerTest {
     private RoletaGiroCreditoRepository roletaGiroCreditoRepository;
 
     @Autowired
+    private RoletaInteracaoRepository roletaInteracaoRepository;
+
+    @Autowired
     private RoletaParticipanteRepository roletaParticipanteRepository;
 
     @Autowired
@@ -58,6 +63,9 @@ class IndicacaoControllerTest {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private UsuarioMissaoSemanalRepository usuarioMissaoSemanalRepository;
 
     @BeforeEach
     void setUp() {
@@ -281,11 +289,13 @@ class IndicacaoControllerTest {
     }
 
     private void limparDados() {
+        roletaInteracaoRepository.deleteAll();
         indicacaoRepository.deleteAll();
         roletaConviteRepository.deleteAll();
         roletaGiroCreditoRepository.deleteAll();
         roletaParticipanteRepository.deleteAll();
         roletaConfigRepository.deleteAll();
+        usuarioMissaoSemanalRepository.deleteAll();
 
         List<Usuario> usuarios = usuarioRepository.findAll();
         usuarios.forEach(usuario -> usuario.setIndicadoPor(null));

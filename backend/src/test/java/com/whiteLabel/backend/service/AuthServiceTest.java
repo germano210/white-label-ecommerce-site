@@ -16,13 +16,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,13 +34,14 @@ class AuthServiceTest {
 
     private UsuarioRepository repository;
     private JwtService jwtService;
+    private SecureRandom random;
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         repository = mock(UsuarioRepository.class);
         jwtService = mock(JwtService.class);
-        SecureRandom random = mock(SecureRandom.class);
+        random = mock(SecureRandom.class);
         when(random.nextInt(1_000_000)).thenReturn(42);
         authService = new AuthService(repository, jwtService, random, CLOCK);
     }
@@ -57,6 +59,7 @@ class AuthServiceTest {
         ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
         verify(repository).save(captor.capture());
         assertEquals("000042", captor.getValue().getOtp());
+        assertEquals("Birdperson", captor.getValue().getNome());
         assertEquals(
                 LocalDateTime.now(CLOCK).plusMinutes(5),
                 captor.getValue().getOtpExpiracao()
@@ -69,7 +72,31 @@ class AuthServiceTest {
 
         authService.requestOtp(new RequestOtpRequest("5511999999999", null));
 
-        verify(repository).save(any(Usuario.class));
+        ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
+        verify(repository).save(captor.capture());
+        assertEquals("Birdperson", captor.getValue().getNome());
+    }
+
+    @Test
+    void shouldCreateRandomInitialNamesFromOfficialListForNewUsers() {
+        when(repository.findByTelefone("5511999990001")).thenReturn(Optional.empty());
+        when(repository.findByTelefone("5511999990002")).thenReturn(Optional.empty());
+        when(repository.findByTelefone("5511999990003")).thenReturn(Optional.empty());
+        when(random.nextInt(19)).thenReturn(0, 6, 18);
+        when(random.nextInt(1_000_000)).thenReturn(101, 102, 103);
+
+        authService.requestOtp(new RequestOtpRequest("5511999990001", null));
+        authService.requestOtp(new RequestOtpRequest("5511999990002", null));
+        authService.requestOtp(new RequestOtpRequest("5511999990003", null));
+
+        ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
+        verify(repository, times(3)).save(captor.capture());
+        List<String> nomes = captor.getAllValues()
+                .stream()
+                .map(Usuario::getNome)
+                .toList();
+
+        assertEquals(List.of("Birdperson", "Jaguar", "Beth"), nomes);
     }
 
     @Test
@@ -93,7 +120,7 @@ class AuthServiceTest {
         assertEquals("EXISTING_USER", response.status());
         assertEquals("USUARIO_JA_CADASTRADO", response.message());
         verify(repository).save(usuario);
-        assertEquals("Maria Atualizada", usuario.getNome());
+        assertEquals("Maria", usuario.getNome());
         assertEquals("5511999999999", usuario.getTelefone());
     }
 

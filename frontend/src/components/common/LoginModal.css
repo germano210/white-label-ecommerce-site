@@ -59,6 +59,18 @@
     margin-top: 37px;
 }
 
+.login-modal__actions--after-notifications {
+    margin-top: 0;
+}
+
+.login-modal__notifications {
+    margin: 20px -12px 78px;
+}
+
+.login-modal__notifications .roleta-notifications-story__chip {
+    background: #F1F1F1;
+}
+
 .login-modal__primary,
 .login-modal__secondary {
     width: 100%;
@@ -81,6 +93,15 @@
 .login-modal__primary:disabled {
     cursor: wait;
     opacity: 0.7;
+}
+
+.login-modal__primary--inactive,
+.login-modal__primary--inactive:disabled {
+    background: #7A7878;
+    color: #ffffff;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 1;
 }
 
 .login-modal__secondary {

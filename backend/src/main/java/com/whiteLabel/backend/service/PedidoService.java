@@ -46,6 +46,7 @@ public class PedidoService {
     private final PagamentoRepository pagamentoRepository;
     private final ProdutoReservaService produtoReservaService;
     private final RoletaGiroRepository roletaGiroRepository;
+    private final RoletaInteracaoService roletaInteracaoService;
     private final InfinitePayClient infinitePayClient;
     private final String infinitePayHandle;
     private final String infinitePayRedirectUrl;
@@ -57,6 +58,7 @@ public class PedidoService {
             PagamentoRepository pagamentoRepository,
             ProdutoReservaService produtoReservaService,
             RoletaGiroRepository roletaGiroRepository,
+            RoletaInteracaoService roletaInteracaoService,
             InfinitePayClient infinitePayClient,
             @Value("${infinitepay.handle}") String infinitePayHandle,
             @Value("${infinitepay.redirect-url}") String infinitePayRedirectUrl,
@@ -67,6 +69,7 @@ public class PedidoService {
         this.pagamentoRepository = pagamentoRepository;
         this.produtoReservaService = produtoReservaService;
         this.roletaGiroRepository = roletaGiroRepository;
+        this.roletaInteracaoService = roletaInteracaoService;
         this.infinitePayClient = infinitePayClient;
         this.infinitePayHandle = infinitePayHandle;
         this.infinitePayRedirectUrl = infinitePayRedirectUrl;
@@ -238,6 +241,14 @@ public class PedidoService {
 
         pagamento.definirCheckoutUrl(link.url());
         pagamento = pagamentoRepository.saveAndFlush(pagamento);
+
+        if (pedidoSalvo.getRoletaGiro() != null) {
+            roletaInteracaoService.registrarUsoPremio(
+                    usuario,
+                    pedidoSalvo.getRoletaGiro(),
+                    pedidoSalvo
+            );
+        }
 
         return CheckoutResponse.from(pagamento);
     }

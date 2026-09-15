@@ -31,6 +31,7 @@ public class PagamentoWebhookService {
     private final PedidoRepository pedidoRepository;
     private final RoletaService roletaService;
     private final ProdutoReservaService produtoReservaService;
+    private final RoletaInteracaoService roletaInteracaoService;
     private final ObjectMapper objectMapper;
     private final String webhookSecret;
 
@@ -39,6 +40,7 @@ public class PagamentoWebhookService {
             PedidoRepository pedidoRepository,
             RoletaService roletaService,
             ProdutoReservaService produtoReservaService,
+            RoletaInteracaoService roletaInteracaoService,
             ObjectMapper objectMapper,
             @Value("${payment.webhook-secret}") String webhookSecret
     ) {
@@ -46,6 +48,7 @@ public class PagamentoWebhookService {
         this.pedidoRepository = pedidoRepository;
         this.roletaService = roletaService;
         this.produtoReservaService = produtoReservaService;
+        this.roletaInteracaoService = roletaInteracaoService;
         this.objectMapper = objectMapper;
         this.webhookSecret = webhookSecret;
     }
@@ -106,6 +109,7 @@ public class PagamentoWebhookService {
             produtoReservaService.finalizarReservasDoPedido(pedido);
             if (!pedidoJaEstavaPago) {
                 roletaService.creditarComissaoIndicacao(pedido, pagamento.getValor());
+                roletaInteracaoService.registrarResgateItem(pedido);
             }
             return;
         }
