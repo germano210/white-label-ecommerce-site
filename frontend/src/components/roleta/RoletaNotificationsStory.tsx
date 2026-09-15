@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Heart } from 'lucide-react';
 import {
     normalizeRoletaRarityText,
     type RoletaNotificationView,
@@ -69,21 +68,46 @@ export function RoletaNotificationsStory({
     ariaLabel = 'Notificacoes da roleta',
 }: RoletaNotificationsStoryProps) {
     const [activeNotificationIndex, setActiveNotificationIndex] = useState(0);
+    const [displayNotifications, setDisplayNotifications] = useState<RoletaNotificationView[]>([]);
     const notificationsRailRef = useRef<HTMLDivElement | null>(null);
     const notificationChipRefs = useRef<Array<HTMLSpanElement | null>>([]);
-    const latestNotificationId = notifications[0]?.id ?? '';
+    const latestNotificationId = displayNotifications[0]?.id ?? '';
 
     useEffect(() => {
-        notificationChipRefs.current = notificationChipRefs.current.slice(0, notifications.length);
+        setDisplayNotifications((currentQueue) => {
+            if (notifications.length === 0) return [];
+            if (currentQueue.length === 0) return notifications;
 
-        if (notifications.length === 0) {
+            const incomingNotificationsById = new Map(
+                notifications.map((notification) => [notification.id, notification]),
+            );
+            const currentNotificationIds = new Set(currentQueue.map((notification) => notification.id));
+            const updatedCurrentQueue = currentQueue
+                .filter((notification) => incomingNotificationsById.has(notification.id))
+                .map((notification) => incomingNotificationsById.get(notification.id) ?? notification);
+            const newNotifications = notifications.filter((notification) => (
+                !currentNotificationIds.has(notification.id)
+            ));
+
+            return [...updatedCurrentQueue, ...newNotifications];
+        });
+    }, [notifications]);
+
+    useEffect(() => {
+        notificationChipRefs.current = notificationChipRefs.current.slice(0, displayNotifications.length);
+
+        if (displayNotifications.length === 0) {
             setActiveNotificationIndex(0);
         }
-    }, [notifications.length]);
+    }, [displayNotifications.length]);
 
     useEffect(() => {
-        setActiveNotificationIndex(0);
-    }, [latestNotificationId]);
+        setActiveNotificationIndex((currentIndex) => (
+            displayNotifications.length === 0
+                ? 0
+                : Math.min(currentIndex, displayNotifications.length - 1)
+        ));
+    }, [displayNotifications.length]);
 
     useEffect(() => {
         const notificationsRail = notificationsRailRef.current;
@@ -95,21 +119,21 @@ export function RoletaNotificationsStory({
             left: activeNotification.offsetLeft - notificationsRail.offsetLeft,
             behavior: 'smooth',
         });
-    }, [activeNotificationIndex, notifications.length]);
+    }, [activeNotificationIndex, displayNotifications.length]);
 
     useEffect(() => {
-        if (notifications.length <= 1) return;
+        if (displayNotifications.length <= 1) return;
 
         const intervalId = window.setInterval(() => {
             setActiveNotificationIndex((currentIndex) => (
-                currentIndex >= notifications.length - 1 ? 0 : currentIndex + 1
+                currentIndex >= displayNotifications.length - 1 ? 0 : currentIndex + 1
             ));
         }, intervalMs);
 
         return () => window.clearInterval(intervalId);
-    }, [intervalMs, latestNotificationId, notifications.length]);
+    }, [intervalMs, latestNotificationId, displayNotifications.length]);
 
-    if (notifications.length === 0) return null;
+    if (displayNotifications.length === 0) return null;
 
     return (
         <div
@@ -117,7 +141,7 @@ export function RoletaNotificationsStory({
             className={`roleta-notifications-story${className ? ` ${className}` : ''}`}
             aria-label={ariaLabel}
         >
-            {notifications.map((notification, index) => (
+            {displayNotifications.map((notification, index) => (
                 <span
                     className={`roleta-notifications-story__chip${activeNotificationIndex === index ? ' roleta-notifications-story__chip--active' : ''}`}
                     key={`${notification.id}-${index}`}
