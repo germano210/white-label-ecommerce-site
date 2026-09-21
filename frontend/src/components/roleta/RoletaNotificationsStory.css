@@ -6,9 +6,8 @@
     overflow-x: auto;
     overflow-y: hidden;
     padding: 0 0 2px;
-    scroll-behavior: smooth;
-    scroll-snap-type: x mandatory;
     scrollbar-width: none;
+    touch-action: pan-x;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -32,7 +31,6 @@
     font-weight: 300;
     line-height: 1;
     padding: 0 15px;
-    scroll-snap-align: start;
     text-overflow: ellipsis;
     white-space: nowrap;
 }

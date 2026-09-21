@@ -167,15 +167,18 @@
 }
 
 .roleta-vip-group-goal {
+    --roleta-group-goal-x-padding: 15px;
     margin-bottom: clamp(14px, 4.8vw, 20px);
-    padding: 20px 15px;
+    padding: 20px var(--roleta-group-goal-x-padding);
     background-color: #F7F7F7 ;
     border-radius: 7px;
     overflow: hidden;
 }
 
 .roleta-vip-group-goal .roleta-notifications-story {
+    width: calc(100% + (var(--roleta-group-goal-x-padding) * 2));
     margin-bottom: 20px;
+    margin-left: calc(var(--roleta-group-goal-x-padding) * -1);
 }
 
 .roleta-vip-group-goal-row {
