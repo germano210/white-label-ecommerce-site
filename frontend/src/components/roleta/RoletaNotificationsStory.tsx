@@ -87,6 +87,7 @@ export function RoletaNotificationsStory({
     const autoplayScrollLeftRef = useRef<number | null>(null);
     const isAutoplayPausedRef = useRef(false);
     const isProgrammaticScrollRef = useRef(false);
+    const isPointerInteractingRef = useRef(false);
     const shouldLoop = displayNotifications.length > 1;
     const renderedNotifications = shouldLoop
         ? Array.from({ length: displayNotifications.length * ROLETA_NOTIFICATION_LOOP_COPIES }, (_, renderIndex) => (
@@ -232,6 +233,24 @@ export function RoletaNotificationsStory({
         scheduleManualSyncFromRail(event.currentTarget);
     };
 
+    const handlePointerDown = () => {
+        isPointerInteractingRef.current = true;
+        pauseAutoplayTemporarily();
+    };
+
+    const handlePointerMove = () => {
+        if (!isPointerInteractingRef.current) return;
+
+        pauseAutoplayTemporarily();
+    };
+
+    const handlePointerEnd = () => {
+        if (!isPointerInteractingRef.current) return;
+
+        isPointerInteractingRef.current = false;
+        pauseAutoplayTemporarily();
+    };
+
     useEffect(() => {
         setDisplayNotifications((currentQueue) => {
             if (notifications.length === 0) return [];
@@ -375,10 +394,11 @@ export function RoletaNotificationsStory({
             className={`roleta-notifications-story${className ? ` ${className}` : ''}`}
             aria-label={ariaLabel}
             onScroll={handleManualScroll}
-            onPointerDown={pauseAutoplayTemporarily}
-            onPointerMove={pauseAutoplayTemporarily}
-            onPointerUp={pauseAutoplayTemporarily}
-            onPointerCancel={pauseAutoplayTemporarily}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+            onPointerLeave={handlePointerEnd}
             onWheel={pauseAutoplayTemporarily}
         >
             {renderedNotifications.map((notification, index) => (
