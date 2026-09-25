@@ -524,22 +524,41 @@
     position: absolute;
     top: 50%;
     z-index: 6;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    place-items: center;
+    transform: translateY(-50%);
+}
+
+.roleta-vip-daily-image-arrow img {
     width: 34px;
     height: 34px;
     border-radius: 50%;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
-    object-fit: contain;
     pointer-events: none;
-    transform: translateY(-50%);
+}
+
+.roleta-vip-daily-image-arrow:disabled {
+    cursor: default;
+    opacity: 0.45;
 }
 
 .roleta-vip-daily-image-arrow--left {
-    left: 25px;
-    transform: translateY(-50%) rotate(180deg);
+    left: 20px;
+}
+
+.roleta-vip-daily-image-arrow--left img {
+    transform: rotate(180deg);
 }
 
 .roleta-vip-daily-image-arrow--right {
-    right: 25px;
+    right: 20px;
 }
 
 .roleta-vip-daily-price--discount {

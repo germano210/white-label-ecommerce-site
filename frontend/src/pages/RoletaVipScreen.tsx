@@ -1998,6 +1998,10 @@ export function RoletaVipScreen() {
         }
 
         if (!expandedDailyProductIds[product.clientKey]) {
+            setActiveImageByProductId((currentImages) => ({
+                ...currentImages,
+                [product.clientKey]: product.images.length > 1 ? 1 : 0,
+            }));
             setExpandedDailyProductIds((currentExpandedIds) => ({
                 ...currentExpandedIds,
                 [product.clientKey]: true,
@@ -2281,9 +2285,7 @@ export function RoletaVipScreen() {
                                         );
                                         const mainImage = product.images[0];
                                         const isExpanded = Boolean(expandedDailyProductIds[product.clientKey]);
-                                        const detailImageIndex = isExpanded && activeImageIndex === 0 && product.images.length > 1
-                                            ? 1
-                                            : activeImageIndex;
+                                        const detailImageIndex = activeImageIndex;
                                         const visibleImageIndex = isExpanded ? detailImageIndex : 0;
                                         const activeImage = product.images[getClampedImageIndex(product, detailImageIndex)];
                                         const checkoutError = dailyCheckoutErrorByProductId[product.clientKey];
@@ -2368,20 +2370,30 @@ export function RoletaVipScreen() {
                                                                 </div>
                                                                 {product.images.length > 1 && (
                                                                     <>
-                                                                        <img
+                                                                        <button
+                                                                            type="button"
                                                                             className="roleta-vip-daily-image-arrow roleta-vip-daily-image-arrow--left"
-                                                                            src={arrowImageIcon}
-                                                                            alt=""
-                                                                            aria-hidden="true"
-                                                                            draggable={false}
-                                                                        />
-                                                                        <img
+                                                                            aria-label={`Foto anterior de ${product.nome}`}
+                                                                            disabled={detailImageIndex === 0}
+                                                                            onClick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                setDailyProductImage(product, -1);
+                                                                            }}
+                                                                        >
+                                                                            <img src={arrowImageIcon} alt="" draggable={false} />
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
                                                                             className="roleta-vip-daily-image-arrow roleta-vip-daily-image-arrow--right"
-                                                                            src={arrowImageIcon}
-                                                                            alt=""
-                                                                            aria-hidden="true"
-                                                                            draggable={false}
-                                                                        />
+                                                                            aria-label={`Próxima foto de ${product.nome}`}
+                                                                            disabled={detailImageIndex === product.images.length - 1}
+                                                                            onClick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                setDailyProductImage(product, 1);
+                                                                            }}
+                                                                        >
+                                                                            <img src={arrowImageIcon} alt="" draggable={false} />
+                                                                        </button>
                                                                     </>
                                                                 )}
                                                                 {product.priceLabel && (
