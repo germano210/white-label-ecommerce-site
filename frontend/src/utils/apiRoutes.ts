@@ -49,6 +49,8 @@ export const apiRoutes = {
     roleta: {
         status: '/api/roleta',
         girar: '/api/roleta/girar',
+        girarPrimeiroAcesso: '/api/roleta/girar-primeiro-acesso',
+        vincularGiroPrimeiroAcesso: '/api/roleta/giro-primeiro-acesso/vincular',
         produtos: '/api/roleta/produtos',
         resgatarProduto: (produtoId: RouteId) => `/api/roleta/produtos/${routeId(produtoId)}/resgatar`,
         convites: '/api/roleta/convites',

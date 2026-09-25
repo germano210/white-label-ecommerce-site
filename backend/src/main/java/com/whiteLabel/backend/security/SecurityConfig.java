@@ -86,6 +86,8 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/roleta", "/api/roleta/")
                         .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/roleta/girar-primeiro-acesso")
+                        .permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/configuracoes/publicas",

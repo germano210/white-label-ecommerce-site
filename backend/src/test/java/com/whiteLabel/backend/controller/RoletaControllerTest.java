@@ -18,6 +18,8 @@ import com.whiteLabel.backend.domain.RoletaMetaStatus;
 import com.whiteLabel.backend.domain.RoletaNivel;
 import com.whiteLabel.backend.domain.RoletaOpcao;
 import com.whiteLabel.backend.domain.RoletaGiroStatus;
+import com.whiteLabel.backend.domain.RoletaGiroVisitante;
+import com.whiteLabel.backend.domain.RoletaGiroVisitanteStatus;
 import com.whiteLabel.backend.domain.RoletaPremio;
 import com.whiteLabel.backend.domain.RoletaProduto;
 import com.whiteLabel.backend.domain.RoletaTipoPremio;
@@ -36,6 +38,7 @@ import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaConviteRepository;
 import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
+import com.whiteLabel.backend.repository.RoletaGiroVisitanteRepository;
 import com.whiteLabel.backend.repository.RoletaInteracaoRepository;
 import com.whiteLabel.backend.repository.RoletaMetaRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
@@ -116,6 +119,9 @@ class RoletaControllerTest {
 
     @Autowired
     private RoletaGiroCreditoRepository roletaGiroCreditoRepository;
+
+    @Autowired
+    private RoletaGiroVisitanteRepository roletaGiroVisitanteRepository;
 
     @Autowired
     private RoletaInteracaoRepository roletaInteracaoRepository;
@@ -237,6 +243,132 @@ class RoletaControllerTest {
     void shouldRequireAuthToSpin() throws Exception {
         mockMvc.perform(post("/api/roleta/girar").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldAllowAnonymousFirstAccessSpin() throws Exception {
+        RoletaPremio premioConfigurado = criarPremioPadrao();
+
+        mockMvc.perform(post("/api/roleta/girar-primeiro-acesso")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.premio.valorPremio").value(10.00))
+                .andExpect(jsonPath("$.premio.status").value("PENDENTE"))
+                .andExpect(jsonPath("$.premio.premioConfiguradoId").value(premioConfigurado.getId()))
+                .andExpect(jsonPath("$.nivelSorteado.id").value(premioConfigurado.getNivel().getId()))
+                .andExpect(jsonPath("$.nivelCorHex").value("#4b69ff"))
+                .andExpect(jsonPath("$.expiraEm").isNotEmpty())
+                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(0));
+
+        assertEquals(1, roletaGiroVisitanteRepository.count());
+        assertEquals(0, roletaGiroRepository.count());
+        assertEquals(0, roletaInteracaoRepository.count());
+    }
+
+    @Test
+    void shouldLinkAnonymousFirstAccessSpinAfterLogin() throws Exception {
+        criarPremioPadrao();
+        Usuario usuario = criarUsuario("Cliente Primeiro Acesso", "551199992201");
+
+        String response = mockMvc.perform(post("/api/roleta/girar-primeiro-acesso")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String token = objectMapper.readTree(response).path("token").asText();
+
+        mockMvc.perform(post("/api/roleta/giro-primeiro-acesso/vincular")
+                        .header("Authorization", bearer(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s"
+                                }
+                                """.formatted(token))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.premioAtual.status").value("PENDENTE"))
+                .andExpect(jsonPath("$.premioAtual.valorPremio").value(10.00))
+                .andExpect(jsonPath("$.roleta.premioAtual.valorPremio").value(10.00))
+                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(8))
+                .andExpect(jsonPath("$.roleta.progressoGrupo").value(1));
+
+        RoletaGiroVisitante giroVisitante = roletaGiroVisitanteRepository.findAll().get(0);
+        assertEquals(RoletaGiroVisitanteStatus.VINCULADO, giroVisitante.getStatus());
+        assertEquals(usuario.getId(), giroVisitante.getUsuario().getId());
+        assertEquals(1, roletaGiroRepository.count());
+        assertEquals(2, roletaInteracaoRepository.count());
+    }
+
+    @Test
+    void shouldRejectExpiredAnonymousFirstAccessToken() throws Exception {
+        RoletaPremio premioConfigurado = criarPremioPadrao();
+        Usuario usuario = criarUsuario("Cliente Token Expirado", "551199992202");
+        roletaGiroVisitanteRepository.save(new RoletaGiroVisitante(
+                "token-expirado",
+                premioConfigurado.getNivel(),
+                premioConfigurado,
+                premioConfigurado.getTipoPremio(),
+                BigDecimal.TEN,
+                LocalDateTime.now().minusHours(1)
+        ));
+
+        mockMvc.perform(post("/api/roleta/giro-primeiro-acesso/vincular")
+                        .header("Authorization", bearer(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "token-expirado"
+                                }
+                                """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Giro de primeiro acesso expirado"));
+
+        RoletaGiroVisitante giroVisitante = roletaGiroVisitanteRepository.findAll().get(0);
+        assertEquals(RoletaGiroVisitanteStatus.EXPIRADO, giroVisitante.getStatus());
+        assertEquals(0, roletaGiroRepository.count());
+    }
+
+    @Test
+    void shouldRejectAlreadyLinkedAnonymousFirstAccessToken() throws Exception {
+        criarPremioPadrao();
+        Usuario usuario = criarUsuario("Cliente Token Usado", "551199992203");
+
+        String response = mockMvc.perform(post("/api/roleta/girar-primeiro-acesso")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String token = objectMapper.readTree(response).path("token").asText();
+
+        mockMvc.perform(post("/api/roleta/giro-primeiro-acesso/vincular")
+                        .header("Authorization", bearer(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s"
+                                }
+                                """.formatted(token))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/roleta/giro-primeiro-acesso/vincular")
+                        .header("Authorization", bearer(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s"
+                                }
+                                """.formatted(token))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Giro de primeiro acesso ja foi vinculado"));
+
+        assertEquals(1, roletaGiroRepository.count());
     }
 
     @Test
@@ -2530,6 +2662,7 @@ class RoletaControllerTest {
         pedidoRepository.deleteAll();
         indicacaoRepository.deleteAll();
         roletaConviteRepository.deleteAll();
+        roletaGiroVisitanteRepository.deleteAll();
         roletaGiroRepository.deleteAll();
         roletaGiroCreditoRepository.deleteAll();
         roletaMetaRepository.deleteAll();

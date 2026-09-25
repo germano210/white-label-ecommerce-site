@@ -99,6 +99,15 @@
     white-space: nowrap;
 }
 
+.roleta-vip-page--guest-before-spin .roleta-vip-profile-cta,
+.roleta-vip-page--guest-before-spin .roleta-vip-group-goal,
+.roleta-vip-page--guest-before-spin .roleta-vip-switch,
+.roleta-vip-page--guest-before-spin .roleta-vip-invite-block,
+.roleta-vip-page--guest-before-spin .roleta-vip-info-footer {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 .roleta-vip-summary {
     display: grid;
     grid-template-columns: minmax(0, 40%) minmax(0, 60%);

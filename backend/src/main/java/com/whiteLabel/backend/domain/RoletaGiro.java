@@ -105,12 +105,34 @@ public class RoletaGiro {
             BigDecimal valorPremio,
             Integer girosExtras
     ) {
+        this(
+                usuario,
+                nivel,
+                premio,
+                premio.getTipoPremio(),
+                premio.getTitulo(),
+                premio.getDescricao(),
+                valorPremio,
+                girosExtras
+        );
+    }
+
+    public RoletaGiro(
+            Usuario usuario,
+            RoletaNivel nivel,
+            RoletaPremio premio,
+            RoletaTipoPremio tipoPremio,
+            String tituloPremio,
+            String descricaoPremio,
+            BigDecimal valorPremio,
+            Integer girosExtras
+    ) {
         this.usuario = Objects.requireNonNull(usuario);
         this.nivel = Objects.requireNonNull(nivel);
         this.premio = Objects.requireNonNull(premio);
-        this.tipoPremio = premio.getTipoPremio();
-        this.tituloPremio = premio.getTitulo();
-        this.descricaoPremio = premio.getDescricao();
+        this.tipoPremio = tipoPremio == null ? premio.getTipoPremio() : tipoPremio;
+        this.tituloPremio = tituloPremio;
+        this.descricaoPremio = descricaoPremio;
         this.valorPremio = valorPremio == null ? BigDecimal.ZERO : valorPremio;
         this.girosExtras = Math.max(0, girosExtras == null ? 0 : girosExtras);
         this.valorDesconto = this.tipoPremio == RoletaTipoPremio.DESCONTO_VALOR

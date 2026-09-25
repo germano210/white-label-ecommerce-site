@@ -15,6 +15,7 @@ import { AdminLoginScreen } from './pages/admin/AdminLoginScreen';
 import { useAdminStore } from './store/useAdminStore';
 import { useConfiguracoesStore } from './store/useConfiguracoesStore';
 import { type AuthUser, useAuthStore } from './store/useAuthStore';
+import { useRoletaGuestStore } from './store/useRoletaGuestStore';
 import { api, isCookieAuthMode } from './utils/api';
 import { apiRoutes } from './utils/apiRoutes';
 import { appRoutes } from './utils/appRoutes';
@@ -79,6 +80,9 @@ function AppRoutes() {
     const hasHydrated = useAuthStore((state) => state.hasHydrated);
     const setSession = useAuthStore((state) => state.setSession);
     const logout = useAuthStore((state) => state.logout);
+    const isGuestFirstAccess = useRoletaGuestStore((state) => state.isGuestFirstAccess);
+    const isLoginPromptOpen = useRoletaGuestStore((state) => state.isLoginPromptOpen);
+    const continueAsGuestFirstAccess = useRoletaGuestStore((state) => state.continueAsGuestFirstAccess);
     const [isRestoringCookieSession, setIsRestoringCookieSession] = useState(isCookieAuthMode);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
     const isAdminRoute = normalizedPathname === appRoutes.admin;
@@ -191,7 +195,13 @@ function AppRoutes() {
                 <Route path="*" element={<Navigate to={appRoutes.root} replace />} />
             </Routes>
 
-            {!isAdminRoute && !isAuthenticated && <LoginModal roletaBackdrop={isRoletaRoute} />}
+            {!isAdminRoute && !isAuthenticated && (!isGuestFirstAccess || isLoginPromptOpen) && (
+                <LoginModal
+                    roletaBackdrop={isRoletaRoute}
+                    initialStep={isLoginPromptOpen ? 'details' : 'choice'}
+                    onFirstAccessAsGuest={continueAsGuestFirstAccess}
+                />
+            )}
         </div>
     );
 }

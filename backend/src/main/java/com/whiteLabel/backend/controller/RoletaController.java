@@ -4,6 +4,8 @@ import com.whiteLabel.backend.dto.CheckoutResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
+import com.whiteLabel.backend.dto.RoletaGiroPrimeiroAcessoResponse;
+import com.whiteLabel.backend.dto.RoletaGiroPrimeiroAcessoVincularRequest;
 import com.whiteLabel.backend.dto.RoletaGiroResponse;
 import com.whiteLabel.backend.dto.RoletaSaqueResponse;
 import com.whiteLabel.backend.dto.RoletaStatusResponse;
@@ -38,6 +40,18 @@ public class RoletaController {
     @PostMapping("/girar")
     public RoletaGiroResponse girar() {
         return roletaService.girar();
+    }
+
+    @PostMapping("/girar-primeiro-acesso")
+    public RoletaGiroPrimeiroAcessoResponse girarPrimeiroAcesso() {
+        return roletaService.girarPrimeiroAcesso();
+    }
+
+    @PostMapping("/giro-primeiro-acesso/vincular")
+    public RoletaGiroResponse vincularGiroPrimeiroAcesso(
+            @Valid @RequestBody RoletaGiroPrimeiroAcessoVincularRequest request
+    ) {
+        return roletaService.vincularGiroPrimeiroAcesso(request);
     }
 
     @GetMapping("/produtos")

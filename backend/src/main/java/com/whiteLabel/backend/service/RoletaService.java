@@ -7,6 +7,8 @@ import com.whiteLabel.backend.domain.RoletaConfig;
 import com.whiteLabel.backend.domain.RoletaGiro;
 import com.whiteLabel.backend.domain.RoletaGiroCredito;
 import com.whiteLabel.backend.domain.RoletaGiroStatus;
+import com.whiteLabel.backend.domain.RoletaGiroVisitante;
+import com.whiteLabel.backend.domain.RoletaGiroVisitanteStatus;
 import com.whiteLabel.backend.domain.RoletaNivel;
 import com.whiteLabel.backend.domain.RoletaOpcao;
 import com.whiteLabel.backend.domain.RoletaParticipante;
@@ -27,6 +29,8 @@ import com.whiteLabel.backend.dto.IndicacaoLinkResponse;
 import com.whiteLabel.backend.dto.ProdutoResponseDTO;
 import com.whiteLabel.backend.dto.RoletaConvitesRequest;
 import com.whiteLabel.backend.dto.RoletaConvitesResponse;
+import com.whiteLabel.backend.dto.RoletaGiroPrimeiroAcessoResponse;
+import com.whiteLabel.backend.dto.RoletaGiroPrimeiroAcessoVincularRequest;
 import com.whiteLabel.backend.dto.RoletaGiroResponse;
 import com.whiteLabel.backend.dto.RoletaMetaResponse;
 import com.whiteLabel.backend.dto.RoletaNotificacaoResponse;
@@ -41,6 +45,7 @@ import com.whiteLabel.backend.repository.ProdutoRepository;
 import com.whiteLabel.backend.repository.RoletaConfigRepository;
 import com.whiteLabel.backend.repository.RoletaGiroCreditoRepository;
 import com.whiteLabel.backend.repository.RoletaGiroRepository;
+import com.whiteLabel.backend.repository.RoletaGiroVisitanteRepository;
 import com.whiteLabel.backend.repository.RoletaNivelRepository;
 import com.whiteLabel.backend.repository.RoletaOpcaoRepository;
 import com.whiteLabel.backend.repository.RoletaParticipanteRepository;
@@ -62,6 +67,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -78,6 +84,8 @@ import java.util.stream.Collectors;
 public class RoletaService {
 
     private static final Long CONFIG_ID = 1L;
+    private static final int HORAS_EXPIRACAO_GIRO_VISITANTE = 24;
+    private static final int BYTES_TOKEN_VISITANTE = 32;
     private static final List<FaixaDesconto> FAIXAS_PADRAO = List.of(
             new FaixaDesconto("0.82", "1.60"),
             new FaixaDesconto("1.14", "3.36"),
@@ -98,6 +106,7 @@ public class RoletaService {
     private final RoletaParticipanteRepository roletaParticipanteRepository;
     private final RoletaGiroRepository roletaGiroRepository;
     private final RoletaGiroCreditoRepository roletaGiroCreditoRepository;
+    private final RoletaGiroVisitanteRepository roletaGiroVisitanteRepository;
     private final RoletaNivelRepository roletaNivelRepository;
     private final RoletaOpcaoRepository roletaOpcaoRepository;
     private final RoletaPremioRepository roletaPremioRepository;
@@ -117,6 +126,7 @@ public class RoletaService {
             RoletaParticipanteRepository roletaParticipanteRepository,
             RoletaGiroRepository roletaGiroRepository,
             RoletaGiroCreditoRepository roletaGiroCreditoRepository,
+            RoletaGiroVisitanteRepository roletaGiroVisitanteRepository,
             RoletaNivelRepository roletaNivelRepository,
             RoletaOpcaoRepository roletaOpcaoRepository,
             RoletaPremioRepository roletaPremioRepository,
@@ -133,6 +143,7 @@ public class RoletaService {
         this.roletaParticipanteRepository = roletaParticipanteRepository;
         this.roletaGiroRepository = roletaGiroRepository;
         this.roletaGiroCreditoRepository = roletaGiroCreditoRepository;
+        this.roletaGiroVisitanteRepository = roletaGiroVisitanteRepository;
         this.roletaNivelRepository = roletaNivelRepository;
         this.roletaOpcaoRepository = roletaOpcaoRepository;
         this.roletaPremioRepository = roletaPremioRepository;
@@ -186,44 +197,135 @@ public class RoletaService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Usuario sem giros disponiveis");
         }
 
-        List<RoletaPremio> premiosAtivos = buscarPremiosAtivosValidos();
-        List<RoletaNivel> niveisAtivos = buscarNiveisAtivosValidos(premiosAtivos);
-        RoletaNivel nivelSorteado = sortearNivel(niveisAtivos);
-        RoletaPremio premioSorteado = sortearPremio(premiosDoNivel(premiosAtivos, nivelSorteado));
-        PremioCalculado premioCalculado = calcularPremio(premioSorteado);
+        SorteioRoleta sorteio = sortearResultadoRoleta();
         descartarPremiosPendentes(usuario.getId());
         RoletaGiro giro = roletaGiroRepository.save(new RoletaGiro(
                 usuario,
-                nivelSorteado,
-                premioSorteado,
-                premioCalculado.valorPremio(),
-                premioCalculado.girosExtras()
+                sorteio.nivel(),
+                sorteio.premio(),
+                sorteio.premioCalculado().valorPremio(),
+                sorteio.premioCalculado().girosExtras()
         ));
 
-        if (premioSorteado.getTipoPremio() == RoletaTipoPremio.GIRO_EXTRA) {
+        if (sorteio.premio().getTipoPremio() == RoletaTipoPremio.GIRO_EXTRA) {
             creditarGiros(
                     participante,
-                    premioCalculado.girosExtras(),
+                    sorteio.premioCalculado().girosExtras(),
                     "PREMIO_GIRO:" + giro.getId()
             );
         }
 
         roletaInteracaoService.registrarGiroRoleta(usuario, giro);
-        roletaInteracaoService.registrarPremioRecebido(usuario, nivelSorteado, premioSorteado, giro);
+        roletaInteracaoService.registrarPremioRecebido(usuario, sorteio.nivel(), sorteio.premio(), giro);
         roletaParticipanteRepository.save(participante);
         roletaConfigRepository.save(config);
 
         RoletaPremioResponse premio = RoletaPremioResponse.from(giro);
-        Map<Long, BigDecimal> chances = calcularChances(niveisAtivos);
+        Map<Long, BigDecimal> chances = calcularChances(sorteio.niveisAtivos());
         return new RoletaGiroResponse(
                 premio,
                 premio,
                 premio,
                 null,
-                RoletaNivelResponse.from(nivelSorteado, chances.getOrDefault(nivelSorteado.getId(), BigDecimal.ZERO)),
-                nivelSorteado.getCorHex(),
-                RoletaPremioConfiguradoResponse.from(premioSorteado),
-                premioCalculado.valorPremio(),
+                RoletaNivelResponse.from(sorteio.nivel(), chances.getOrDefault(sorteio.nivel().getId(), BigDecimal.ZERO)),
+                sorteio.nivel().getCorHex(),
+                RoletaPremioConfiguradoResponse.from(sorteio.premio()),
+                sorteio.premioCalculado().valorPremio(),
+                participante.getGirosDisponiveis(),
+                montarStatus(config, participante)
+        );
+    }
+
+    @Transactional
+    public RoletaGiroPrimeiroAcessoResponse girarPrimeiroAcesso() {
+        RoletaConfig config = obterConfigSomenteLeitura();
+        if (!Boolean.TRUE.equals(config.getAtiva())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Roleta inativa");
+        }
+
+        SorteioRoleta sorteio = sortearResultadoRoleta();
+        RoletaGiroVisitante giroVisitante = roletaGiroVisitanteRepository.save(new RoletaGiroVisitante(
+                gerarTokenVisitante(),
+                sorteio.nivel(),
+                sorteio.premio(),
+                sorteio.premio().getTipoPremio(),
+                sorteio.premioCalculado().valorPremio(),
+                LocalDateTime.now(clock).plusHours(HORAS_EXPIRACAO_GIRO_VISITANTE)
+        ));
+
+        Map<Long, BigDecimal> chances = calcularChances(sorteio.niveisAtivos());
+        return new RoletaGiroPrimeiroAcessoResponse(
+                giroVisitante.getToken(),
+                RoletaPremioResponse.from(giroVisitante),
+                RoletaNivelResponse.from(
+                        sorteio.nivel(),
+                        chances.getOrDefault(sorteio.nivel().getId(), BigDecimal.ZERO)
+                ),
+                sorteio.nivel().getCorHex(),
+                giroVisitante.getExpiraEm(),
+                montarStatus(config, null)
+        );
+    }
+
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public RoletaGiroResponse vincularGiroPrimeiroAcesso(
+            RoletaGiroPrimeiroAcessoVincularRequest request
+    ) {
+        Usuario usuario = obterUsuarioAutenticado();
+        RoletaConfig config = obterConfig();
+        String token = request.token().trim();
+        RoletaGiroVisitante giroVisitante = roletaGiroVisitanteRepository.findByTokenForUpdate(token)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Giro de primeiro acesso nao encontrado"
+                ));
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        validarGiroVisitanteVinculavel(giroVisitante, now);
+
+        RoletaParticipante participante = garantirParticipanteForUpdate(usuario, config);
+        descartarPremiosPendentes(usuario.getId());
+
+        int girosExtras = calcularGirosExtras(giroVisitante.getTipoPremio(), giroVisitante.getValorPremio());
+        RoletaGiro giro = roletaGiroRepository.save(new RoletaGiro(
+                usuario,
+                giroVisitante.getNivel(),
+                giroVisitante.getPremio(),
+                giroVisitante.getTipoPremio(),
+                gerarTituloPremio(giroVisitante.getTipoPremio(), giroVisitante.getValorPremio()),
+                giroVisitante.getPremio().getDescricao(),
+                giroVisitante.getValorPremio(),
+                girosExtras
+        ));
+        giroVisitante.vincular(usuario, now);
+
+        if (giroVisitante.getTipoPremio() == RoletaTipoPremio.GIRO_EXTRA) {
+            creditarGiros(
+                    participante,
+                    girosExtras,
+                    "PREMIO_GIRO:" + giro.getId()
+            );
+        }
+
+        roletaGiroVisitanteRepository.save(giroVisitante);
+        roletaInteracaoService.registrarGiroRoleta(usuario, giro);
+        roletaInteracaoService.registrarPremioRecebido(usuario, giroVisitante.getNivel(), giroVisitante.getPremio(), giro);
+        roletaParticipanteRepository.save(participante);
+
+        RoletaPremioResponse premio = RoletaPremioResponse.from(giro);
+        Map<Long, BigDecimal> chances = calcularChances(roletaNivelRepository.findByAtivoTrueOrderByOrdemAscIdAsc());
+        return new RoletaGiroResponse(
+                premio,
+                premio,
+                premio,
+                null,
+                RoletaNivelResponse.from(
+                        giroVisitante.getNivel(),
+                        chances.getOrDefault(giroVisitante.getNivel().getId(), BigDecimal.ZERO)
+                ),
+                giroVisitante.getNivelCorHex(),
+                RoletaPremioConfiguradoResponse.from(giroVisitante.getPremio()),
+                giroVisitante.getValorPremio(),
                 participante.getGirosDisponiveis(),
                 montarStatus(config, participante)
         );
@@ -715,6 +817,70 @@ public class RoletaService {
 
         premios.forEach(this::validarPremioAtivoParaSorteio);
         return premios;
+    }
+
+    private SorteioRoleta sortearResultadoRoleta() {
+        List<RoletaPremio> premiosAtivos = buscarPremiosAtivosValidos();
+        List<RoletaNivel> niveisAtivos = buscarNiveisAtivosValidos(premiosAtivos);
+        RoletaNivel nivelSorteado = sortearNivel(niveisAtivos);
+        RoletaPremio premioSorteado = sortearPremio(premiosDoNivel(premiosAtivos, nivelSorteado));
+
+        return new SorteioRoleta(
+                nivelSorteado,
+                premioSorteado,
+                calcularPremio(premioSorteado),
+                niveisAtivos
+        );
+    }
+
+    private String gerarTokenVisitante() {
+        for (int tentativa = 0; tentativa < 5; tentativa++) {
+            byte[] bytes = new byte[BYTES_TOKEN_VISITANTE];
+            secureRandom.nextBytes(bytes);
+            String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+            if (!roletaGiroVisitanteRepository.existsByToken(token)) {
+                return token;
+            }
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Nao foi possivel gerar token de giro visitante"
+        );
+    }
+
+    private void validarGiroVisitanteVinculavel(
+            RoletaGiroVisitante giroVisitante,
+            LocalDateTime now
+    ) {
+        if (giroVisitante.getStatus() == RoletaGiroVisitanteStatus.VINCULADO) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Giro de primeiro acesso ja foi vinculado"
+            );
+        }
+        if (giroVisitante.getStatus() == RoletaGiroVisitanteStatus.EXPIRADO) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Giro de primeiro acesso expirado"
+            );
+        }
+        if (giroVisitante.expiradoEm(now)) {
+            giroVisitante.expirar();
+            roletaGiroVisitanteRepository.save(giroVisitante);
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Giro de primeiro acesso expirado"
+            );
+        }
+    }
+
+    private int calcularGirosExtras(RoletaTipoPremio tipoPremio, BigDecimal valorPremio) {
+        if (tipoPremio != RoletaTipoPremio.GIRO_EXTRA) {
+            return 0;
+        }
+
+        return Math.max(1, valorPremio == null ? 0 : valorPremio.intValue());
     }
 
     private List<RoletaNivel> buscarNiveisAtivosValidos(List<RoletaPremio> premiosAtivos) {
@@ -1610,6 +1776,14 @@ public class RoletaService {
     }
 
     private record PremioCalculado(BigDecimal valorPremio, Integer girosExtras) {
+    }
+
+    private record SorteioRoleta(
+            RoletaNivel nivel,
+            RoletaPremio premio,
+            PremioCalculado premioCalculado,
+            List<RoletaNivel> niveisAtivos
+    ) {
     }
 
     private record PremiosNivelRequest(RoletaNivel nivel, List<AdminRoletaPremioRequest> premios) {

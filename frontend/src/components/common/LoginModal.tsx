@@ -21,6 +21,8 @@ type AccessMode = 'first' | 'login';
 
 interface LoginModalProps {
     roletaBackdrop?: boolean;
+    initialStep?: LoginStep;
+    onFirstAccessAsGuest?: () => void;
 }
 
 interface VerifyOtpResponse {
@@ -127,9 +129,13 @@ function isDuplicatePhoneResponse(response?: RequestOtpResponse) {
         || normalizedStatus.includes('cadastr');
 }
 
-export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
+export function LoginModal({
+    roletaBackdrop = false,
+    initialStep = 'choice',
+    onFirstAccessAsGuest,
+}: LoginModalProps) {
     const setSession = useAuthStore((state) => state.setSession);
-    const [step, setStep] = useState<LoginStep>('choice');
+    const [step, setStep] = useState<LoginStep>(initialStep);
     const [accessMode, setAccessMode] = useState<AccessMode>('login');
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
@@ -150,6 +156,10 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
         setError('');
         setNotice('');
         setStep('details');
+    };
+
+    const continueAsGuestFirstAccess = () => {
+        onFirstAccessAsGuest?.();
     };
 
     const fetchNotifications = useCallback(async () => {
@@ -289,7 +299,7 @@ export function LoginModal({ roletaBackdrop = false }: LoginModalProps) {
                             <button
                                 className="login-modal__primary"
                                 type="button"
-                                onClick={() => startAuthFlow('first')}
+                                onClick={continueAsGuestFirstAccess}
                             >
                                 Primeiro Acesso
                             </button>

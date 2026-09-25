@@ -7,6 +7,7 @@ import { AppIcon } from '../components/icons/AppIcon';
 import { RoletaProfileModal } from '../components/roleta/RoletaProfileModal';
 import { RoletaNotificationsStory } from '../components/roleta/RoletaNotificationsStory';
 import { useAuthStore } from '../store/useAuthStore';
+import { useRoletaGuestStore } from '../store/useRoletaGuestStore';
 import { api, isCookieAuthMode } from '../utils/api';
 import { apiRoutes } from '../utils/apiRoutes';
 import { getImageUrl } from '../utils/imageUtils';
@@ -160,6 +161,16 @@ interface RoletaGiroResponse extends Partial<RoletaStatusApi> {
     girosDisponiveis?: NumericApiValue;
     giros_disponiveis?: NumericApiValue;
     roleta?: RoletaStatusApi | null;
+}
+
+interface RoletaPrimeiroAcessoResponse extends RoletaGiroResponse {
+    guestSpinToken?: string | null;
+    guest_spin_token?: string | null;
+    tokenPrimeiroAcesso?: string | null;
+    token_primeiro_acesso?: string | null;
+    giroPrimeiroAcessoToken?: string | null;
+    giro_primeiro_acesso_token?: string | null;
+    token?: string | null;
 }
 
 interface ProdutoCheckoutResponse {
@@ -679,6 +690,17 @@ function getPremioAtualFromSpin(data?: RoletaGiroResponse | null) {
         ?? data?.premioSorteado
         ?? data?.premio_sorteado
         ?? data?.premio
+        ?? null;
+}
+
+function getGuestSpinTokenFromResponse(data?: RoletaPrimeiroAcessoResponse | null) {
+    return data?.guestSpinToken
+        ?? data?.guest_spin_token
+        ?? data?.tokenPrimeiroAcesso
+        ?? data?.token_primeiro_acesso
+        ?? data?.giroPrimeiroAcessoToken
+        ?? data?.giro_primeiro_acesso_token
+        ?? data?.token
         ?? null;
 }
 
@@ -1286,6 +1308,14 @@ export function RoletaVipScreen() {
     const user = useAuthStore((state) => state.user);
     const logout = useAuthStore((state) => state.logout);
     const isAuthenticated = isCookieAuthMode ? Boolean(user) : Boolean(token && user);
+    const isGuestFirstAccess = useRoletaGuestStore((state) => state.isGuestFirstAccess);
+    const hasGuestSpun = useRoletaGuestStore((state) => state.hasGuestSpun);
+    const guestSpinToken = useRoletaGuestStore((state) => state.guestSpinToken);
+    const pendingAuthAction = useRoletaGuestStore((state) => state.pendingAuthAction);
+    const requestGuestLogin = useRoletaGuestStore((state) => state.requestLogin);
+    const setGuestSpinResult = useRoletaGuestStore((state) => state.setGuestSpinResult);
+    const clearPendingAuthAction = useRoletaGuestStore((state) => state.clearPendingAuthAction);
+    const resetGuestAccess = useRoletaGuestStore((state) => state.resetGuestAccess);
     const [roleta, setRoleta] = useState<RoletaViewState>(emptyRoletaState);
     const [activeTab, setActiveTab] = useState<RoletaTab>(getInitialRoletaTabFromUrl);
     const [isLoading, setIsLoading] = useState(true);
@@ -1311,6 +1341,7 @@ export function RoletaVipScreen() {
     const [inviteCopyLabel, setInviteCopyLabel] = useState('Copiar link');
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const fetchRoletaInFlightRef = useRef(false);
+    const isLinkingGuestSpinRef = useRef(false);
     const dailyCarouselRef = useRef<HTMLDivElement | null>(null);
     const dailyCheckoutInFlightRef = useRef(false);
     const isAdjustingDailyCarouselLoopRef = useRef(false);
@@ -1338,7 +1369,11 @@ export function RoletaVipScreen() {
         : 'guest';
     const wheelGradient = useMemo(() => createWheelGradient(roleta.opcoes), [roleta.opcoes]);
     const hasWheelOptions = roleta.opcoes.length > 0;
-    const canSpin = isAuthenticated && roleta.ativa && roleta.girosDisponiveis > 0 && hasWheelOptions && !isSpinning;
+    const isGuestBeforeFirstSpin = !isAuthenticated && isGuestFirstAccess && !hasGuestSpun;
+    const canGuestFirstSpin = isGuestBeforeFirstSpin && roleta.ativa && hasWheelOptions && !isSpinning;
+    const canAuthenticatedSpin = isAuthenticated && roleta.ativa && roleta.girosDisponiveis > 0 && hasWheelOptions && !isSpinning;
+    const canSpin = canAuthenticatedSpin || canGuestFirstSpin;
+    const visibleSpinsLeft = canGuestFirstSpin ? Math.max(1, roleta.girosDisponiveis) : roleta.girosDisponiveis;
     const currentPrize = roleta.premioAtual;
     const visibleInviteUrl = isAuthenticated ? inviteUrl : '';
     const loopedDailyProducts = useMemo(() => {
@@ -1414,6 +1449,56 @@ export function RoletaVipScreen() {
     useEffect(() => {
         void fetchRoleta();
     }, [authRefreshKey, fetchRoleta]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !guestSpinToken || isLinkingGuestSpinRef.current) return;
+
+        isLinkingGuestSpinRef.current = true;
+
+        const linkGuestSpin = async () => {
+            try {
+                const { data } = await api.post<RoletaStatusApi & { roleta?: RoletaStatusApi | null }>(
+                    apiRoutes.roleta.vincularGiroPrimeiroAcesso,
+                    { token: guestSpinToken },
+                );
+                const statusPayload = data.roleta ?? data;
+
+                if (statusPayload) {
+                    setRoleta(mergeLocalNotificationsIntoRoleta(normalizeRoletaStatus(statusPayload)));
+                } else {
+                    await fetchRoleta();
+                }
+
+                resetGuestAccess();
+            } catch (linkError) {
+                setError(getRoletaErrorMessage(linkError));
+            } finally {
+                isLinkingGuestSpinRef.current = false;
+            }
+        };
+
+        void linkGuestSpin();
+    }, [fetchRoleta, guestSpinToken, isAuthenticated, resetGuestAccess]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !pendingAuthAction) return;
+
+        if (pendingAuthAction === 'profile') {
+            setIsProfileModalOpen(true);
+        }
+
+        if (pendingAuthAction === 'daily') {
+            setActiveTab('daily');
+        }
+
+        clearPendingAuthAction();
+    }, [clearPendingAuthAction, isAuthenticated, pendingAuthAction]);
+
+    useEffect(() => {
+        if (isGuestBeforeFirstSpin && activeTab !== 'spin') {
+            setActiveTab('spin');
+        }
+    }, [activeTab, isGuestBeforeFirstSpin]);
 
     const fetchInviteUrl = useCallback(async () => {
         if (!isAuthenticated) {
@@ -1518,13 +1603,20 @@ export function RoletaVipScreen() {
     }, [activeTab, fetchDailyProducts, fetchRoleta, hasLoadedDailyProducts]);
 
     const handleSpin = async () => {
+        if (!isAuthenticated && !canGuestFirstSpin) {
+            requestGuestLogin(null);
+            return;
+        }
+
         if (!canSpin) return;
 
         setIsSpinning(true);
         setError('');
 
         try {
-            const { data } = await api.post<RoletaGiroResponse>(apiRoutes.roleta.girar);
+            const { data } = canGuestFirstSpin
+                ? await api.post<RoletaPrimeiroAcessoResponse>(apiRoutes.roleta.girarPrimeiroAcesso)
+                : await api.post<RoletaGiroResponse>(apiRoutes.roleta.girar);
             const statusPayload = data.roleta ?? (hasRoletaStatusPayload(data) ? data : null);
             const rawPrize = getPremioAtualFromSpin(data) ?? getPremioAtualFromStatus(statusPayload);
             const normalizedStatus = statusPayload
@@ -1552,6 +1644,13 @@ export function RoletaVipScreen() {
             const nextPrize = createPrizeView(rawPrize, slicesForSpin);
             const targetSliceIndex = getPrizeSliceIndex(rawPrize, slicesForSpin);
             const targetSliceOffsetDegrees = getRandomSliceOffsetDegrees(slicesForSpin.length);
+
+            if (canGuestFirstSpin) {
+                setGuestSpinResult({
+                    token: getGuestSpinTokenFromResponse(data),
+                    prize: rawPrize,
+                });
+            }
 
             setWheelRotation((currentRotation) => createTargetWheelRotation(
                 currentRotation,
@@ -1589,10 +1688,7 @@ export function RoletaVipScreen() {
 
     const handleRedeemDailyProduct = async (product: DailyProduct) => {
         if (!isAuthenticated) {
-            setDailyCheckoutErrorByProductId((currentErrors) => ({
-                ...currentErrors,
-                [product.clientKey]: 'Entre para continuar o resgate.',
-            }));
+            requestGuestLogin('daily');
             return;
         }
 
@@ -2059,6 +2155,11 @@ export function RoletaVipScreen() {
     };
 
     const handleCopyInviteUrl = async () => {
+        if (!isAuthenticated) {
+            requestGuestLogin('invite');
+            return;
+        }
+
         if (!visibleInviteUrl || isInviteLoading) return;
 
         try {
@@ -2085,7 +2186,7 @@ export function RoletaVipScreen() {
     );
 
     return (
-        <div className="roleta-vip-page">
+        <div className={`roleta-vip-page${isGuestBeforeFirstSpin ? ' roleta-vip-page--guest-before-spin' : ''}`}>
             <main className="roleta-vip-shell" aria-busy={isLoading}>
                 <section className="roleta-vip-top" aria-label="Resumo da roleta VIP">
                     <div className="roleta-vip-header">
@@ -2096,7 +2197,14 @@ export function RoletaVipScreen() {
                             <button
                                 type="button"
                                 className="roleta-vip-profile-button"
-                                onClick={() => setIsProfileModalOpen(true)}
+                                onClick={() => {
+                                    if (!isAuthenticated) {
+                                        requestGuestLogin('profile');
+                                        return;
+                                    }
+
+                                    setIsProfileModalOpen(true);
+                                }}
                                 aria-label="Abrir perfil"
                             >
                                 <span>{formatCurrencyBRL(roleta.valorDisponivelResgate)}</span>
@@ -2148,7 +2256,11 @@ export function RoletaVipScreen() {
                         <button
                             type="button"
                             className={activeTab === 'daily' ? 'is-active' : ''}
-                            onClick={() => setActiveTab('daily')}
+                            onClick={() => {
+                                if (isGuestBeforeFirstSpin) return;
+
+                                setActiveTab('daily');
+                            }}
                         >
                             Itens diarios
                         </button>
@@ -2186,7 +2298,7 @@ export function RoletaVipScreen() {
                                 )}
 
                                 <p className="roleta-vip-spins-left">
-                                    <strong>{roleta.girosDisponiveis}</strong> giro(s) restantes
+                                    <strong>{visibleSpinsLeft}</strong> giro(s) restantes
                                 </p>
 
                                 <div className={`roleta-vip-spin-actions${currentPrize ? ' has-prize' : ''}`}>
@@ -2209,14 +2321,21 @@ export function RoletaVipScreen() {
                                                 WebkitTextStroke: '0.25px #000000',
                                                 boxShadow: '1px 1px 10px #fff6f1'
                                             }}
-                                            onClick={() => setActiveTab('daily')}
+                                            onClick={() => {
+                                                if (!isAuthenticated) {
+                                                    requestGuestLogin('daily');
+                                                    return;
+                                                }
+
+                                                setActiveTab('daily');
+                                            }}
                                         >
                                             Usar {removePrizeNegativeSign(currentPrize.valorLabel || formatCurrencyBRL(Math.abs(currentPrize.valor)))}
                                         </button>
                                     )}
                                 </div>
 
-                                {!isLoading && roleta.girosDisponiveis < 1 && (
+                                {!isLoading && visibleSpinsLeft < 1 && (
                                     <p className="roleta-vip-no-spins">
                                         Voce ainda nao tem giros disponiveis.
                                     </p>
@@ -2506,7 +2625,7 @@ export function RoletaVipScreen() {
                                     <button
                                         type="button"
                                         onClick={() => void handleCopyInviteUrl()}
-                                        disabled={!isAuthenticated || isInviteLoading || !visibleInviteUrl}
+                                        disabled={isInviteLoading || (isAuthenticated && !visibleInviteUrl)}
                                     >
                                         {inviteCopyLabel}
                                     </button>
@@ -2527,7 +2646,7 @@ export function RoletaVipScreen() {
                     {activeTab === 'spin' && roletaInfoFooter}
                 </section>
             </main>
-            {isProfileModalOpen && (
+            {isProfileModalOpen && isAuthenticated && (
                 <RoletaProfileModal
                     valorDisponivelResgate={roleta.valorDisponivelResgate}
                     onClose={() => setIsProfileModalOpen(false)}
