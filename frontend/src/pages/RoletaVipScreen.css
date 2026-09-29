@@ -100,10 +100,12 @@
 }
 
 .roleta-vip-page--guest-before-spin .roleta-vip-profile-cta,
+.roleta-vip-page--guest-before-spin .roleta-vip-title,
 .roleta-vip-page--guest-before-spin .roleta-vip-group-goal,
 .roleta-vip-page--guest-before-spin .roleta-vip-switch,
 .roleta-vip-page--guest-before-spin .roleta-vip-invite-block,
 .roleta-vip-page--guest-before-spin .roleta-vip-info-footer {
+    filter: blur(2px);
     opacity: 0.5;
     pointer-events: none;
 }

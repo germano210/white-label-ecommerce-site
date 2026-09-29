@@ -259,7 +259,8 @@ class RoletaControllerTest {
                 .andExpect(jsonPath("$.nivelSorteado.id").value(premioConfigurado.getNivel().getId()))
                 .andExpect(jsonPath("$.nivelCorHex").value("#4b69ff"))
                 .andExpect(jsonPath("$.expiraEm").isNotEmpty())
-                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(0));
+                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(3))
+                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(3));
 
         assertEquals(1, roletaGiroVisitanteRepository.count());
         assertEquals(0, roletaGiroRepository.count());
@@ -269,6 +270,10 @@ class RoletaControllerTest {
     @Test
     void shouldLinkAnonymousFirstAccessSpinAfterLogin() throws Exception {
         criarPremioPadrao();
+        RoletaConfig configLegada = new RoletaConfig();
+        configLegada.setId(1L);
+        configLegada.setGirosIniciais(8);
+        roletaConfigRepository.save(configLegada);
         Usuario usuario = criarUsuario("Cliente Primeiro Acesso", "551199992201");
 
         String response = mockMvc.perform(post("/api/roleta/girar-primeiro-acesso")
@@ -278,6 +283,12 @@ class RoletaControllerTest {
                 .getResponse()
                 .getContentAsString();
         String token = objectMapper.readTree(response).path("token").asText();
+
+        mockMvc.perform(get("/api/roleta")
+                        .header("Authorization", bearer(usuario))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.girosDisponiveis").value(8));
 
         mockMvc.perform(post("/api/roleta/giro-primeiro-acesso/vincular")
                         .header("Authorization", bearer(usuario))
@@ -292,7 +303,7 @@ class RoletaControllerTest {
                 .andExpect(jsonPath("$.premioAtual.status").value("PENDENTE"))
                 .andExpect(jsonPath("$.premioAtual.valorPremio").value(10.00))
                 .andExpect(jsonPath("$.roleta.premioAtual.valorPremio").value(10.00))
-                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(8))
+                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(3))
                 .andExpect(jsonPath("$.roleta.progressoGrupo").value(1));
 
         RoletaGiroVisitante giroVisitante = roletaGiroVisitanteRepository.findAll().get(0);
@@ -399,8 +410,8 @@ class RoletaControllerTest {
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.girosTotaisObtidos").value(8))
-                .andExpect(jsonPath("$.girosDisponiveis").value(8))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(3))
+                .andExpect(jsonPath("$.girosDisponiveis").value(3))
                 .andExpect(jsonPath("$.valorDisponivelResgate").value(0.00))
                 .andExpect(jsonPath("$.valorTotalResgatado").value(0.00))
                 .andExpect(jsonPath("$.codigoConvite").isNotEmpty())
@@ -422,9 +433,9 @@ class RoletaControllerTest {
                 .andExpect(jsonPath("$.corNivel").value("#4b69ff"))
                 .andExpect(jsonPath("$.premioConfiguradoSorteado.id").value(premioConfigurado.getId()))
                 .andExpect(jsonPath("$.valor").value(10.00))
-                .andExpect(jsonPath("$.girosDisponiveis").value(7))
-                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(7))
-                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(8))
+                .andExpect(jsonPath("$.girosDisponiveis").value(2))
+                .andExpect(jsonPath("$.roleta.girosDisponiveis").value(2))
+                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(3))
                 .andExpect(jsonPath("$.premioAtual.valorPremio").value(10.00))
                 .andExpect(jsonPath("$.roleta.premioAtual.valorPremio").value(10.00))
                 .andExpect(jsonPath("$.roleta.premioPendente.valorPremio").value(10.00))
@@ -532,13 +543,13 @@ class RoletaControllerTest {
                             .header("Authorization", bearer(usuario))
                             .accept(MediaType.APPLICATION_JSON))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.girosTotaisObtidos").value(8))
-                    .andExpect(jsonPath("$.girosDisponiveis").value(8));
+                    .andExpect(jsonPath("$.girosTotaisObtidos").value(3))
+                    .andExpect(jsonPath("$.girosDisponiveis").value(3));
         }
 
         var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
-        assertEquals(8, participante.getGirosTotaisObtidos());
-        assertEquals(8, participante.getGirosDisponiveis());
+        assertEquals(3, participante.getGirosTotaisObtidos());
+        assertEquals(3, participante.getGirosDisponiveis());
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
     }
 
@@ -550,7 +561,7 @@ class RoletaControllerTest {
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.girosDisponiveis").value(8));
+                .andExpect(jsonPath("$.girosDisponiveis").value(3));
 
         for (int tentativa = 0; tentativa < 5; tentativa++) {
             mockMvc.perform(get("/api/roleta/convites")
@@ -562,8 +573,8 @@ class RoletaControllerTest {
                             .header("Authorization", bearer(usuario))
                             .accept(MediaType.APPLICATION_JSON))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.girosTotaisObtidos").value(8))
-                    .andExpect(jsonPath("$.girosDisponiveis").value(8));
+                    .andExpect(jsonPath("$.girosTotaisObtidos").value(3))
+                    .andExpect(jsonPath("$.girosDisponiveis").value(3));
         }
 
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
@@ -610,8 +621,8 @@ class RoletaControllerTest {
         assertEquals(1, roletaParticipanteRepository.count());
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("INICIAL:" + usuario.getId()));
         var participante = roletaParticipanteRepository.findByUsuarioId(usuario.getId()).orElseThrow();
-        assertEquals(8, participante.getGirosTotaisObtidos());
-        assertEquals(8, participante.getGirosDisponiveis());
+        assertEquals(3, participante.getGirosTotaisObtidos());
+        assertEquals(3, participante.getGirosDisponiveis());
     }
 
     @Test
@@ -624,8 +635,8 @@ class RoletaControllerTest {
                         .header("Authorization", bearer(usuario))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.girosDisponiveis").value(9))
-                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(10));
+                .andExpect(jsonPath("$.girosDisponiveis").value(4))
+                .andExpect(jsonPath("$.roleta.girosTotaisObtidos").value(5));
 
         var giro = roletaGiroRepository.findAll().get(0);
         assertEquals(1, roletaGiroCreditoRepository.countByChaveEvento("PREMIO_GIRO:" + giro.getId()));
@@ -684,10 +695,10 @@ class RoletaControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.convitesConvertidos").value(1))
-                .andExpect(jsonPath("$.girosDisponiveis").value(greaterThanOrEqualTo(10)))
-                .andExpect(jsonPath("$.girosDisponiveis").value(lessThanOrEqualTo(13)))
-                .andExpect(jsonPath("$.girosTotaisObtidos").value(greaterThanOrEqualTo(10)))
-                .andExpect(jsonPath("$.girosTotaisObtidos").value(lessThanOrEqualTo(13)))
+                .andExpect(jsonPath("$.girosDisponiveis").value(greaterThanOrEqualTo(5)))
+                .andExpect(jsonPath("$.girosDisponiveis").value(lessThanOrEqualTo(8)))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(greaterThanOrEqualTo(5)))
+                .andExpect(jsonPath("$.girosTotaisObtidos").value(lessThanOrEqualTo(8)))
                 .andExpect(jsonPath("$.girosPorConviteMin").value(2))
                 .andExpect(jsonPath("$.girosPorConviteMax").value(5));
 
@@ -711,8 +722,8 @@ class RoletaControllerTest {
                 .getProgressoGrupo());
         var participanteIndicador = roletaParticipanteRepository.findByUsuarioId(indicador.getId())
                 .orElseThrow();
-        assertEquals(8 + convite.getGirosConcedidos(), participanteIndicador.getGirosDisponiveis());
-        assertEquals(8 + convite.getGirosConcedidos(), participanteIndicador.getGirosTotaisObtidos());
+        assertEquals(3 + convite.getGirosConcedidos(), participanteIndicador.getGirosDisponiveis());
+        assertEquals(3 + convite.getGirosConcedidos(), participanteIndicador.getGirosTotaisObtidos());
     }
 
     @Test
@@ -1997,10 +2008,10 @@ class RoletaControllerTest {
                 .findByUsuarioId(usuarioJaCreditado.getId())
                 .orElseThrow();
 
-        assertEquals(12, participanteQueGirou.getGirosDisponiveis());
-        assertEquals(13, participanteQueGirou.getGirosTotaisObtidos());
-        assertEquals(8, participanteJaCreditado.getGirosDisponiveis());
-        assertEquals(8, participanteJaCreditado.getGirosTotaisObtidos());
+        assertEquals(7, participanteQueGirou.getGirosDisponiveis());
+        assertEquals(8, participanteQueGirou.getGirosTotaisObtidos());
+        assertEquals(3, participanteJaCreditado.getGirosDisponiveis());
+        assertEquals(3, participanteJaCreditado.getGirosTotaisObtidos());
         assertEquals(2, roletaGiroCreditoRepository.countByChaveEventoStartingWith("META_GRUPO:1:"));
     }
 

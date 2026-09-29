@@ -86,6 +86,7 @@ public class RoletaService {
     private static final Long CONFIG_ID = 1L;
     private static final int HORAS_EXPIRACAO_GIRO_VISITANTE = 24;
     private static final int BYTES_TOKEN_VISITANTE = 32;
+    private static final int GIROS_INICIAIS_PRIMEIRO_ACESSO = 3;
     private static final List<FaixaDesconto> FAIXAS_PADRAO = List.of(
             new FaixaDesconto("0.82", "1.60"),
             new FaixaDesconto("1.14", "3.36"),
@@ -263,7 +264,7 @@ public class RoletaService {
                 ),
                 sorteio.nivel().getCorHex(),
                 giroVisitante.getExpiraEm(),
-                montarStatus(config, null)
+                montarStatus(config, null, GIROS_INICIAIS_PRIMEIRO_ACESSO)
         );
     }
 
@@ -283,7 +284,12 @@ public class RoletaService {
 
         validarGiroVisitanteVinculavel(giroVisitante, now);
 
-        RoletaParticipante participante = garantirParticipanteForUpdate(usuario, config);
+        RoletaParticipante participante = garantirParticipanteForUpdate(
+                usuario,
+                config,
+                GIROS_INICIAIS_PRIMEIRO_ACESSO
+        );
+        normalizarGirosIniciaisPrimeiroAcesso(participante, config);
         descartarPremiosPendentes(usuario.getId());
 
         int girosExtras = calcularGirosExtras(giroVisitante.getTipoPremio(), giroVisitante.getValorPremio());
@@ -551,15 +557,26 @@ public class RoletaService {
 
     private RoletaParticipante garantirParticipante(Usuario usuario, RoletaConfig config) {
         return roletaParticipanteRepository.findByUsuarioId(usuario.getId())
-                .orElseGet(() -> criarParticipanteComCreditoInicial(usuario, config));
+                .orElseGet(() -> criarParticipanteComCreditoInicial(usuario, config.getGirosIniciais()));
     }
 
     private RoletaParticipante garantirParticipanteForUpdate(Usuario usuario, RoletaConfig config) {
-        return roletaParticipanteRepository.findByUsuarioIdForUpdate(usuario.getId())
-                .orElseGet(() -> criarParticipanteComCreditoInicial(usuario, config));
+        return garantirParticipanteForUpdate(usuario, config, config.getGirosIniciais());
     }
 
-    private RoletaParticipante criarParticipanteComCreditoInicial(Usuario usuario, RoletaConfig config) {
+    private RoletaParticipante garantirParticipanteForUpdate(
+            Usuario usuario,
+            RoletaConfig config,
+            Integer girosIniciais
+    ) {
+        return roletaParticipanteRepository.findByUsuarioIdForUpdate(usuario.getId())
+                .orElseGet(() -> criarParticipanteComCreditoInicial(usuario, girosIniciais));
+    }
+
+    private RoletaParticipante criarParticipanteComCreditoInicial(
+            Usuario usuario,
+            Integer girosIniciais
+    ) {
         Usuario usuarioBloqueado = usuarioRepository.findByIdForUpdate(usuario.getId())
                 .orElse(usuario);
         Optional<RoletaParticipante> participanteExistente =
@@ -569,8 +586,26 @@ public class RoletaService {
         }
 
         RoletaParticipante participante = salvarNovoParticipante(usuarioBloqueado);
-        creditarGiros(participante, config.getGirosIniciais(), "INICIAL:" + usuario.getId());
+        creditarGiros(participante, girosIniciais, "INICIAL:" + usuario.getId());
         return participante;
+    }
+
+    private void normalizarGirosIniciaisPrimeiroAcesso(
+            RoletaParticipante participante,
+            RoletaConfig config
+    ) {
+        if (participante == null || config == null) {
+            return;
+        }
+
+        int girosConfigurados = config.getGirosIniciais();
+        if (girosConfigurados == GIROS_INICIAIS_PRIMEIRO_ACESSO) {
+            return;
+        }
+        if (participante.getGirosTotaisObtidos() == girosConfigurados
+                && participante.getGirosDisponiveis() == girosConfigurados) {
+            participante.redefinirGirosIniciais(GIROS_INICIAIS_PRIMEIRO_ACESSO);
+        }
     }
 
     private RoletaParticipante salvarNovoParticipante(Usuario usuario) {
@@ -657,7 +692,16 @@ public class RoletaService {
             RoletaConfig config,
             RoletaParticipante participante
     ) {
+        return montarStatus(config, participante, 0);
+    }
+
+    private RoletaStatusResponse montarStatus(
+            RoletaConfig config,
+            RoletaParticipante participante,
+            Integer girosVisitante
+    ) {
         LocalDateTime now = LocalDateTime.now(clock);
+        int girosAnonimos = Math.max(0, girosVisitante == null ? 0 : girosVisitante);
         RoletaMetaResponse metaAtual = roletaMetaService.obterMetaAtual().orElse(null);
         RoletaPremioResponse premioPendente = participante == null
                 ? null
@@ -679,8 +723,8 @@ public class RoletaService {
         return new RoletaStatusResponse(
                 null,
                 montarNotificacoes(),
-                participante == null ? 0 : participante.getGirosTotaisObtidos(),
-                participante == null ? 0 : participante.getGirosDisponiveis(),
+                participante == null ? girosAnonimos : participante.getGirosTotaisObtidos(),
+                participante == null ? girosAnonimos : participante.getGirosDisponiveis(),
                 participante == null ? BigDecimal.ZERO : participante.getValorDisponivelResgate(),
                 participante == null ? BigDecimal.ZERO : participante.getValorTotalResgatado(),
                 metaAtual == null ? config.getMetaGrupo() : metaAtual.quantidadeAlvo(),

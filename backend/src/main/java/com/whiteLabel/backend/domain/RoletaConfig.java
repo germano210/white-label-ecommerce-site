@@ -36,17 +36,17 @@ public class RoletaConfig {
     @Column(name = "giros_bonus_grupo", nullable = false)
     private Integer girosBonusGrupo = 5;
 
-    @Column(name = "giros_iniciais", nullable = false)
-    private Integer girosIniciais = 8;
+    @Column(name = "giros_iniciais", nullable = false, columnDefinition = "integer default 3")
+    private Integer girosIniciais = 3;
 
     @Column(name = "giro_diario_quantidade", nullable = false)
-    private Integer giroDiarioQuantidade = 1;
+    private Integer giroDiarioQuantidade = 3;
 
     @Column(name = "giro_diario_somente_quando_zerar", nullable = false)
     private Boolean giroDiarioSomenteQuandoZerar = true;
 
     @Column(name = "giros_ganhos_por_convite", nullable = false)
-    private Integer girosGanhosPorConvite = 1;
+    private Integer girosGanhosPorConvite = 2;
 
     @Column(name = "giros_por_convite_min", nullable = false, columnDefinition = "integer default 2")
     private Integer girosPorConviteMin = 2;

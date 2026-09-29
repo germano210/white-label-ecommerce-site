@@ -7,12 +7,12 @@
     justify-content: center;
     padding: 16px;
     background: rgba(255, 255, 255, 0.76);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(250px);
 }
 
 .login-modal__overlay--roleta {
     background: rgba(255, 247, 230, 0.18);
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(3px);
 }
 
 .login-modal__card {

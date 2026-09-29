@@ -108,6 +108,12 @@ public class RoletaParticipante {
         this.girosDisponiveis = Math.max(0, girosDisponiveis == null ? 0 : girosDisponiveis);
     }
 
+    public void redefinirGirosIniciais(Integer quantidade) {
+        int giros = Math.max(0, quantidade == null ? 0 : quantidade);
+        girosTotaisObtidos = giros;
+        girosDisponiveis = giros;
+    }
+
     public void adicionarGiros(Integer quantidade) {
         int incremento = Math.max(0, quantidade == null ? 0 : quantidade);
         adicionarGirosAoHistorico(incremento);
