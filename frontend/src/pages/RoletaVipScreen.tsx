@@ -1325,6 +1325,7 @@ export function RoletaVipScreen() {
     const [dailyProducts, setDailyProducts] = useState<DailyProduct[]>([]);
     const [activeImageByProductId, setActiveImageByProductId] = useState<Record<string, number>>({});
     const [activeProductIndex, setActiveProductIndex] = useState(0);
+    const [viewedDailyProductIds, setViewedDailyProductIds] = useState<Record<string, boolean>>({});
     const [dailyCarouselProgress, setDailyCarouselProgress] = useState(0);
     const [expandedDailyProductIds, setExpandedDailyProductIds] = useState<Record<string, boolean>>({});
     const [isDailyLoading, setIsDailyLoading] = useState(false);
@@ -1553,6 +1554,7 @@ export function RoletaVipScreen() {
             const { data } = await api.get<RoletaProdutoApi[] | RoletaProdutosResponse>(apiRoutes.roleta.produtos);
             const nextProducts = normalizeDailyProductsResponse(data);
             setDailyProducts(nextProducts);
+            setViewedDailyProductIds(nextProducts[0] ? { [nextProducts[0].clientKey]: true } : {});
             setActiveProductIndex(0);
             setDailyCarouselProgress(0);
             setHasLoadedDailyProducts(true);
@@ -1914,6 +1916,15 @@ export function RoletaVipScreen() {
         setActiveProductIndex(productIndex);
         scrollDailyCarouselToRenderIndex(getMiddleDailyRenderIndex(productIndex), behavior);
     };
+
+    useEffect(() => {
+        const activeProduct = dailyProducts[activeProductIndex];
+        if (!activeProduct) return;
+
+        setViewedDailyProductIds((current) => current[activeProduct.clientKey]
+            ? current
+            : { ...current, [activeProduct.clientKey]: true });
+    }, [activeProductIndex, dailyProducts]);
 
     const handleDailyCarouselScroll = (event: UIEvent<HTMLDivElement>) => {
         if (isAdjustingDailyCarouselLoopRef.current) return;
@@ -2578,7 +2589,10 @@ export function RoletaVipScreen() {
                                             <button
                                                 type="button"
                                                 key={dailyProduct.clientKey}
-                                                className={productIndex === activeProductIndex ? 'is-active' : ''}
+                                                className={[
+                                                    viewedDailyProductIds[dailyProduct.clientKey] ? 'is-viewed' : '',
+                                                    productIndex === activeProductIndex ? 'is-active' : '',
+                                                ].filter(Boolean).join(' ')}
                                                 onClick={(event) => {
                                                     event.stopPropagation();
                                                     if (dailyProductBarGestureRef.current.suppressNextClick) {
@@ -2587,8 +2601,12 @@ export function RoletaVipScreen() {
                                                     }
                                                     scrollToDailyProduct(productIndex);
                                                 }}
-                                                aria-label={`Ir para produto ${productIndex + 1}`}
-                                            />
+                                                aria-label={`Ir para produto ${productIndex + 1}: ${dailyProduct.nome}`}
+                                            >
+                                                {viewedDailyProductIds[dailyProduct.clientKey] && (
+                                                    <span title={dailyProduct.nome}>{dailyProduct.nome}</span>
+                                                )}
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
