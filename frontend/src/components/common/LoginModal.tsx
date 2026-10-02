@@ -64,13 +64,79 @@ interface AuthMeResponse {
     user?: VerifyOtpResponse['user'];
 }
 
+type NumericApiValue = number | string | null | undefined;
+
+interface RoletaMetaApi {
+    titulo?: string | null;
+    quantidadeAlvo?: NumericApiValue;
+    quantidade_alvo?: NumericApiValue;
+    progressoAtual?: NumericApiValue;
+    progresso_atual?: NumericApiValue;
+    girosRecompensa?: NumericApiValue;
+    giros_recompensa?: NumericApiValue;
+}
+
 interface RoletaNotificationsResponse {
     notificacoes?: RoletaNotificacaoApi[] | null;
     ultimosEventos?: RoletaNotificacaoApi[] | null;
+    metaAtual?: RoletaMetaApi | null;
+    meta_atual?: RoletaMetaApi | null;
+    metaGrupo?: NumericApiValue;
+    meta_grupo?: NumericApiValue;
+    progressoGrupo?: NumericApiValue;
+    progresso_grupo?: NumericApiValue;
+    girosBonusGrupo?: NumericApiValue;
+    giros_bonus_grupo?: NumericApiValue;
+}
+
+interface LoginModalGroupGoal {
+    hasMeta: boolean;
+    title: string;
+    current: number;
+    target: number;
+    reward: number;
 }
 
 function onlyDigits(value: string) {
     return value.replace(/\D/g, '');
+}
+
+function parseApiNumber(value: NumericApiValue) {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    if (typeof value === 'string') {
+        const parsedValue = Number(value.trim().replace(',', '.'));
+        return Number.isFinite(parsedValue) ? parsedValue : 0;
+    }
+
+    return 0;
+}
+
+function normalizeLoginModalGroupGoal(data: RoletaNotificationsResponse): LoginModalGroupGoal {
+    const metaAtual = data.metaAtual ?? data.meta_atual;
+
+    if (!metaAtual) {
+        return {
+            hasMeta: false,
+            title: 'Meta atual do grupo',
+            current: 0,
+            target: 0,
+            reward: 0,
+        };
+    }
+
+    const target = Math.floor(parseApiNumber(metaAtual.quantidadeAlvo ?? metaAtual.quantidade_alvo));
+    const current = Math.floor(parseApiNumber(metaAtual.progressoAtual ?? metaAtual.progresso_atual));
+
+    return {
+        hasMeta: target > 0,
+        title: metaAtual.titulo?.trim() || 'Meta atual do grupo',
+        current: Math.min(Math.max(current, 0), Math.max(target, 0)),
+        target,
+        reward: Math.floor(parseApiNumber(metaAtual.girosRecompensa ?? metaAtual.giros_recompensa)),
+    };
 }
 
 function formatPhone(value: string) {
@@ -143,10 +209,20 @@ export function LoginModal({
     const [notice, setNotice] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [notifications, setNotifications] = useState<RoletaNotificationView[]>([]);
+    const [groupGoal, setGroupGoal] = useState<LoginModalGroupGoal>({
+        hasMeta: false,
+        title: 'Meta atual do grupo',
+        current: 0,
+        target: 0,
+        reward: 0,
+    });
 
     const phoneDigits = onlyDigits(phone);
     const isPhoneValid = phoneDigits.length >= 10;
     const hasNotifications = notifications.length > 0;
+    const groupGoalProgress = groupGoal.hasMeta
+        ? Math.min(100, Math.max(0, (groupGoal.current / groupGoal.target) * 100))
+        : 0;
     const phoneStepTitle = accessMode === 'first'
         ? 'Digite seu Whatsapp'
         : 'Bem-vindo(a) de volta';
@@ -166,8 +242,16 @@ export function LoginModal({
         try {
             const { data } = await api.get<RoletaNotificationsResponse>(apiRoutes.roleta.status);
             setNotifications(normalizeRoletaNotifications(data.notificacoes ?? data.ultimosEventos ?? []));
+            setGroupGoal(normalizeLoginModalGroupGoal(data));
         } catch {
             setNotifications([]);
+            setGroupGoal({
+                hasMeta: false,
+                title: 'Meta atual do grupo',
+                current: 0,
+                target: 0,
+                reward: 0,
+            });
         }
     }, []);
 
@@ -290,12 +374,27 @@ export function LoginModal({
                         {hasNotifications && (
                             <RoletaNotificationsStory
                                 notifications={notifications}
-                                className="login-modal__notifications"
+                                className={`login-modal__notifications${groupGoal.hasMeta ? ' login-modal__notifications--with-goal' : ''}`}
                                 ariaLabel="Notificacoes da roleta no login"
                             />
                         )}
 
-                        <div className={`login-modal__actions${hasNotifications ? ' login-modal__actions--after-notifications' : ''} flex flex-col gap-3 mt-6`}>
+                        {groupGoal.hasMeta && (
+                            <section className="login-modal__goal" aria-label="Meta atual do grupo">
+                                <div className="login-modal__goal-row">
+                                    <span>{groupGoal.title}</span>
+                                    <strong>{groupGoal.current}/{groupGoal.target}</strong>
+                                </div>
+                                <div className="login-modal__goal-track" aria-hidden="true">
+                                    <span
+                                        className="login-modal__goal-fill"
+                                        style={{ width: `${groupGoalProgress}%` }}
+                                    />
+                                </div>
+                            </section>
+                        )}
+
+                        <div className={`login-modal__actions${hasNotifications || groupGoal.hasMeta ? ' login-modal__actions--after-notifications' : ''} flex flex-col gap-3 mt-6`}>
                             <button
                                 className="login-modal__primary"
                                 type="button"
